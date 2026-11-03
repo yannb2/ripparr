@@ -109,8 +109,8 @@
                             <span class="badge sv-dv ms-1">DV EL</span>
                         }
                     </td>
-                    <td>@string.Join(", ", streams.Where(s => s.Kind == StreamKind.Audio).Select(s => $"{s.Language} {s.CodecName}"))</td>
-                    <td>@string.Join(" ", streams.Where(s => s.Kind == StreamKind.Subtitle).Select(s => s.Language).Distinct())</td>
+                    <td>@string.Join(", ", streams.Where(s => s.Kind == StreamKind.Audio).Select(s => $"{Languages.Name(s.Language)} {s.CodecName}"))</td>
+                    <td>@string.Join(", ", streams.Where(s => s.Kind == StreamKind.Subtitle).Select(s => Languages.Name(s.Language)).Distinct())</td>
                     <td class="text-nowrap">
                         @if (playlist.MainFeature)
                         {
@@ -219,6 +219,7 @@
                 <div class="col-md-1">
                     <label class="form-label small mb-1" title="ISO 639-2, such as eng or fre">Language</label>
                     <input class="form-control form-control-sm" value="@_original" @onchange="ChangeOriginal" title="The film's original language: decides 'original' in the profile"/>
+                    <div class="small text-body-secondary text-truncate">@(_original == null ? "" : Languages.Name(_original))</div>
                 </div>
             </div>
 

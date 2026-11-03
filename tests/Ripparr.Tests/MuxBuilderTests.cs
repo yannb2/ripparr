@@ -69,6 +69,19 @@ public class MuxBuilderTests
     }
 
     [TestMethod]
+    public void MapsOnlyTheStreamsDgDemuxWasAskedFor()
+    {
+        List<DemuxedFile> files = [Video("a.hevc", 3840), Audio("x.dtshd", "DTS", 6, "DTS-HD Master Audio"), Subtitle("y.sup")];
+        var pids = new HashSet<int> { Film.Streams[0].Pid, Film.Streams[3].Pid, Film.Streams[6].Pid };
+        var mapping = MuxBuilder.Map(Film, files, pids);
+
+        Assert.AreEqual("a.hevc", mapping.Files[0].FileName);
+        Assert.AreEqual("x.dtshd", mapping.Files[3].FileName);
+        Assert.AreEqual("y.sup", mapping.Files[6].FileName);
+        Assert.IsEmpty(mapping.Warnings);
+    }
+
+    [TestMethod]
     public void BuildsNamedOutputsInPlanOrder()
     {
         var profile = new RipProfile();
@@ -149,17 +162,40 @@ public class MuxBuilderTests
         Assert.IsTrue(MuxBuilder.IsStreamFile("/a/b.sup"));
         Assert.IsFalse(MuxBuilder.IsStreamFile("/a/b.txt"));
         CollectionAssert.AreEqual(new[] { "-i", "/d/BDMV/PLAYLIST/00800.mpls", "-o", "/w/00800" },
-            JobPipeline.ExpandArguments("-i {input} -o {output}", "/d/BDMV/PLAYLIST/00800.mpls", "/w/00800"));
+            DgDemuxCommand.Expand("-i {input} -o {output}", "/d/BDMV/PLAYLIST/00800.mpls", "/w/00800"));
     }
 
     [TestMethod]
-    public void AProfileCanHaveItsOwnDgDemuxArguments()
+    public void BuildsDgDemuxArgumentsFromTheProfile()
     {
-        var options = new Ripparr.Options.RipparrOptions();
-        var profile = new Ripparr.Profiles.RipProfile();
-        Assert.AreEqual(options.DgDemuxArguments, JobPipeline.DgDemuxTemplate(profile, options));
-        profile.DgDemuxArguments = " -i {input} -o {output} -ac3 ";
-        Assert.AreEqual("-i {input} -o {output} -ac3", JobPipeline.DgDemuxTemplate(profile, options));
-        Assert.AreEqual(profile.DgDemuxArguments, profile.Copy().DgDemuxArguments);
+        const string global = "-i {input} -o {output}";
+        var profile = new RipProfile();
+        var plan = new TrackPlan
+        {
+            Tracks =
+            [
+                new PlannedTrack { Kind = StreamKind.Video, Pid = 0x1011, Keep = true },
+                new PlannedTrack { Kind = StreamKind.Video, Pid = 0x1015, Keep = true, DolbyVisionLayer = true },
+                new PlannedTrack { Kind = StreamKind.Audio, Pid = 0x1100, Keep = true },
+                new PlannedTrack { Kind = StreamKind.Audio, Pid = 0x1101, Keep = false },
+                new PlannedTrack { Kind = StreamKind.Subtitle, Pid = 0x12A0, Keep = true }
+            ]
+        };
+        var pids = DgDemuxCommand.DemuxedPids(profile, plan);
+        CollectionAssert.AreEqual(new[] { "-i", "/d/00800.mpls", "-o", "/w/00800", "-thd", "2", "-demux", "4113,4117,4352,4768" },
+            DgDemuxCommand.Arguments(profile, global, "/d/00800.mpls", "/w/00800", pids!.ToList()));
+
+        profile.KeepTrueHdCore = true;
+        profile.DgDemux = new DgDemuxSettings { DemuxOnlyKept = false, Angle = 2, SkipFirstClip = true, StrictPlaylist = true };
+        profile.DgDemuxArguments = "-nogaps";
+        Assert.IsNull(DgDemuxCommand.DemuxedPids(profile, plan));
+        CollectionAssert.AreEqual(new[] { "-i", "/d/x.mpls", "-o", "/w/x", "-ang", "2", "-thd", "1", "-sf", "-strictpl", "-nogaps" },
+            DgDemuxCommand.Arguments(profile, global, "/d/x.mpls", "/w/x", null));
+
+        // A full template of its own (0.2.0 profiles) replaces everything.
+        profile.DgDemuxArguments = "-i {input} -o {output} -sl";
+        CollectionAssert.AreEqual(new[] { "-i", "/d/x.mpls", "-o", "/w/x", "-sl" },
+            DgDemuxCommand.Arguments(profile, global, "/d/x.mpls", "/w/x", null));
+        Assert.AreEqual(2, profile.Copy().DgDemux.Angle);
     }
 }

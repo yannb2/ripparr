@@ -73,7 +73,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         context.Step(JobSteps.Demux);
         Directory.CreateDirectory(context.DemuxFolder);
         var prefix = Path.Combine(context.DemuxFolder, playlist.Name);
-        var demuxArguments = ExpandArguments(DgDemuxTemplate(job.Profile, context.Options), mplsPath, prefix);
+        var demuxArguments = DgDemuxCommand.Arguments(job.Profile, context.Options.DgDemuxArguments, mplsPath, prefix,
+            DgDemuxCommand.DemuxedPids(job.Profile, job.Plan));
         await context.RunAsync(new ProcessSpec(tools.DgDemux, demuxArguments) { WorkingDirectory = context.DemuxFolder }, Long,
             line =>
             {
@@ -110,7 +111,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             context.Log($"  {Path.GetFileName(path)}: {Describe(facts)}");
         }
 
-        var mapping = MuxBuilder.Map(playlist.Mpls, files);
+        var mapping = MuxBuilder.Map(playlist.Mpls, files, DgDemuxCommand.DemuxedPids(job.Profile, job.Plan));
         foreach (var warning in mapping.Warnings)
         {
             context.Warn(warning);
@@ -422,7 +423,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         var mpls = Path.Combine(disc, "BDMV", "PLAYLIST", playlist.Name + ".mpls");
         context.Log("$ " + new ProcessSpec(tools.DgDemux,
-            ExpandArguments(DgDemuxTemplate(context.Job.Profile, context.Options), mpls, Path.Combine(context.DemuxFolder, playlist.Name))).CommandLine);
+            DgDemuxCommand.Arguments(context.Job.Profile, context.Options.DgDemuxArguments, mpls, Path.Combine(context.DemuxFolder, playlist.Name),
+                DgDemuxCommand.DemuxedPids(context.Job.Profile, context.Job.Plan))).CommandLine);
         var srt = context.Job.Plan.Kept.Where(t => SubtitleStep.WantsSrt(context.Job.Profile, t, context.Job.OriginalLanguage)).ToList();
         if (srt.Count > 0)
         {
@@ -446,10 +448,6 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
     }
 
     /// <summary>Splits the DGDemux argument setting on spaces and fills {input} and {output}.</summary>
-    /// <summary>The profile's DGDemux arguments, or the global default (Ripparr__DgDemuxArguments) when it has none.</summary>
-    public static string DgDemuxTemplate(RipProfile profile, RipparrOptions options) =>
-        string.IsNullOrWhiteSpace(profile.DgDemuxArguments) ? options.DgDemuxArguments : profile.DgDemuxArguments.Trim();
-
     /// <summary>The stream's size on disk; mediainfo's figure when the file is gone.</summary>
     private static long FileSize(string path, StreamFacts facts)
     {
@@ -462,11 +460,6 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             return facts.StreamSize;
         }
     }
-
-    public static List<string> ExpandArguments(string template, string input, string output) =>
-        template.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(a => a.Replace("{input}", input).Replace("{output}", output))
-            .ToList();
 
     private static bool Report(JobContext context, double progress)
     {

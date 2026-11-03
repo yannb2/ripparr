@@ -53,7 +53,8 @@ are rejected, so neither the workflow nor the Dockerfile moves to 2.x unless ask
 
 **DGDemux**: rationalqm.us refuses downloads from build servers, so the image may come without it (the build
 log and the Tools page say so). Download `dgdemux_linux_<version>.zip (1.0.0.85 is the pinned one)` yourself and put the `dgdemux` binary in
-`/config/tools/dgdemux` (executable); Ripparr uses a binary there instead of the image's.
+`/config/tools/dgdemux` (executable), with `DGDemux.txt` from the same zip next to it (`dgdemux -h` prints that
+file); Ripparr uses a binary there instead of the image's.
 
 The MakeMKV key is entered on the Tools page and saved in `/config/makemkv/.MakeMKV/settings.conf`. It never
 belongs in compose, `.env` or git. The image includes MakeMKV, whose licence you accept by building it, so keep

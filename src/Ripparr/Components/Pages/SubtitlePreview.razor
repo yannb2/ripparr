@@ -29,7 +29,7 @@
     }
     else
     {
-        <span class="text-body-secondary">No OCR for this track: add @_subtitle.Language to the profile's SRT languages to get text.</span>
+        <span class="text-body-secondary">No OCR for this track: add @Languages.Name(_subtitle.Language) (@_subtitle.Language) to the profile's SRT languages to get text.</span>
     }
     <span class="ms-auto d-flex align-items-center gap-2">
         <select class="form-select form-select-sm" style="width: auto" value="@_filter" @onchange="ChangeFilter">
