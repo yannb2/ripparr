@@ -1,0 +1,11 @@
+bin/
+obj/
+publish/
+.vs/
+.vscode/
+.idea/
+*.user
+TestResults/
+*.db
+*.db-wal
+*.db-shm
