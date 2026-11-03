@@ -17,6 +17,12 @@ size (a constant bit rate, as AC-3 or a DTS core, is taken as it is). For an ISO
 before MakeMKV has decrypted it: the form then shows what the playlist says (resolution, bit depth, HDR10,
 HDR10+ or Dolby Vision, frame rate, sample rate) and the full details come with the job.
 
+For foreign-language films, **Read subtitles** on the same form reads the whole film once (minutes for a UHD
+disc) and pulls out every picture subtitle track: each track gets its exact caption count and forced captions,
+and a preview page with every caption's picture, to find the forced or "foreign parts only" track before the
+job. The read goes on if the page is left, is kept in the subtitle folder (`disc-*`, pruned with the job
+previews) and works on folders and decrypted ISOs.
+
 ## What a job does
 
 1. **Check**: finds the playlist, the size it needs and whether the disc is encrypted (AACS folder, or the

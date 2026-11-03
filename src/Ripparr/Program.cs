@@ -24,6 +24,7 @@ builder.Services.AddScoped<Toasts>();
 builder.Services.AddSingleton<JobEvents>();
 builder.Services.AddSingleton<DiscAnalyzer>();
 builder.Services.AddSingleton<StreamProbe>();
+builder.Services.AddSingleton<SubtitleScanner>();
 builder.Services.AddSingleton<JobPipeline>();
 builder.Services.AddSingleton<RadarrClient>();
 builder.Services.AddSingleton<JobRunner>();
@@ -66,6 +67,16 @@ app.MapGet("/api/jobs/{id:long}/subtitles/{key}.srt",
         return path == null
             ? Results.NotFound()
             : Results.File(path, "application/x-subrip", $"{Naming.SafeFileName(job!.DisplayTitle)}.{key}.srt");
+    });
+// The same for a disc's subtitles read before the job. The key and PID have to be a scan's own.
+app.MapGet("/api/discs/{key}/subtitles/{pid:int}/{index:int}.png",
+    (string key, int pid, int index, SubtitleScanner scanner) =>
+    {
+        var path = scanner.SupFile(key, pid);
+        var caption = path == null ? null : CaptionCache.Get(path).FirstOrDefault(c => c.Index == index);
+        return caption == null
+            ? Results.NotFound()
+            : Results.File(Png.Rgba(caption.Render()), "image/png");
     });
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

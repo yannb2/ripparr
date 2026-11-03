@@ -1,0 +1,103 @@
+@page "/discs/{Key}/subtitles/{Pid:int}"
+@using Ripparr.Subtitles
+@inject SubtitleScanner Scanner
+
+<PageTitle>Subtitles · @(_scan?.SourceName ?? "Disc") · Ripparr</PageTitle>
+
+@if (_scan == null || _captions == null)
+{
+    <div class="alert alert-warning">This subtitle read is gone (only the last few are kept): read the subtitles again from the disc page.</div>
+    return;
+}
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+    <h2 class="mb-0 me-auto">PID @Pid <span class="text-body-secondary fs-5">@_scan.SourceName · playlist @_scan.Playlist</span></h2>
+</div>
+<div class="small text-body-secondary mb-3">
+    Read from the disc before the job. Forced captions are the ones the disc marks forced; a track with only a few
+    hundred captions in a film is often the "foreign parts only" track even when none is marked.
+</div>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3 small">
+    <span>@_captions.Count captions, @_captions.Count(c => c.Forced) forced</span>
+    <span class="ms-auto">
+        <select class="form-select form-select-sm" style="width: auto" value="@_filter" @onchange="ChangeFilter">
+            <option value="all">All captions</option>
+            <option value="forced">Forced only</option>
+        </select>
+    </span>
+</div>
+
+@{
+    var rows = _captions.Where(c => _filter != "forced" || c.Forced).ToList();
+    var pages = Math.Max(1, (rows.Count + PageSize - 1) / PageSize);
+    var page = Math.Min(_page, pages - 1);
+}
+
+<div class="card mb-3">
+    <div class="table-responsive">
+        <table class="table table-sm mb-0 small align-middle">
+            <thead>
+            <tr>
+                <th class="text-end">#</th>
+                <th>Time</th>
+                <th>Picture</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var caption in rows.Skip(page * PageSize).Take(PageSize))
+            {
+                <tr>
+                    <td class="text-end text-body-secondary">@caption.Index</td>
+                    <td class="text-nowrap font-monospace">
+                        @Srt.Time(caption.Start)<br/>@Srt.Time(caption.End)
+                        @if (caption.Forced)
+                        {
+                            <br/><span class="badge text-bg-warning">forced</span>
+                        }
+                    </td>
+                    <td style="max-width: 40rem">
+                        <div class="sv-caption">
+                            <img src="api/discs/@Key/subtitles/@Pid/@(caption.Index).png" loading="lazy" alt="caption @caption.Index"/>
+                        </div>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (pages > 1)
+{
+    <nav class="d-flex align-items-center gap-2 small">
+        <button class="btn btn-sm btn-outline-secondary" disabled="@(page == 0)" @onclick="() => _page = page - 1"><i class="bi bi-chevron-left"></i></button>
+        <span>Page @(page + 1) of @pages (@rows.Count captions)</span>
+        <button class="btn btn-sm btn-outline-secondary" disabled="@(page >= pages - 1)" @onclick="() => _page = page + 1"><i class="bi bi-chevron-right"></i></button>
+    </nav>
+}
+
+@code {
+    private const int PageSize = 40;
+
+    [Parameter] public string Key { get; set; } = "";
+    [Parameter] public int Pid { get; set; }
+
+    private SubtitleScan? _scan;
+    private List<PgsCaption>? _captions;
+    private string _filter = "all";
+    private int _page;
+
+    protected override void OnParametersSet()
+    {
+        _scan = Scanner.Find(Key);
+        var sup = Scanner.SupFile(Key, Pid);
+        _captions = sup == null ? null : CaptionCache.Get(sup);
+    }
+
+    private void ChangeFilter(ChangeEventArgs e)
+    {
+        _filter = e.Value?.ToString() ?? "all";
+        _page = 0;
+    }
+}
