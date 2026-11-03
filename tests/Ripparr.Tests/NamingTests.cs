@@ -38,8 +38,7 @@ public class NamingTests
     [TestMethod]
     public void TrackNameTemplates()
     {
-        Assert.AreEqual("English - TrueHD Atmos 7.1", Naming.Apply(Profile.AudioNameTemplate,
-            new Dictionary<string, string?> { ["language"] = "English", ["codec"] = "TrueHD Atmos", ["channels"] = "7.1" }));
+        Assert.AreEqual("English - TrueHD Atmos 7.1", TrackNaming.Audio(Profile, "English", "TrueHD Atmos", "7.1", new TrackFlags()));
     }
 
     [TestMethod]

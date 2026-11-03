@@ -860,3 +860,97 @@ h2:focus {
     max-width: 100%;
     height: auto;
 }
+
+/* ---- Sticky action bar and side tabs (as in the Muxarr fork) ---- */
+
+.sv-sticky-bar {
+    position: sticky;
+    bottom: 0;
+    margin-top: 2rem;
+    padding: 0.75rem 0;
+    background: color-mix(in srgb, var(--bs-body-bg) 50%, transparent);
+    backdrop-filter: blur(4px);
+    border-top: 1px solid var(--bs-border-color);
+    z-index: 10;
+}
+
+[data-bs-theme="dark"] .sv-sticky-bar {
+    background: color-mix(in srgb, #0d0d1a 50%, transparent);
+    border-top-color: var(--sv-border);
+}
+
+@media (max-width: 767.98px) {
+    .sv-tab-row {
+        flex-direction: row !important;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .sv-tab-row .nav-link {
+        flex: 1 1 auto;
+        padding: 0.5rem;
+        text-align: center !important;
+        white-space: nowrap;
+    }
+
+    .sv-tab-row .nav-link > i {
+        display: none;
+    }
+
+    .sv-sticky-bar .btn {
+        padding: 0.375rem 0.625rem;
+        font-size: 0.875rem;
+        white-space: nowrap;
+    }
+}
+
+/* ---- Language list editor (as the Muxarr fork's LanguagePriorityEditor) ---- */
+
+.lpe-container { display: flex; flex-direction: column; gap: 0.25rem; }
+
+.lpe-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.55rem;
+    border-radius: 0.375rem;
+    font-size: 0.85rem;
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    transition: border-color 0.15s, background-color 0.15s, opacity 0.15s;
+    user-select: none;
+    width: fit-content;
+}
+
+.lpe-item:hover { border-color: var(--bs-border-color-translucent); }
+.lpe-item-original { border-style: dashed; }
+.lpe-original-icon { font-size: 0.75rem; color: var(--bs-warning); opacity: 0.8; }
+.lpe-item-dragging { opacity: 0.35; }
+.lpe-item-dragover { box-shadow: inset 3px 0 0 var(--bs-primary); }
+.lpe-drag-handle { color: var(--bs-secondary-color); font-size: 0.8rem; cursor: grab; opacity: 0.5; }
+.lpe-item:hover .lpe-drag-handle { opacity: 0.9; }
+.lpe-priority-number { font-size: 0.65rem; font-weight: 600; color: var(--bs-secondary-color); min-width: 0.9rem; text-align: center; }
+.lpe-lang-name { font-weight: 500; color: var(--bs-body-color); }
+.lpe-lang-code { font-size: 0.75rem; color: var(--bs-secondary-color); }
+
+.lpe-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: none;
+    padding: 0 0.15rem;
+    font-size: 0.7rem;
+    color: var(--bs-secondary-color);
+    opacity: 0.45;
+    cursor: pointer;
+    transition: opacity 0.15s, color 0.15s;
+    line-height: 1;
+}
+
+.lpe-icon-btn:hover:not(:disabled) { opacity: 1; }
+.lpe-icon-btn:disabled { opacity: 0.15; cursor: default; }
+.lpe-remove-btn:hover { color: var(--bs-danger); }
+.lpe-add-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.25rem; flex-wrap: wrap; }
+.lpe-add-wrapper { min-width: min(420px, 100%); flex-grow: 1; max-width: 32rem; }
+.lpe-add-wrapper input { font-size: 0.85rem; padding: 0.3rem 0.55rem; }

@@ -31,9 +31,18 @@ public static class SubtitleStep
             : Languages.Same(l, track.Language));
     }
 
+    /// <summary>The SRT's name: the subtitle templates with {codec} = SRT. With the SDH text removed it is no longer SDH.</summary>
     public static string SrtName(RipProfile profile, PlannedTrack track) =>
-        Naming.Apply(track.Forced ? profile.ForcedSrtNameTemplate : profile.SrtNameTemplate,
-            new Dictionary<string, string?> { ["language"] = Languages.Name(track.Language) });
+        TrackNaming.Subtitle(profile, Languages.Name(track.Language), "SRT",
+            new TrackFlags(HearingImpaired: track.HearingImpaired && !profile.SrtRemoveSdh, Forced: track.Forced, Commentary: track.Commentary));
+
+    /// <summary>True when enough captions carry SDH text ([door slams], JOHN:, ♪) to call the track SDH: a tenth, and at least 5.</summary>
+    public static bool LooksSdh(IReadOnlyList<OcrCaption> captions)
+    {
+        var withText = captions.Count(c => c.Text.Length > 0);
+        var sdh = captions.Count(c => SdhCleaner.HasSdh(c.Text));
+        return sdh >= 5 && sdh * 10 >= withText;
+    }
 
     public static async Task<List<OutputTrack>> RunAsync(JobContext context, List<OutputTrack> outputs)
     {
@@ -100,6 +109,16 @@ public static class SubtitleStep
                     await File.WriteAllTextAsync(Path.Combine(folder, key + ".ocr.json"), JsonSerializer.Serialize(ocr, Json),
                         context.CancellationToken);
 
+                    if (profile.DetectSdh && !track.HearingImpaired && LooksSdh(ocr))
+                    {
+                        track.HearingImpaired = true;
+                        var renamed = output with { Name = MuxBuilder.TrackName(track, output.File.Facts, profile, job.OriginalLanguage) };
+                        result[result.IndexOf(output)] = renamed;
+                        output = renamed;
+                        entry = entry with { Name = renamed.Name };
+                        context.Log($"  SDH text in many captions: marked as SDH, now \"{renamed.Name}\".");
+                    }
+
                     var cues = ocr.Select(c => new SrtCue(c.Start, c.End, profile.SrtRemoveSdh ? c.Clean : c.Text)).ToList();
                     var srt = Srt.Write(cues);
                     var srtPath = Path.Combine(context.DemuxFolder, key + ".srt");
@@ -110,7 +129,8 @@ public static class SubtitleStep
                     var srtTrack = new PlannedTrack
                     {
                         StreamIndex = track.StreamIndex, Kind = StreamKind.Subtitle, Pid = track.Pid, Codec = "SRT",
-                        Language = track.Language, Keep = true, Forced = track.Forced, Default = false
+                        Language = track.Language, Keep = true, Forced = track.Forced, Commentary = track.Commentary,
+                        HearingImpaired = track.HearingImpaired && !profile.SrtRemoveSdh, Default = false
                     };
                     var facts = new StreamFacts { Kind = StreamKind.Subtitle, Format = "SRT (OCR)", ElementCount = written };
                     var name = SrtName(profile, track);

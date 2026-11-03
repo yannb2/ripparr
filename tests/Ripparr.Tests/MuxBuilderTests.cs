@@ -86,11 +86,12 @@ public class MuxBuilderTests
     {
         var profile = new RipProfile();
         var plan = TrackPlanner.Build(Film, profile, "eng");
-        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile, "eng");
 
         CollectionAssert.AreEqual(new[]
         {
-            "", "English - TrueHD Atmos 7.1", "French - DTS-HD MA 5.1", "English - Commentary - AC3 2.0", "English", "French"
+            "2160p - HEVC - HDR10", "English - TrueHD Atmos 7.1", "French - DTS-HD MA 5.1 Dub", "English - AC3 2.0 (Commentary)",
+            "English - PGS", "French - PGS"
         }, outputs.Select(o => o.Name).ToArray());
     }
 

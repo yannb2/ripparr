@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Ripparr.Profiles;
 
 public enum ChapterNaming
@@ -13,7 +15,7 @@ public enum ChapterNaming
 /// Which playlists and tracks a job keeps and how it names everything. Stored as JSON,
 /// so a new setting needs no database change; a missing value takes its default.
 /// </summary>
-public sealed class RipProfile
+public sealed class RipProfile : IJsonOnDeserialized
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
     public string Name { get; set; } = "New profile";
@@ -41,8 +43,13 @@ public sealed class RipProfile
     /// <summary>"original" (the film's language), "und", or a code.</summary>
     public string VideoLanguage { get; set; } = "original";
 
-    /// <summary>Tokens: {resolution} {codec} {hdr}. Empty = no name.</summary>
-    public string VideoNameTemplate { get; set; } = "";
+    /// <summary>
+    /// Tokens: {resolution} {codec} {dv} {dvprofile} {dvlayer} {range} {hdr} {language}. Empty = no name.
+    /// </summary>
+    public string VideoNameTemplate { get; set; } = TrackNaming.DefaultVideo;
+
+    /// <summary>What {dv} writes, with {dvprofile} and {dvlayer}. Empty = "Dolby Vision Profile {dvprofile} {dvlayer}".</summary>
+    public string DolbyVisionTemplate { get; set; } = "";
 
     // ---- Audio ----
 
@@ -60,10 +67,11 @@ public sealed class RipProfile
     /// <summary>Keep the AC-3 core DGDemux writes next to a TrueHD track.</summary>
     public bool KeepTrueHdCore { get; set; }
 
-    /// <summary>Tokens: {language} {codec} {channels}.</summary>
-    public string AudioNameTemplate { get; set; } = "{language} - {codec} {channels}";
+    /// <summary>Tokens: {language} {codec} {channels} {dub} {description} {trackname} and the flag words.</summary>
+    public string AudioNameTemplate { get; set; } = TrackNaming.DefaultAudio;
 
-    public string CommentaryNameTemplate { get; set; } = "{language} - Commentary - {codec} {channels}";
+    /// <summary>Templates for flagged tracks, by flag (sdh, forced, commentary, ad, dub). The first matching flag wins.</summary>
+    public Dictionary<string, string> AudioNameOverrides { get; set; } = TrackNaming.DefaultAudioOverrides();
 
     // ---- Subtitles ----
 
@@ -71,10 +79,11 @@ public sealed class RipProfile
 
     public bool KeepOtherSubtitleLanguages { get; set; }
 
-    /// <summary>Tokens: {language}.</summary>
-    public string SubtitleNameTemplate { get; set; } = "{language}";
+    /// <summary>Tokens: {language} {codec} {dub} {trackname} and the flag words. SRT tracks use it too, with {codec} = SRT.</summary>
+    public string SubtitleNameTemplate { get; set; } = TrackNaming.DefaultSubtitle;
 
-    public string ForcedSubtitleNameTemplate { get; set; } = "{language} - Forced";
+    /// <summary>Templates for flagged tracks, by flag (sdh, forced, commentary, ad, dub). The first matching flag wins.</summary>
+    public Dictionary<string, string> SubtitleNameOverrides { get; set; } = TrackNaming.DefaultSubtitleOverrides();
 
     /// <summary>
     /// Languages that also get a text (SRT) track, read from the picture subtitles with OCR
@@ -85,13 +94,12 @@ public sealed class RipProfile
     /// <summary>Remove the text for the deaf and hard of hearing from the SRT tracks ([door slams], JOHN:, ♪ lyrics).</summary>
     public bool SrtRemoveSdh { get; set; } = true;
 
+    /// <summary>Mark a subtitle track as SDH (flag and name) when its OCR finds SDH text in many captions.</summary>
+    public bool DetectSdh { get; set; } = true;
+
     /// <summary>Also make an SRT of forced subtitle tracks.</summary>
     public bool SrtForForced { get; set; } = true;
 
-    /// <summary>Tokens: {language}.</summary>
-    public string SrtNameTemplate { get; set; } = "{language} - SRT";
-
-    public string ForcedSrtNameTemplate { get; set; } = "{language} - Forced - SRT";
 
     // ---- Chapters ----
 
@@ -112,6 +120,61 @@ public sealed class RipProfile
     /// <summary>Write TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION... as MKV global tags, as tag_release does.</summary>
     public bool WriteTags { get; set; } = true;
 
+    // ---- Names from before 0.3.0, read once and moved to the settings above ----
+
+    /// <summary>Before 0.3.0: the commentary audio name. Now AudioNameOverrides["commentary"].</summary>
+    public string? CommentaryNameTemplate { get; set; }
+
+    /// <summary>Before 0.3.0: the forced subtitle name. Now SubtitleNameOverrides["forced"].</summary>
+    public string? ForcedSubtitleNameTemplate { get; set; }
+
+    /// <summary>Before 0.3.0: the SRT names. SRT tracks now use the subtitle names with {codec} = SRT.</summary>
+    public string? SrtNameTemplate { get; set; }
+
+    public string? ForcedSrtNameTemplate { get; set; }
+
+    /// <summary>
+    /// A profile saved before 0.3.0 (it still has the old names) moves to the 0.3.0 names: a name
+    /// left at the old default takes the new default, a name of your own is kept.
+    /// </summary>
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        if (CommentaryNameTemplate == null && ForcedSubtitleNameTemplate == null && SrtNameTemplate == null && ForcedSrtNameTemplate == null)
+        {
+            return;
+        }
+
+        if (VideoNameTemplate == "")
+        {
+            VideoNameTemplate = TrackNaming.DefaultVideo;
+        }
+
+        if (AudioNameTemplate == "{language} - {codec} {channels}")
+        {
+            AudioNameTemplate = TrackNaming.DefaultAudio;
+        }
+
+        if (CommentaryNameTemplate != null && CommentaryNameTemplate != "{language} - Commentary - {codec} {channels}")
+        {
+            AudioNameOverrides[TrackNaming.Commentary] = CommentaryNameTemplate;
+        }
+
+        if (SubtitleNameTemplate == "{language}")
+        {
+            SubtitleNameTemplate = TrackNaming.DefaultSubtitle;
+        }
+
+        if (ForcedSubtitleNameTemplate != null && ForcedSubtitleNameTemplate != "{language} - Forced")
+        {
+            SubtitleNameOverrides[TrackNaming.Forced] = ForcedSubtitleNameTemplate;
+        }
+
+        CommentaryNameTemplate = null;
+        ForcedSubtitleNameTemplate = null;
+        SrtNameTemplate = null;
+        ForcedSrtNameTemplate = null;
+    }
+
     public RipProfile Copy(string? name = null)
     {
         var json = System.Text.Json.JsonSerializer.Serialize(this);
@@ -128,7 +191,7 @@ public sealed class RipProfile
         {
             Id = "uhd-remux",
             Name = "UHD remux",
-            Description = "Everything that matters on a UHD disc: Dolby Vision kept as on the disc, lossless audio, commentaries."
+            Description = "Everything that matters on a UHD disc: Dolby Vision merged into one track, lossless audio, commentaries."
         },
         new()
         {

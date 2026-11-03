@@ -132,7 +132,7 @@ public static partial class MuxBuilder
     }
 
     /// <summary>The finished file's tracks, in the plan's order, each with its name.</summary>
-    public static List<OutputTrack> Outputs(TrackPlan plan, StreamMapping mapping, RipProfile profile)
+    public static List<OutputTrack> Outputs(TrackPlan plan, StreamMapping mapping, RipProfile profile, string? originalLanguage = null)
     {
         var outputs = new List<OutputTrack>();
         foreach (var track in plan.Kept)
@@ -142,23 +142,40 @@ public static partial class MuxBuilder
                 continue;
             }
 
-            outputs.Add(new OutputTrack(track, file, TrackName(track, file.Facts, profile)));
+            outputs.Add(new OutputTrack(track, file, TrackName(track, file.Facts, profile, originalLanguage)));
             if (profile.KeepTrueHdCore && mapping.Cores.TryGetValue(file, out var core))
             {
                 var coreTrack = new PlannedTrack
                 {
                     StreamIndex = track.StreamIndex, Kind = StreamKind.Audio, Codec = "AC3", Language = track.Language,
-                    Keep = true, Commentary = track.Commentary, Pid = track.Pid
+                    Keep = true, Commentary = track.Commentary, VisualImpaired = track.VisualImpaired, Pid = track.Pid
                 };
-                outputs.Add(new OutputTrack(coreTrack, core, TrackName(coreTrack, core.Facts, profile)));
+                outputs.Add(new OutputTrack(coreTrack, core, TrackName(coreTrack, core.Facts, profile, originalLanguage)));
             }
         }
 
         return outputs;
     }
 
-    /// <summary>The track name: typed on the form, or from the profile's template.</summary>
-    public static string TrackName(PlannedTrack track, StreamFacts facts, RipProfile profile)
+    /// <summary>
+    /// A track's flags. Dub: audio in another language than the film's own (known from Radarr or
+    /// TMDB), except commentaries and audio descriptions.
+    /// </summary>
+    public static TrackFlags Flags(PlannedTrack track, string? originalLanguage) => new(
+        HearingImpaired: track.HearingImpaired,
+        Forced: track.Forced,
+        Commentary: track.Commentary,
+        VisualImpaired: track.VisualImpaired,
+        Dub: track.Kind == StreamKind.Audio && !track.Commentary && !track.VisualImpaired
+             && !string.IsNullOrWhiteSpace(originalLanguage) && originalLanguage != "und"
+             && !Languages.Same(track.Language, originalLanguage));
+
+    /// <summary>
+    /// The track name: typed on the form, or from the profile's templates. The video's Dolby
+    /// Vision profile and layer come from dovi_tool once the layers are merged.
+    /// </summary>
+    public static string TrackName(PlannedTrack track, StreamFacts facts, RipProfile profile, string? originalLanguage = null,
+        string? dvProfile = null, string? dvLayer = null)
     {
         if (!string.IsNullOrWhiteSpace(track.Name))
         {
@@ -166,24 +183,21 @@ public static partial class MuxBuilder
         }
 
         var language = Languages.Name(track.Language);
+        var flags = Flags(track, originalLanguage);
         return track.Kind switch
         {
-            StreamKind.Video => Naming.Apply(profile.VideoNameTemplate, new Dictionary<string, string?>
-            {
-                ["resolution"] = facts.Resolution, ["codec"] = facts.VideoCodec, ["hdr"] = facts.DynamicRange, ["language"] = language
-            }),
-            StreamKind.Audio => Naming.Apply(track.Commentary ? profile.CommentaryNameTemplate : profile.AudioNameTemplate,
-                new Dictionary<string, string?>
-                {
-                    ["language"] = language,
-                    ["codec"] = string.IsNullOrEmpty(facts.Format) ? track.Codec : facts.AudioCodec,
-                    ["channels"] = facts.ChannelWords
-                }),
-            StreamKind.Subtitle => Naming.Apply(track.Forced ? profile.ForcedSubtitleNameTemplate : profile.SubtitleNameTemplate,
-                new Dictionary<string, string?> { ["language"] = language }),
+            StreamKind.Video => TrackNaming.Video(profile, language, facts.Resolution, facts.VideoCodec, facts.DynamicRange,
+                TrackNaming.DolbyVisionProfile(dvProfile ?? facts.DolbyVisionProfile, facts.DynamicRange), dvLayer),
+            StreamKind.Audio => TrackNaming.Audio(profile, language,
+                string.IsNullOrEmpty(facts.Format) ? track.Codec : facts.AudioCodec, facts.ChannelWords, flags),
+            StreamKind.Subtitle => TrackNaming.Subtitle(profile, language, SubtitleCodec(track, facts), flags),
             _ => ""
         };
     }
+
+    /// <summary>PGS for Blu-ray picture subtitles, SRT for the OCR text.</summary>
+    public static string SubtitleCodec(PlannedTrack track, StreamFacts facts) =>
+        string.Equals(facts.Format, "SRT (OCR)", StringComparison.Ordinal) || track.Codec == "SRT" ? "SRT" : string.IsNullOrEmpty(track.Codec) ? "PGS" : track.Codec;
 
     /// <summary>The values the file name and title templates use.</summary>
     public static Dictionary<string, string?> NameValues(Job job, IReadOnlyList<OutputTrack> outputs)
@@ -285,9 +299,19 @@ public static partial class MuxBuilder
                 arguments.AddRange(["--forced-display-flag", $"0:{(planned.Forced ? "yes" : "no")}"]);
             }
 
-            if (planned.Kind == StreamKind.Audio && planned.Commentary)
+            if (planned.Commentary)
             {
                 arguments.AddRange(["--commentary-flag", "0:yes"]);
+            }
+
+            if (planned.HearingImpaired)
+            {
+                arguments.AddRange(["--hearing-impaired-flag", "0:yes"]);
+            }
+
+            if (planned.VisualImpaired)
+            {
+                arguments.AddRange(["--visual-impaired-flag", "0:yes"]);
             }
 
             if (planned.Kind == StreamKind.Video && frameRate is { } rate)
