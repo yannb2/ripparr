@@ -8,7 +8,7 @@ ARG DOVI_TOOL_VERSION=2.3.4
 ARG FFMPEG_VERSION=8.1
 ARG SEVENZIP_VERSION=25.01
 
-# MakeMKV built from its own source on the same Ubuntu as the final image, command line only (no Qt).
+# MakeMKV built from its own source (versions older than the newest move to /download/old/) on the same Ubuntu as the final image, command line only (no Qt).
 # makemkv-bin holds the closed part (makemkvcon); building it means accepting its EULA,
 # which is why the image is for your own use and the package stays private.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS makemkv
@@ -21,7 +21,9 @@ WORKDIR /build
 RUN set -eux; \
     case "${MAKEMKV_VERSION}" in 1.*) ;; *) echo "MakeMKV ${MAKEMKV_VERSION}: 2.x is held back, see README" >&2; exit 1 ;; esac; \
     for part in oss bin; do \
-        curl -fsSL "https://www.makemkv.com/download/makemkv-${part}-${MAKEMKV_VERSION}.tar.gz" -o "${part}.tar.gz"; \
+        name="makemkv-${part}-${MAKEMKV_VERSION}.tar.gz"; \
+        curl -fsSL "https://www.makemkv.com/download/${name}" -o "${part}.tar.gz" \
+            || curl -fsSL "https://www.makemkv.com/download/old/${name}" -o "${part}.tar.gz"; \
         tar -xzf "${part}.tar.gz"; \
     done; \
     cd "makemkv-oss-${MAKEMKV_VERSION}"; \
