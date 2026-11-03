@@ -103,7 +103,7 @@ else
         _folderProblems = FolderCheck.Problems(Options.Value);
         _loading = true;
         var options = Options.Value;
-        _sources = await Task.Run(() => SourceFinder.Find(options.Sources, [options.WorkFolder, options.DoneFolder]));
+        _sources = await Task.Run(() => SourceFinder.Find(options.Sources, [options.WorkFolder, options.DoneFolder, options.IsoMount.Folder]));
         _loading = false;
     }
 

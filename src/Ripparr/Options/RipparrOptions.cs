@@ -58,6 +58,9 @@ public class RipparrOptions
 
     public ToolPaths Tools { get; set; } = new();
 
+    /// <summary>The ISO mount service on the host (host/ripparr_mount.py): jobs read a mounted ISO instead of unpacking it.</summary>
+    public IsoMountOptions IsoMount { get; set; } = new();
+
     public UpdateCheckOptions Updates { get; set; } = new();
 
     /// <summary>Used to look up the title, year, TMDb and IMDb IDs and the original language.</summary>
@@ -99,6 +102,60 @@ public class RipparrOptions
         var candidate = System.IO.Path.Combine(toolsFolder, name);
         return current == name && File.Exists(candidate) ? candidate : current;
     }
+}
+
+public class IsoMountOptions
+{
+    /// <summary>Use the mount service for plain (decrypted) ISO files. Off: always unpack with 7-Zip.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>The service's socket, bind-mounted from the host (/run/ripparr-mount:/run/ripparr-mount).</summary>
+    public string Socket { get; set; } = "/run/ripparr-mount/mount.sock";
+
+    /// <summary>Where the service mounts the ISOs; left out of the Sources list so a disc doesn't show twice.</summary>
+    public string Folder { get; set; } = "/mnt/pc/iso-mounts";
+
+    /// <summary>When the ISO can't be mounted: Ask (the job stops and asks before unpacking) or Unpack (unpack with 7-Zip right away).</summary>
+    public MountFallback WhenItFails { get; set; } = MountFallback.Ask;
+
+    /// <summary>
+    /// Folders that have another path on the host than in the container (the volume /mnt/usb:/usb):
+    /// the service gets host paths, Ripparr reads the mount at its container path. Not needed when
+    /// the volumes keep the same path on both sides.
+    /// </summary>
+    public List<PathMapping> PathMap { get; set; } = [];
+
+    /// <summary>The host's path for a path in the container.</summary>
+    public string ToHost(string path) => Map(path, m => m.Container, m => m.Host);
+
+    /// <summary>The container's path for a path on the host.</summary>
+    public string ToContainer(string path) => Map(path, m => m.Host, m => m.Container);
+
+    private string Map(string path, Func<PathMapping, string> from, Func<PathMapping, string> to)
+    {
+        foreach (var mapping in PathMap.OrderByDescending(m => from(m).Length))
+        {
+            var prefix = from(mapping).TrimEnd('/');
+            if (prefix.Length > 0 && (path == prefix || path.StartsWith(prefix + "/", StringComparison.Ordinal)))
+            {
+                return to(mapping).TrimEnd('/') + path[prefix.Length..];
+            }
+        }
+
+        return path;
+    }
+}
+
+public class PathMapping
+{
+    public string Container { get; set; } = "";
+    public string Host { get; set; } = "";
+}
+
+public enum MountFallback
+{
+    Ask,
+    Unpack
 }
 
 public class SourceRoot

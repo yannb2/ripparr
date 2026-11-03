@@ -47,14 +47,16 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                     $"{playlist.Mpls.Clips.Count} clip(s), {Format.Size(playlist.Size)}" +
                     (playlist.Mpls.HasDolbyVisionEnhancementLayer ? ", Dolby Vision enhancement layer" : ""));
 
-        var prepare = PrepareMode(source, analysis);
+        var prepare = PrepareMode(source, analysis, context.Options.IsoMount.Enabled && !job.UnpackIso);
         context.Log($"Encryption: {analysis.Encryption}. Prepare: {Describe(prepare)}.");
+        job.StepWeights = JobProgress.Weights(prepare, job.Plan.MergeDolbyVisionLayer,
+            job.Plan.Kept.Count(t => SubtitleStep.WantsSrt(job.Profile, t, job.OriginalLanguage)));
         Directory.CreateDirectory(context.WorkFolder);
         CheckSpace(context, source, analysis, playlist, prepare);
 
         if (job.DryRun)
         {
-            DryRun(context, source, playlist, prepare);
+            await DryRunAsync(context, source, playlist, prepare);
             return;
         }
 
@@ -285,24 +287,29 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         /// <summary>A plain ISO: unpack the playlist's clips with 7-Zip.</summary>
         Unpack,
 
+        /// <summary>A plain ISO: mounted read-only by the mount service on the host, then read in place.</summary>
+        Mount,
+
         /// <summary>Encrypted: MakeMKV backup --decrypt into the job folder.</summary>
         Decrypt
     }
 
-    public static Prepare PrepareMode(DiscSource source, DiscAnalysis analysis)
+    /// <param name="mount">Mount plain ISOs (the mount service is on and the job was not told to unpack).</param>
+    public static Prepare PrepareMode(DiscSource source, DiscAnalysis analysis, bool mount)
     {
         if (analysis.Encryption is Encryption.Encrypted or Encryption.Likely)
         {
             return Prepare.Decrypt;
         }
 
-        return source.Kind == SourceKind.Iso ? Prepare.Unpack : Prepare.InPlace;
+        return source.Kind != SourceKind.Iso ? Prepare.InPlace : mount ? Prepare.Mount : Prepare.Unpack;
     }
 
     private static string Describe(Prepare prepare) => prepare switch
     {
         Prepare.InPlace => "read the folder where it is",
         Prepare.Unpack => "unpack the playlist's clips with 7-Zip",
+        Prepare.Mount => "mount the ISO read-only and read it in place",
         _ => "decrypt a copy with MakeMKV"
     };
 
@@ -313,42 +320,124 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         _ => facts.Format ?? "subtitle"
     };
 
-    private async Task<string> PrepareAsync(JobContext context, DiscSource source, PlaylistInfo playlist, Prepare prepare)
+    private static async Task<string> PrepareAsync(JobContext context, DiscSource source, PlaylistInfo playlist, Prepare prepare)
     {
-        var tools = context.Options.Tools;
         switch (prepare)
         {
             case Prepare.InPlace:
                 context.Log($"Reading {source.Path} in place.");
                 return source.Path;
 
-            case Prepare.Unpack:
+            case Prepare.Mount:
             {
-                var reader = new IsoReader(tools.SevenZip);
-                List<string> patterns = ["BDMV/index.bdmv", "BDMV/MovieObject.bdmv", "BDMV/PLAYLIST/*", "BDMV/CLIPINF/*"];
-                patterns.AddRange(playlist.Mpls.Clips.Distinct(StringComparer.OrdinalIgnoreCase).Select(c => $"BDMV/STREAM/{c}.m2ts"));
-                context.Log("$ " + new ProcessSpec(tools.SevenZip, ["x", source.Path, $"-o{context.DiscFolder}", "-y", "-bsp1", ..patterns]).CommandLine);
-                var result = await reader.ExtractAsync(source.Path, context.DiscFolder, patterns, context.CancellationToken,
-                    line =>
-                    {
-                        if (MuxBuilder.PercentProgress(line) is { } p && line.Trim().Length < 60)
-                        {
-                            context.Progress(p);
-                        }
-                    }, Long);
-                if (result.Success && DiscAnalyzer.PlaylistPath(context.DiscFolder, playlist.Name) != null)
+                var mounted = await MountAsync(context, source, playlist);
+                if (mounted != null)
                 {
-                    return context.DiscFolder;
+                    return mounted;
                 }
 
-                context.Warn($"7-Zip could not unpack the ISO ({result.LastLine}); trying MakeMKV backup instead.");
-                TryDeleteFolder(context, context.DiscFolder);
-                return await BackupAsync(context, source, decrypt: false);
+                context.Job.StepWeights[JobSteps.Prepare] = JobProgress.Weights(Prepare.Unpack, false, 0)[JobSteps.Prepare];
+                return await UnpackAsync(context, source, playlist);
             }
+
+            case Prepare.Unpack:
+                return await UnpackAsync(context, source, playlist);
 
             default:
                 return await BackupAsync(context, source, decrypt: true);
         }
+    }
+
+    /// <summary>
+    /// Asks the mount service to mount the ISO. Null when it could not and the settings say to
+    /// unpack instead; when they say to ask (the default), the job stops with the question.
+    /// </summary>
+    private static async Task<string?> MountAsync(JobContext context, DiscSource source, PlaylistInfo playlist)
+    {
+        var settings = context.Options.IsoMount;
+        context.Log($"Asking the mount service ({settings.Socket}) to mount {source.Path}.");
+        var reply = await IsoMount.MountAsync(settings.Socket, settings.ToHost(source.Path), context.CancellationToken);
+        string reason;
+        if (reply is { Ok: true, Path: { } hostPath })
+        {
+            // MountedAt keeps the host path: that is what the service unmounts.
+            context.Job.MountedAt = hostPath;
+            var path = settings.ToContainer(hostPath);
+            context.Save();
+            var folder = SourceFinder.BdmvParent(path);
+            if (folder != null && DiscAnalyzer.PlaylistPath(folder, playlist.Name) != null)
+            {
+                context.Log($"Mounted read-only at {path}: reading the disc there, nothing is copied.");
+                return folder;
+            }
+
+            // Mounted on the host but not visible here: the container's /mnt/pc volume needs rslave.
+            reason = $"The ISO was mounted at {path}, but this container does not see the playlist there " +
+                     "(is the volume mounted with rslave?)";
+            await UnmountAsync(context);
+        }
+        else
+        {
+            reason = reply.Error ?? "The mount service did not say why.";
+        }
+
+        if (settings.WhenItFails == MountFallback.Unpack)
+        {
+            context.Warn($"Could not mount the ISO ({reason.TrimEnd('.')}); unpacking it with 7-Zip instead.");
+            return null;
+        }
+
+        throw new JobQuestionException(
+            $"The ISO could not be mounted: {reason.TrimEnd('.')}. Unpack the playlist's clips with 7-Zip instead? " +
+            $"That copies about {Format.Size(playlist.Size)} to {context.Options.WorkFolder} first.",
+            $"Could not mount the ISO: {reason}");
+    }
+
+    /// <summary>Unmounts the job's ISO (when the job ends, or a mount that is no use).</summary>
+    public static async Task UnmountAsync(JobContext context)
+    {
+        if (context.Job.MountedAt is not { } path)
+        {
+            return;
+        }
+
+        var reply = await IsoMount.UnmountAsync(context.Options.IsoMount.Socket, path, CancellationToken.None);
+        if (reply.Ok)
+        {
+            context.Log($"Unmounted {path}.");
+        }
+        else
+        {
+            context.Warn($"Could not unmount {path}: {reply.Error} (unmount it on the host: sudo ripparr_mount.py unmount {path})");
+        }
+
+        context.Job.MountedAt = null;
+        context.Save();
+    }
+
+    private static async Task<string> UnpackAsync(JobContext context, DiscSource source, PlaylistInfo playlist)
+    {
+        var tools = context.Options.Tools;
+        var reader = new IsoReader(tools.SevenZip);
+        List<string> patterns = ["BDMV/index.bdmv", "BDMV/MovieObject.bdmv", "BDMV/PLAYLIST/*", "BDMV/CLIPINF/*"];
+        patterns.AddRange(playlist.Mpls.Clips.Distinct(StringComparer.OrdinalIgnoreCase).Select(c => $"BDMV/STREAM/{c}.m2ts"));
+        context.Log("$ " + new ProcessSpec(tools.SevenZip, ["x", source.Path, $"-o{context.DiscFolder}", "-y", "-bsp1", ..patterns]).CommandLine);
+        var result = await reader.ExtractAsync(source.Path, context.DiscFolder, patterns, context.CancellationToken,
+            line =>
+            {
+                if (MuxBuilder.PercentProgress(line) is { } p && line.Trim().Length < 60)
+                {
+                    context.Progress(p);
+                }
+            }, Long);
+        if (result.Success && DiscAnalyzer.PlaylistPath(context.DiscFolder, playlist.Name) != null)
+        {
+            return context.DiscFolder;
+        }
+
+        context.Warn($"7-Zip could not unpack the ISO ({result.LastLine}); trying MakeMKV backup instead.");
+        TryDeleteFolder(context, context.DiscFolder);
+        return await BackupAsync(context, source, decrypt: false);
     }
 
     private static async Task<string> BackupAsync(JobContext context, DiscSource source, bool decrypt)
@@ -406,6 +495,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         {
             Prepare.Decrypt => discSize,
             Prepare.Unpack => playlist.Size,
+            // Unpacked anyway when the mount fails and the settings say not to ask.
+            Prepare.Mount when context.Options.IsoMount.WhenItFails == MountFallback.Unpack => playlist.Size,
             _ => 0
         };
 
@@ -427,17 +518,35 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         }
     }
 
-    private static void DryRun(JobContext context, DiscSource source, PlaylistInfo playlist, Prepare prepare)
+    private static async Task DryRunAsync(JobContext context, DiscSource source, PlaylistInfo playlist, Prepare prepare)
     {
         var tools = context.Options.Tools;
         context.Step("Dry run");
         var disc = prepare == Prepare.InPlace ? source.Path : context.DiscFolder;
+        var unpack = prepare == Prepare.Unpack;
+        if (prepare == Prepare.Mount)
+        {
+            var ping = await IsoMount.PingAsync(context.Options.IsoMount.Socket, context.CancellationToken);
+            if (ping.Ok)
+            {
+                context.Log($"Mount: the mount service (version {ping.Version}) mounts the ISO read-only, DGDemux reads it there.");
+                disc = Path.Combine(context.Options.IsoMount.Folder, "<the mounted ISO>");
+            }
+            else
+            {
+                unpack = true;
+                context.Log($"Mount: {ping.Error} " + (context.Options.IsoMount.WhenItFails == MountFallback.Ask
+                    ? "The job would stop and ask before unpacking with 7-Zip:"
+                    : "The job would unpack with 7-Zip instead:"));
+            }
+        }
+
         if (prepare == Prepare.Decrypt)
         {
             context.Log("$ " + new ProcessSpec(tools.MakeMkvCon, ["-r", "--progress=-same", "--noscan", "backup", "--decrypt",
                 MakeMkv.SourceArgument(source), context.DiscFolder]).CommandLine);
         }
-        else if (prepare == Prepare.Unpack)
+        else if (unpack)
         {
             context.Log("$ " + new ProcessSpec(tools.SevenZip, ["x", source.Path, $"-o{context.DiscFolder}", "-y", "BDMV/PLAYLIST/*",
                 "BDMV/CLIPINF/*", ..playlist.Mpls.Clips.Distinct().Select(c => $"BDMV/STREAM/{c}.m2ts")]).CommandLine);

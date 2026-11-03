@@ -6,6 +6,7 @@
 @inject JobRunner Runner
 @inject RadarrClient Radarr
 @inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<RipparrOptions> Options
 @implements IDisposable
 
 <PageTitle>@(_source?.Name ?? "Disc") · Ripparr</PageTitle>
@@ -34,6 +35,21 @@
     {
         case Encryption.None:
             <span class="badge text-bg-success">Not encrypted</span>
+            @if (_source.Kind == SourceKind.Iso && _mount != null)
+            {
+                @if (_mount.Ok)
+                {
+                    <span class="badge text-bg-success" title="The mount service mounts the ISO read-only for the job: nothing is copied.">
+                        <i class="bi bi-hdd"></i> Mount service ready: read in place
+                    </span>
+                }
+                else
+                {
+                    <span class="badge text-bg-warning" title="@_mount.Error">
+                        <i class="bi bi-exclamation-triangle"></i> Mount service not reachable: the job will @(Options.Value.IsoMount.WhenItFails == MountFallback.Ask ? "ask before unpacking" : "unpack it")
+                    </span>
+                }
+            }
             break;
         case Encryption.Encrypted:
             <span class="badge text-bg-warning" title="MakeMKV decrypts a copy first.">Encrypted: MakeMKV decrypts it first</span>
@@ -319,6 +335,8 @@
 
             <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles"/>
 
+            <ChapterList Playlist="_selected.Mpls" Naming="Profile.Chapters"/>
+
             @if (Profile.WriteTags)
             {
                 <div class="mt-3">
@@ -399,11 +417,17 @@
 
     private async Task Reload() => await Load(true);
 
+    /// <summary>The mount service's answer to a ping, for plain ISOs (null: not asked, or switched off).</summary>
+    private MountReply? _mount;
+
     private async Task Load(bool fresh)
     {
         _analysis = null;
         StateHasChanged();
         _analysis = await Analyzer.AnalyseAsync(_source!, CancellationToken.None, fresh);
+        _mount = _source!.Kind == SourceKind.Iso && Options.Value.IsoMount.Enabled
+            ? await IsoMount.PingAsync(Options.Value.IsoMount.Socket, CancellationToken.None)
+            : null;
         if (_analysis.MainFeature is { } main)
         {
             Select(main);

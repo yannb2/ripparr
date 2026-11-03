@@ -18,6 +18,11 @@ services:
       # Ripparr__WorkFolder: /downloads/ripparr/work
       # Ripparr__DoneFolder: /downloads/ripparr/done
       # Ripparr__Updates__AllowMakeMkvMajor: "false"
+      # Where the mount service mounts ISOs; must match its --root (default /mnt/pc/iso-mounts).
+      Ripparr__IsoMount__Folder: /mnt/iso-mounts
+      # /usb is /mnt/usb on the host: the mount service gets host paths.
+      Ripparr__IsoMount__PathMap__0__Container: /usb
+      Ripparr__IsoMount__PathMap__0__Host: /mnt/usb
     volumes:
       - /config/ripparr:/config
       # Scratch: ISO files and BDMV folders anywhere under it, work and done folders too.
@@ -25,3 +30,7 @@ services:
       # USB drives mounted on the VM under /mnt/usb show up as a second source.
       # rslave: a drive plugged in after the container started still appears.
       - /mnt/usb:/usb:ro,rslave
+      # The ISO mount service (host/ripparr_mount.py, see the README): its socket, and the folder it mounts
+      # ISOs in (rslave, so a mount made after the container started shows up).
+      - /run/ripparr-mount:/run/ripparr-mount
+      - /mnt/iso-mounts:/mnt/iso-mounts:ro,rslave

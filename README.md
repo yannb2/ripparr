@@ -37,8 +37,10 @@ the job previews) and work on folders and decrypted ISOs.
 
 1. **Check**: finds the playlist, the size it needs and whether the disc is encrypted (AACS folder, or the
    encryption bits in the first stream packets).
-2. **Prepare**: reads a plain BDMV folder where it is, unpacks a plain ISO with 7-Zip, or makes a decrypted
-   backup with `makemkvcon backup --decrypt` when the source is encrypted.
+2. **Prepare**: reads a plain BDMV folder where it is, has the mount service mount a plain ISO read-only
+   (nothing copied; see below), or makes a decrypted backup with `makemkvcon backup --decrypt` when the source
+   is encrypted. When the ISO can't be mounted the job stops and asks: **Unpack with 7-Zip** (the playlist's
+   clips only, the size is in the question) or **Try mounting again**.
 3. **Demux**: DGDemux writes each stream of the playlist, the Dolby Vision enhancement layer included.
 4. **Read streams**: MediaInfo reads every stream (codec, channels, Atmos, DTS:X, HDR format).
 5. **Subtitles**: every picture subtitle track (PGS) is kept in `/config/subtitles/job-<id>/` for the preview
@@ -54,6 +56,34 @@ the job previews) and work on folders and decrypted ISOs.
 9. **Finish**: moves the file to `done/Title (Year)/`.
 
 Each step logs the exact command it ran, on the job page and in `/config/logs/job-<id>.log`.
+
+The job page shows the current step's percentage and the time left in it (from its pace so far), and the whole
+job's percentage: the steps done plus the current one's share, each step weighted by how long it usually takes
+(copying or decrypting the disc, DGDemux and mkvmerge move all the data; the OCR counts per SRT track). The
+queue shows both too, and `/api/stats` gives the whole-job figure.
+
+## Mount ISOs instead of unpacking
+
+A container can't mount an ISO without being privileged, so a small service on the host does it:
+[`host/ripparr_mount.py`](host/ripparr_mount.py) (Python, standard library only). Ripparr asks it over a unix
+socket; it mounts the ISO with `mount -o loop,ro,nosuid,nodev,noexec` (UDF, as Blu-rays are) under its folder,
+which the container sees through an `rslave` volume, and unmounts it when the job ends. It only mounts `.iso`
+files from the folders it is told to allow, and only unmounts its own mounts.
+
+```sh
+sudo install -m 755 host/ripparr_mount.py /usr/local/sbin/ripparr_mount.py
+sudo install -m 644 host/ripparr-mount.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now ripparr-mount
+```
+
+The unit mounts in `/mnt/pc/iso-mounts`, allows ISOs from `/downloads` and `/mnt/pc`, and lets gid 1000 use
+the socket; change `--root`, `--allow` and `--group` in it to suit. The service works with host paths: a volume that
+changes the path (`/mnt/usb:/usb`) needs `Ripparr__IsoMount__PathMap__0__Container: /usb` and
+`__Host: /mnt/usb` (nothing to set when the volumes keep the path, like `/downloads:/downloads`). Then give
+the container the socket folder (`/run/ripparr-mount:/run/ripparr-mount`) and make sure it sees the mount
+folder (already the case under `/mnt/pc` with `rslave`); set `Ripparr__IsoMount__Folder` when it is elsewhere.
+The disc page says whether the service answers. By hand: `sudo ripparr_mount.py mount /downloads/film.iso`,
+`list`, `unmount <path>`.
 
 ## Profiles
 
@@ -103,6 +133,11 @@ the queue, the current job and its progress for a Homepage tile.
 | `Ripparr__SubtitleFolder` | `/config/subtitles` |
 | `Ripparr__KeepSubtitlePreviews` | `30` (jobs whose subtitle pictures are kept) |
 | `Ripparr__Radarr__Url` / `__ApiKey` | not set: title, year and IDs are typed by hand |
+| `Ripparr__IsoMount__Enabled` | `true` (`false`: always unpack ISOs with 7-Zip) |
+| `Ripparr__IsoMount__Socket` | `/run/ripparr-mount/mount.sock` |
+| `Ripparr__IsoMount__Folder` | `/mnt/pc/iso-mounts` (where the service mounts; left out of the sources) |
+| `Ripparr__IsoMount__WhenItFails` | `Ask` (`Unpack`: unpack with 7-Zip without asking) |
+| `Ripparr__IsoMount__PathMap__0__Container` / `__Host` | none (folders whose path differs on the host) |
 
 ## Building
 

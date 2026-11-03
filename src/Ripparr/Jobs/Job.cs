@@ -13,7 +13,10 @@ public enum JobStatus
     Cancelled,
 
     /// <summary>Was running when the container stopped.</summary>
-    Interrupted
+    Interrupted,
+
+    /// <summary>Stopped to ask something (Question): the ISO could not be mounted, unpack it instead?</summary>
+    Waiting
 }
 
 /// <summary>One track of the finished MKV, for the job page. Jobs saved before 0.1.3 have no details, size or bit rate.</summary>
@@ -70,6 +73,24 @@ public sealed class Job
     /// <summary>Progress of the current step, 0 to 1. Null when the tool gives none.</summary>
     public double? Progress { get; set; }
 
+    /// <summary>When the current step started, for the time left.</summary>
+    public DateTime? StepStarted { get; set; }
+
+    /// <summary>
+    /// How much of the whole job each step is, roughly (set once the job knows how it prepares the
+    /// disc): the whole-job percentage adds up the steps done and the share of the current one.
+    /// </summary>
+    public Dictionary<string, double> StepWeights { get; set; } = [];
+
+    /// <summary>The question a Waiting job asks.</summary>
+    public string? Question { get; set; }
+
+    /// <summary>Unpack the ISO with 7-Zip instead of mounting it (the answer to "unpack instead?").</summary>
+    public bool UnpackIso { get; set; }
+
+    /// <summary>Where the mount service mounted the ISO for this job; unmounted when the job ends.</summary>
+    public string? MountedAt { get; set; }
+
     public string? OutputPath { get; set; }
     public string? Error { get; set; }
     public List<VerifyCheck> Checks { get; set; } = [];
@@ -82,10 +103,18 @@ public sealed class Job
     public List<JobSubtitle> Subtitles { get; set; } = [];
 
     [JsonIgnore]
-    public bool IsFinished => Status is JobStatus.Done or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Interrupted;
+    public bool IsFinished => Status is JobStatus.Done or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Interrupted or JobStatus.Waiting;
 
     [JsonIgnore]
-    public bool CanRetry => Status is JobStatus.Failed or JobStatus.Cancelled or JobStatus.Interrupted;
+    public bool CanRetry => Status is JobStatus.Failed or JobStatus.Cancelled or JobStatus.Interrupted or JobStatus.Waiting;
+
+    /// <summary>The whole job, 0 to 1: steps done plus the current step's share. Null before the weights are known.</summary>
+    [JsonIgnore]
+    public double? Overall => JobProgress.Overall(StepWeights, Step, Progress);
+
+    /// <summary>Time left in the current step, from how fast it went so far. Null until there is enough to go on.</summary>
+    [JsonIgnore]
+    public TimeSpan? StepTimeLeft => JobProgress.TimeLeft(StepStarted, Progress, DateTime.UtcNow);
 
     [JsonIgnore]
     public string DisplayTitle => string.IsNullOrWhiteSpace(Title)
@@ -119,6 +148,67 @@ public sealed class Job
 
     [JsonIgnore]
     public TimeSpan? Elapsed => Started is { } s ? (Finished ?? DateTime.UtcNow) - s : null;
+}
+
+/// <summary>The whole-job percentage and the time left.</summary>
+public static class JobProgress
+{
+    /// <summary>
+    /// Rough share of each step in a UHD remux: copying or decrypting the disc, DGDemux and mkvmerge
+    /// move all the data, dovi_tool the video only, the OCR depends on how many SRT tracks.
+    /// </summary>
+    public static Dictionary<string, double> Weights(JobPipeline.Prepare prepare, bool mergeDolbyVision, int srtTracks) => new()
+    {
+        [JobSteps.Check] = 1,
+        [JobSteps.Prepare] = prepare switch
+        {
+            JobPipeline.Prepare.Decrypt => 30,
+            JobPipeline.Prepare.Unpack => 20,
+            _ => 0.5
+        },
+        [JobSteps.Demux] = 30,
+        [JobSteps.ReadStreams] = 2,
+        [JobSteps.Subtitles] = 2 + 6 * srtTracks,
+        [JobSteps.DolbyVision] = mergeDolbyVision ? 15 : 0,
+        [JobSteps.Mux] = 25,
+        [JobSteps.Verify] = 3,
+        [JobSteps.Finish] = 1
+    };
+
+    public static double? Overall(IReadOnlyDictionary<string, double> weights, string? step, double? progress)
+    {
+        var total = weights.Values.Sum();
+        if (total <= 0 || step == null || !JobSteps.All.Contains(step))
+        {
+            return null;
+        }
+
+        var done = 0.0;
+        foreach (var name in JobSteps.All)
+        {
+            var weight = weights.GetValueOrDefault(name);
+            if (name == step)
+            {
+                done += weight * Math.Clamp(progress ?? 0, 0, 1);
+                break;
+            }
+
+            done += weight;
+        }
+
+        return Math.Clamp(done / total, 0, 1);
+    }
+
+    public static TimeSpan? TimeLeft(DateTime? started, double? progress, DateTime now)
+    {
+        if (started is not { } s || progress is not { } p || p < 0.01 || p >= 1)
+        {
+            return null;
+        }
+
+        var elapsed = now - s;
+        return elapsed < TimeSpan.FromSeconds(10) ? null : TimeSpan.FromSeconds(elapsed.TotalSeconds * (1 - p) / p);
+    }
 }
 
 /// <summary>The steps of a job, in order, for the progress bar.</summary>

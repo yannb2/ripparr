@@ -1,0 +1,84 @@
+@* The playlist's chapters in a card that opens and closes: where each starts, how long it runs and the name it gets in the MKV. *@
+
+<div class="card mt-3">
+    <button type="button" class="card-header d-flex align-items-center gap-2 border-0 w-100 text-start bg-transparent"
+            @onclick="() => _open = !_open" aria-expanded="@(_open ? "true" : "false")">
+        <i class="bi @(_open ? "bi-chevron-down" : "bi-chevron-right")"></i>
+        <span class="fw-semibold">Chapters</span>
+        <span class="badge text-bg-secondary">@Playlist.Chapters.Count</span>
+        @if (Playlist.Chapters.Count > 0)
+        {
+            <span class="small text-body-secondary ms-1">
+                @(Naming == ChapterNaming.Numbered ? "named Chapter 01, Chapter 02…" : "times only, no names") · from the playlist
+            </span>
+        }
+    </button>
+    @if (_open)
+    {
+        <div class="card-body pt-2">
+            @if (Playlist.Chapters.Count == 0)
+            {
+                <div class="small text-body-secondary">This playlist has no chapter marks: the MKV will have none.</div>
+            }
+            else
+            {
+                var total = Math.Max(1, Playlist.Duration.TotalSeconds);
+                <div class="position-relative mb-3 rounded bg-body-tertiary" style="height: 10px" title="Where the chapters fall in the film">
+                    @foreach (var chapter in Chapters())
+                    {
+                        <span class="position-absolute top-0 bottom-0 bg-primary" style="width: 2px; left: @((chapter.Start.TotalSeconds / total * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%"
+                              title="@chapter.Name @Format.Duration(chapter.Start)"></span>
+                    }
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm small mb-0 align-middle">
+                        <thead>
+                        <tr>
+                            <th class="text-end">#</th>
+                            <th>Start</th>
+                            <th>Length</th>
+                            <th>Name in the MKV</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var chapter in Chapters())
+                        {
+                            <tr>
+                                <td class="text-end text-body-secondary">@chapter.Number</td>
+                                <td class="font-monospace">@chapter.Start.ToString(@"h\:mm\:ss\.fff")</td>
+                                <td class="font-monospace">
+                                    @Format.Duration(chapter.Length)
+                                    @if (chapter.Length < TimeSpan.FromSeconds(10))
+                                    {
+                                        <span class="badge text-bg-warning ms-1 font-sans-serif" title="Often a mark at the very end of the film or on a logo">very short</span>
+                                    }
+                                </td>
+                                <td>@(chapter.Name.Length == 0 ? "(no name)" : chapter.Name)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Mpls Playlist { get; set; } = null!;
+    [Parameter] public ChapterNaming Naming { get; set; }
+
+    private bool _open;
+
+    /// <summary>Each chapter with its length (to the next one, or to the end) and the name the job writes.</summary>
+    private IEnumerable<(int Number, TimeSpan Start, TimeSpan Length, string Name)> Chapters()
+    {
+        var marks = Playlist.Chapters;
+        for (var i = 0; i < marks.Count; i++)
+        {
+            var end = i + 1 < marks.Count ? marks[i + 1].Start : Playlist.Duration;
+            var number = (i + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+            yield return (i + 1, marks[i].Start, end - marks[i].Start, Naming == ChapterNaming.Numbered ? $"Chapter {number}" : "");
+        }
+    }
+}
