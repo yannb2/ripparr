@@ -50,6 +50,46 @@ public static partial class MuxBuilder
         return VideoExtensions.Contains(extension) || AudioExtensions.Contains(extension) || SubtitleExtensions.Contains(extension);
     }
 
+    public static bool IsSubtitleFile(string path) => SubtitleExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    /// <summary>
+    /// Facts for a picture subtitle file DGDemux wrote (.sup), from its own captions: MediaInfo
+    /// reports no track at all for a bare .sup. Null when the file holds no PGS segments.
+    /// </summary>
+    public static StreamFacts? SupFacts(string path)
+    {
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var captions = size == 0 ? [] : Subtitles.PgsReader.Read(path);
+            if (size > 0 && captions.Count == 0 && !StartsWithPg(path))
+            {
+                return null;
+            }
+
+            return new StreamFacts
+            {
+                Kind = StreamKind.Subtitle,
+                Format = "PGS",
+                StreamSize = size,
+                ElementCount = captions.Count,
+                DurationSeconds = captions.Count > 0 ? captions[^1].End.TotalSeconds : 0
+            };
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // Unreadable or not PGS after all: left to the "could not read" warning.
+            return null;
+        }
+    }
+
+    private static bool StartsWithPg(string path)
+    {
+        using var stream = File.OpenRead(path);
+        Span<byte> head = stackalloc byte[2];
+        return stream.Read(head) == 2 && head[0] == (byte)'P' && head[1] == (byte)'G';
+    }
+
     public static int? Delay(string fileName) =>
         DelayRegex().Match(fileName) is { Success: true } m && int.TryParse(m.Groups[1].Value, out var ms) && ms != 0 ? ms : null;
 

@@ -1,3 +1,5 @@
+using Ripparr.Jobs;
+using Ripparr.Disc;
 using Ripparr.Subtitles;
 
 namespace Ripparr.Tests;
@@ -103,6 +105,28 @@ public class SubtitleTests
             {
                 Directory.Delete(folder, true);
             }
+        }
+    }
+
+    [TestMethod]
+    public void ReadsABareSupThatMediaInfoCannot()
+    {
+        var facts = MuxBuilder.SupFacts(Sample);
+        Assert.IsNotNull(facts);
+        Assert.AreEqual(StreamKind.Subtitle, facts.Kind);
+        Assert.AreEqual("PGS", facts.Format);
+        Assert.AreEqual(PgsReader.Read(Sample).Count, facts.ElementCount);
+        Assert.IsTrue(MuxBuilder.IsSubtitleFile("/x/00800.4608.SUP"));
+
+        var notPgs = Path.Combine(Path.GetTempPath(), $"ripparr-{Guid.NewGuid():N}.sup");
+        File.WriteAllText(notPgs, "hello, not a subtitle");
+        try
+        {
+            Assert.IsNull(MuxBuilder.SupFacts(notPgs));
+        }
+        finally
+        {
+            File.Delete(notPgs);
         }
     }
 }
