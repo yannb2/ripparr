@@ -144,4 +144,23 @@ public class SmallPartsTests
             Directory.Delete(folder, true);
         }
     }
+
+    [TestMethod]
+    public void FindsFoldersItCannotWrite()
+    {
+        var folder = Directory.CreateTempSubdirectory("ripparr-folders").FullName;
+        try
+        {
+            Assert.IsNull(FolderCheck.Check(Path.Combine(folder, "work")));
+            Assert.IsTrue(Directory.Exists(Path.Combine(folder, "work")));
+            // A path under a file can never be made.
+            File.WriteAllText(Path.Combine(folder, "file"), "");
+            Assert.IsNotNull(FolderCheck.Check(Path.Combine(folder, "file", "work")));
+            StringAssert.StartsWith(FolderCheck.Hint([new FolderProblem("Work folder", "/downloads/ripparr/work", "not writable")]), "sudo chown -R ");
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
 }

@@ -14,6 +14,21 @@
     </button>
 </div>
 
+@if (_folderProblems.Count > 0)
+{
+    <div class="alert alert-danger">
+        <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle"></i> Ripparr cannot write to these folders, so jobs will fail:</div>
+        <ul class="mb-2">
+            @foreach (var problem in _folderProblems)
+            {
+                <li>@problem.Name <code>@problem.Path</code>: @problem.Error</li>
+            }
+        </ul>
+        <div class="small">They need to belong to the user the container runs as. On the host (the paths there may differ):
+            <code>@FolderCheck.Hint(_folderProblems)</code></div>
+    </div>
+}
+
 <p class="text-body-secondary small">
     ISO files and folders with a BDMV folder in
     @foreach (var (root, i) in Options.Value.Sources.Select((r, i) => (r, i)))
@@ -75,6 +90,7 @@ else
     private List<DiscSource> _sources = [];
     private string _filter = "";
     private bool _loading = true;
+    private List<FolderProblem> _folderProblems = [];
 
     private IEnumerable<DiscSource> Filtered => string.IsNullOrWhiteSpace(_filter)
         ? _sources
@@ -84,6 +100,7 @@ else
 
     private async Task Refresh()
     {
+        _folderProblems = FolderCheck.Problems(Options.Value);
         _loading = true;
         var options = Options.Value;
         _sources = await Task.Run(() => SourceFinder.Find(options.Sources, [options.WorkFolder, options.DoneFolder]));
