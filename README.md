@@ -1,7 +1,7 @@
 # Ripparr
 
 Turns a Blu-ray or UHD Blu-ray backup (an ISO file or a BDMV folder, on scratch or on a USB drive) into one
-finished MKV, named and tagged the way the library expects, ready for Radarr to import.
+finished MKV, named and tagged the way the library expects, ready for Radarr (or Sonarr, for TV discs) to import.
 
 MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix builds the MKV, and MediaInfo
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
@@ -102,6 +102,33 @@ OCR) unless another is picked. An extra is named after what was typed (`Making O
 names that both Jellyfin and Radarr leave alone: `featurettes`, `behind the scenes`, `deleted scenes`,
 `interviews`, `scenes`, `shorts`, `trailers` and `extras`. Move the type folder next to the film in the library.
 
+## TV discs
+
+When most playlists have about the same length (three or more, within a quarter, nothing much longer
+beside them), the disc page switches to **TV episodes**; the switch at the top changes it either way. Look the
+series up in **Sonarr**: the title, year, TVDB, TMDb and IMDb IDs, the original language and, for Sonarr's
+Anime series type, absolute numbers. Set the season and the first episode on the disc: the ticked playlists are
+numbered from it in disc order (any number can be typed over), and get their titles from Sonarr (or typed ones).
+**Pictures** show three frames of each playlist to check the order. Ripparr remembers where the last disc of a
+series stopped, so the next disc starts at the next episode.
+
+Each episode is its own job and goes to `done/Series (Year)/Season 01/` (season 0 to `Specials`) as
+`Series S01E05 [1080p][AVC][SDR][TrueHD-5.1][BDRemux] - Episode Title.mkv`, with ` (005)` after `S01E05` for
+anime, MKV title `Series S01E05 - Episode Title`, ready for a Sonarr manual import. The profile page has the
+episode templates (`{episode}`, `{absolute}`, `{episodetitle}`). The tags add `TVDB2` (`series/<id>`),
+`TMDB` as `tv/<id>` and `ABSOLUTE_EPISODE`.
+
+Episodes cut out of one big clip (common on TV discs) are told apart by their in and out times, and the "play
+all" playlist that plays the whole clip is flagged. The **Extras** card works on TV discs too: the extras go to
+the series folder, or to the season's folder (`Season 01/extras/`). Sonarr skips the same folder names.
+
+## Queue and History
+
+The queue shows what is waiting, running, or needs a look (failed, interrupted, waiting for an answer). Every
+row has **Remove**: a queued or running job is cancelled, the others move to **History**, where done, failed
+and cancelled jobs stay with their result, a search, a status filter, Retry, and a delete that forgets a job and
+its log (never the MKV).
+
 ## Profiles
 
 A profile decides the track plan: audio and subtitle languages in order (`original` is the film's own language
@@ -150,6 +177,7 @@ the queue, the current job and its progress for a Homepage tile.
 | `Ripparr__SubtitleFolder` | `/config/subtitles` |
 | `Ripparr__KeepSubtitlePreviews` | `30` (jobs whose subtitle pictures are kept) |
 | `Ripparr__Radarr__Url` / `__ApiKey` | not set: title, year and IDs are typed by hand |
+| `Ripparr__Sonarr__Url` / `__ApiKey` | not set: series, IDs and episode titles are typed by hand |
 | `Ripparr__IsoMount__Enabled` | `true` (`false`: always unpack ISOs with 7-Zip) |
 | `Ripparr__IsoMount__Socket` | `/run/ripparr-mount/mount.sock` |
 | `Ripparr__IsoMount__Folder` | `/mnt/pc/iso-mounts` (where the service mounts; left out of the sources) |

@@ -1,0 +1,530 @@
+@* A TV disc: the series from Sonarr, then one job per episode playlist, numbered from the first episode. *@
+@inject SonarrClient Sonarr
+@inject JobStore Store
+@inject JobRunner Runner
+@inject NavigationManager Navigation
+
+<div class="card mb-3">
+    <div class="card-header fw-semibold">TV episodes: @SelectedCount of @Shown.Count() playlists</div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end mb-3">
+            <div class="col-md-6">
+                <label class="form-label small mb-1">Look up in Sonarr</label>
+                <div class="input-group input-group-sm">
+                    <input class="form-control" @bind="_search" @onkeyup="SearchOnEnter"/>
+                    <button class="btn btn-outline-secondary" @onclick="Search" disabled="@(!Sonarr.Configured || _searching)">
+                        @if (_searching)
+                        {
+                            <span class="spinner-border spinner-border-sm"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-search"></i>
+                        }
+                    </button>
+                </div>
+                @if (!Sonarr.Configured)
+                {
+                    <div class="form-text">Sonarr is not set up: fill in the series, year and IDs by hand, and type the episode titles.</div>
+                }
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small mb-1">Profile</label>
+                <select class="form-select form-select-sm" value="@_profileId" @onchange="ChangeProfile">
+                    @foreach (var profile in Profiles)
+                    {
+                        <option value="@profile.Id">@profile.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        @if (_searchError != null)
+        {
+            <div class="alert alert-warning py-2 small">@_searchError</div>
+        }
+
+        @if (_matches.Count > 0)
+        {
+            <div class="list-group list-group-flush mb-3 small">
+                @foreach (var match in _matches.Take(8))
+                {
+                    <button class="list-group-item list-group-item-action" @onclick="() => Pick(match)">
+                        <span class="fw-semibold">@match.Title (@match.Year)</span>
+                        <span class="text-body-secondary ms-2">TVDB @match.TvdbId · @Languages.Name(match.OriginalLanguage)</span>
+                        @if (match.Anime)
+                        {
+                            <span class="badge text-bg-info ms-2">Anime numbers</span>
+                        }
+                        @if (match.SonarrId != null)
+                        {
+                            <span class="badge text-bg-success ms-2">In Sonarr</span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+
+        <div class="row g-2 mb-2">
+            <div class="col-md-4">
+                <label class="form-label small mb-1">Series</label>
+                <input class="form-control form-control-sm" @bind="_title" @bind:event="oninput"/>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1">Year</label>
+                <input class="form-control form-control-sm" type="number" @bind="_year" @bind:event="oninput"/>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">TVDB ID</label>
+                <input class="form-control form-control-sm" type="number" @bind="_tvdb"/>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">TMDb ID</label>
+                <input class="form-control form-control-sm" type="number" @bind="_tmdb"/>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">IMDb ID</label>
+                <input class="form-control form-control-sm" @bind="_imdb"/>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1" title="ISO 639-2, such as eng or jpn">Language</label>
+                <input class="form-control form-control-sm" value="@_original" @onchange="ChangeOriginal"/>
+                <div class="small text-body-secondary text-truncate">@(_original == null ? "" : Languages.Name(_original))</div>
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-end gap-3 mb-2">
+            <div>
+                <label class="form-label small mb-1">Season</label>
+                <input class="form-control form-control-sm" type="number" min="0" style="width: 6rem" @bind="_season" @bind:event="oninput"/>
+            </div>
+            <div>
+                <label class="form-label small mb-1">First episode on this disc</label>
+                <input class="form-control form-control-sm" type="number" min="1" style="width: 8rem" @bind="_first" @bind:event="oninput"/>
+            </div>
+            <div class="form-check form-switch mb-1">
+                <input class="form-check-input" type="checkbox" id="anime" @bind="_anime"/>
+                <label class="form-check-label small" for="anime" title="Sonarr's Anime series type: the absolute number goes in the name, S01E05 (005)">Absolute numbers (anime)</label>
+            </div>
+            <div class="form-check form-switch mb-1 ms-auto">
+                <input class="form-check-input" type="checkbox" id="episodesAll" @bind="_showAll"/>
+                <label class="form-check-label small" for="episodesAll">Show all playlists</label>
+            </div>
+        </div>
+        @if (_resumeNote != null)
+        {
+            <div class="small text-body-secondary mb-2"><i class="bi bi-bookmark me-1"></i>@_resumeNote</div>
+        }
+        @if (_episodesNote != null)
+        {
+            <div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>@_episodesNote</div>
+        }
+
+        <div class="table-responsive">
+            <table class="table table-sm small align-middle mb-2">
+                <thead>
+                <tr>
+                    <th></th>
+                    <th>Playlist</th>
+                    <th>Length</th>
+                    <th class="text-end">Chapters</th>
+                    <th class="text-end">Size</th>
+                    <th style="width: 7rem">Episode</th>
+                    <th style="min-width: 16rem">Title</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var playlist in Shown)
+                {
+                    var row = Row(playlist);
+                    var number = Number(playlist);
+                    var known = number is { } n ? Known(n) : null;
+                    <tr class="@(row.Selected ? "table-active" : "")">
+                        <td><input type="checkbox" class="form-check-input" checked="@row.Selected" @onchange="e => row.Selected = e.Value is true"/></td>
+                        <td class="fw-semibold">
+                            @playlist.Name
+                            @if (playlist.PlayAll)
+                            {
+                                <span class="badge text-bg-warning ms-1">Play all</span>
+                            }
+                        </td>
+                        <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
+                        <td class="text-end">@playlist.Mpls.Chapters.Count</td>
+                        <td class="text-end text-nowrap">@Format.Size(playlist.Size)</td>
+                        <td>
+                            @if (row.Selected)
+                            {
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">@($"S{_season:00}E")</span>
+                                    <input class="form-control" type="number" min="0" value="@row.Number" placeholder="@number"
+                                           @onchange="e => row.Number = int.TryParse(e.Value?.ToString(), out var v) ? v : null"/>
+                                </div>
+                            }
+                        </td>
+                        <td>
+                            @if (row.Selected)
+                            {
+                                <input class="form-control form-control-sm" placeholder="@(known?.Title ?? "episode title")" value="@row.Title"
+                                       @onchange="e => SetTitle(row, e)"/>
+                                @if (_anime && known?.Absolute is { } absolute)
+                                {
+                                    <div class="text-body-secondary">absolute @EpisodeNumbers.Absolute(absolute)</div>
+                                }
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-link p-0 text-nowrap" @onclick="() => row.Pictures = !row.Pictures"
+                                    title="Three pictures from the playlist, to check the order">
+                                <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
+                            </button>
+                        </td>
+                    </tr>
+                    @if (row.Pictures)
+                    {
+                        <tr>
+                            <td></td>
+                            <td colspan="7">
+                                <div class="d-flex flex-wrap gap-2 py-1">
+                                    @for (var i = 0; i < Thumbnails.Count; i++)
+                                    {
+                                        <img src="@PictureUrl(playlist, i)" alt="Picture @(i + 1) of playlist @playlist.Name" loading="lazy"
+                                             class="rounded border bg-body-tertiary" style="height: 120px; min-width: 160px; object-fit: contain"
+                                             onerror="this.replaceWith(Object.assign(document.createElement('span'), {className: 'small text-body-secondary align-self-center', textContent: 'No picture (too big to stream out of the ISO without the mount service, or ffmpeg could not read it)'}))"/>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+
+        @if (Preview is { } preview)
+        {
+            <div class="small mb-2">
+                <div><span class="text-body-secondary">First MKV title:</span> <span class="fw-semibold">@preview.Title</span></div>
+                <div><span class="text-body-secondary">First file (codec and HDR words come from the streams):</span> <span class="sv-path">@preview.Folder/@preview.File</span></div>
+            </div>
+        }
+
+        @if (_error != null)
+        {
+            <div class="alert alert-danger py-2 small">@_error</div>
+        }
+
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" disabled="@(SelectedCount == 0)" @onclick="() => Queue(false)">
+                <i class="bi bi-play-fill"></i> Queue @SelectedCount episode@(SelectedCount == 1 ? "" : "s")
+            </button>
+            <button class="btn btn-outline-secondary" disabled="@(SelectedCount == 0)" @onclick="() => Queue(true)">Dry run</button>
+        </div>
+    </div>
+</div>
+
+<ExtrasPicker Source="Source" Analysis="Analysis" Profiles="Profiles" Taken="Taken" Season="_season" Tv="true" FilmJob="SeriesJob"/>
+
+@code {
+    [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
+    [Parameter, EditorRequired] public DiscAnalysis Analysis { get; set; } = null!;
+    [Parameter, EditorRequired] public List<RipProfile> Profiles { get; set; } = [];
+
+    /// <summary>What to look up first: the series name guessed from the disc's name.</summary>
+    [Parameter] public string InitialSearch { get; set; } = "";
+
+    private sealed class EpisodeRow
+    {
+        public bool Selected { get; set; }
+        public int? Number { get; set; }
+        public string Title { get; set; } = "";
+        public bool Pictures { get; set; }
+    }
+
+    private readonly Dictionary<string, EpisodeRow> _rows = new();
+    private List<PlaylistInfo> _found = [];
+    private DiscAnalysis? _seen;
+    private bool _showAll;
+    private string _profileId = "";
+
+    private string _search = "";
+    private bool _searching;
+    private string? _searchError;
+    private List<SeriesMatch> _matches = [];
+    private List<EpisodeInfo> _episodes = [];
+    private string? _episodesNote;
+    private string? _resumeNote;
+
+    private string _title = "";
+    private int? _year;
+    private int? _tvdb;
+    private int? _tmdb;
+    private string? _imdb;
+    private string? _original;
+    private bool _anime;
+    private int _season = 1;
+    private int _first = 1;
+    private string? _error;
+
+    private RipProfile Profile => Profiles.FirstOrDefault(p => p.Id == _profileId) ?? Profiles.FirstOrDefault() ?? new RipProfile();
+
+    protected override void OnParametersSet()
+    {
+        if (_seen == Analysis)
+        {
+            return;
+        }
+
+        _seen = Analysis;
+        _found = EpisodeFinder.Find(Analysis);
+        _rows.Clear();
+        foreach (var playlist in _found)
+        {
+            Row(playlist).Selected = true;
+        }
+
+        var video = _found.FirstOrDefault()?.Resolution;
+        _profileId = video == "2160p"
+            ? Profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? Profiles.FirstOrDefault()?.Id ?? ""
+            : Profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? Profiles.FirstOrDefault()?.Id ?? "";
+        if (_search.Length == 0)
+        {
+            var guess = ReleaseName.Guess(Source.Name);
+            _title = guess.Title;
+            _year = guess.Year;
+            _search = InitialSearch.Length > 0 ? InitialSearch : guess.Title;
+        }
+    }
+
+    /// <summary>The episodes found, or every playlist worth a look (not duplicates, a minute or more).</summary>
+    private IEnumerable<PlaylistInfo> Shown => _showAll
+        ? Analysis.Playlists.Where(p => p.DuplicateOf == null && p.Duration >= TimeSpan.FromMinutes(1)).OrderBy(p => p.Name, StringComparer.Ordinal)
+        : _found.Concat(_rows.Where(r => r.Value.Selected).Select(r => Analysis.Find(r.Key)).OfType<PlaylistInfo>()).Distinct()
+            .OrderBy(p => p.Name, StringComparer.Ordinal);
+
+    private EpisodeRow Row(PlaylistInfo playlist)
+    {
+        if (!_rows.TryGetValue(playlist.Name, out var row))
+        {
+            row = new EpisodeRow();
+            _rows[playlist.Name] = row;
+        }
+
+        return row;
+    }
+
+    private List<PlaylistInfo> SelectedPlaylists =>
+        Shown.Where(p => Row(p).Selected).ToList();
+
+    private int SelectedCount => SelectedPlaylists.Count;
+
+    private IReadOnlyCollection<string> Taken => _rows.Where(r => r.Value.Selected).Select(r => r.Key).ToHashSet();
+
+    /// <summary>The episode number: typed, or the first episode plus the row's place among the ticked ones.</summary>
+    private int? Number(PlaylistInfo playlist)
+    {
+        var row = Row(playlist);
+        if (!row.Selected)
+        {
+            return null;
+        }
+
+        if (row.Number is { } typed)
+        {
+            return typed;
+        }
+
+        return _first + SelectedPlaylists.IndexOf(playlist);
+    }
+
+    private EpisodeInfo? Known(int number) => _episodes.FirstOrDefault(e => e.Season == _season && e.Episode == number);
+
+    private string PictureUrl(PlaylistInfo playlist, int index) =>
+        $"api/discs/pictures/{index}.jpg?path={Uri.EscapeDataString(Source.Path)}&playlist={Uri.EscapeDataString(playlist.Name)}";
+
+    private async Task SearchOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Search();
+        }
+    }
+
+    private async Task Search()
+    {
+        _searching = true;
+        _searchError = null;
+        (_matches, _searchError) = await Sonarr.SearchAsync(_search, CancellationToken.None);
+        if (_searchError == null && _matches.Count == 0)
+        {
+            _searchError = "Sonarr found nothing.";
+        }
+
+        _searching = false;
+    }
+
+    private async Task Pick(SeriesMatch match)
+    {
+        _title = match.Title;
+        _year = match.Year;
+        _tvdb = match.TvdbId;
+        _tmdb = match.TmdbId;
+        _imdb = match.ImdbId;
+        _original = match.OriginalLanguage;
+        _anime = match.Anime;
+        _matches = [];
+        _episodes = [];
+        _episodesNote = null;
+        Resume();
+        if (match.SonarrId is { } id)
+        {
+            string? error;
+            (_episodes, error) = await Sonarr.EpisodesAsync(id, CancellationToken.None);
+            _episodesNote = error ?? (_episodes.Count == 0 ? "Sonarr has no episodes for this series yet." : null);
+        }
+        else
+        {
+            _episodesNote = "Not in Sonarr yet: add it there for the episode titles, or type them.";
+        }
+    }
+
+    private string ResumeKey => $"tv.next.{(_tvdb is { } tvdb ? tvdb.ToString() : _title.Trim().ToLowerInvariant())}";
+
+    /// <summary>Starts where the last disc of this series stopped.</summary>
+    private void Resume()
+    {
+        _resumeNote = null;
+        var saved = Store.Setting(ResumeKey);
+        if (saved?.Split(':') is [var s, var e] && int.TryParse(s, out var season) && int.TryParse(e, out var episode))
+        {
+            _season = season;
+            _first = episode;
+            _resumeNote = $"The last disc of this series stopped before {EpisodeNumbers.Code(season, episode)}: this one starts there.";
+        }
+    }
+
+    private static void SetTitle(EpisodeRow row, ChangeEventArgs e) => row.Title = e.Value?.ToString() ?? "";
+
+    private void ChangeProfile(ChangeEventArgs e) => _profileId = e.Value?.ToString() ?? _profileId;
+
+    private void ChangeOriginal(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString()?.Trim();
+        _original = string.IsNullOrEmpty(text) ? null : text.ToLowerInvariant();
+    }
+
+    /// <summary>The series as a job (title, year, IDs, language, tags): the episodes and the extras start from it.</summary>
+    private (Job? Job, string? Error) SeriesJob()
+    {
+        if (string.IsNullOrWhiteSpace(_title) || _year is null)
+        {
+            return (null, "A series and a year are needed for the folder name.");
+        }
+
+        return (new Job
+        {
+            SourcePath = Source.Path,
+            SourceKind = Source.Kind,
+            SourceName = Source.Name,
+            Title = _title.Trim(),
+            Year = _year,
+            TvdbId = _tvdb,
+            TmdbId = _tmdb,
+            ImdbId = string.IsNullOrWhiteSpace(_imdb) ? null : _imdb.Trim(),
+            OriginalLanguage = _original,
+            Profile = Profile,
+            Tags = Profile.CustomTags.Select(t => t.Copy()).ToList()
+        }, null);
+    }
+
+    private List<Job> Episodes(Job series, bool dryRun)
+    {
+        var jobs = new List<Job>();
+        foreach (var playlist in SelectedPlaylists)
+        {
+            var number = Number(playlist)!.Value;
+            var known = Known(number);
+            var row = Row(playlist);
+            jobs.Add(new Job
+            {
+                SourcePath = series.SourcePath,
+                SourceKind = series.SourceKind,
+                SourceName = series.SourceName,
+                Playlist = playlist.Name,
+                Title = series.Title,
+                Year = series.Year,
+                TvdbId = series.TvdbId,
+                TmdbId = series.TmdbId,
+                ImdbId = series.ImdbId,
+                OriginalLanguage = series.OriginalLanguage,
+                Season = _season,
+                Episode = number,
+                AbsoluteEpisode = _anime ? known?.Absolute : null,
+                EpisodeTitle = row.Title.Trim() is { Length: > 0 } typed ? typed : known?.Title is { Length: > 0 } title ? title : null,
+                Profile = series.Profile,
+                Plan = TrackPlanner.Build(playlist.Mpls, series.Profile, series.OriginalLanguage),
+                Tags = series.Tags.Select(t => t.Copy()).ToList(),
+                DryRun = dryRun
+            });
+        }
+
+        return jobs;
+    }
+
+    private (string Title, string Folder, string File)? Preview
+    {
+        get
+        {
+            var (series, _) = SeriesJob();
+            if (series == null || SelectedCount == 0)
+            {
+                return null;
+            }
+
+            var first = Episodes(series, true)[0];
+            var values = MuxBuilder.NameValues(first, []);
+            var playlist = Analysis.Find(first.Playlist);
+            var video = playlist?.Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer);
+            values["resolution"] = video == null ? null : StreamCoding.Resolution(video.Format);
+            values["videocodec"] = video?.CodecName;
+            var folder = JobPipeline.DoneFolder("done", first, values);
+            return (JobPipeline.MkvTitle(first, values), folder, JobPipeline.FileName(first, values));
+        }
+    }
+
+    private void Queue(bool dryRun)
+    {
+        _error = null;
+        var (series, error) = SeriesJob();
+        if (series == null)
+        {
+            _error = error;
+            return;
+        }
+
+        var jobs = Episodes(series, dryRun);
+        if (jobs.Select(j => j.Episode).Distinct().Count() != jobs.Count)
+        {
+            _error = "Two playlists have the same episode number.";
+            return;
+        }
+
+        if (jobs.FirstOrDefault(j => !j.Plan.Kept.Any(t => t.Kind == StreamKind.Video)) is { } novideo)
+        {
+            _error = $"Playlist {novideo.Playlist} has no video track to keep.";
+            return;
+        }
+
+        foreach (var job in jobs)
+        {
+            Runner.Enqueue(job);
+        }
+
+        if (!dryRun)
+        {
+            Store.SetSetting(ResumeKey, $"{_season}:{jobs.Max(j => j.Episode)!.Value + 1}");
+        }
+
+        Navigation.NavigateTo(jobs.Count == 1 ? $"job/{jobs[0].Id}" : "queue");
+    }
+}

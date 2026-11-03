@@ -130,6 +130,20 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>The MKV title. Same tokens.</summary>
     public string TitleTemplate { get; set; } = "{title} ({year}){ - edition}";
 
+    /// <summary>
+    /// A TV episode's file name, Sonarr's Standard Episode Format in this library. More tokens:
+    /// {episode} (S01E05), {absolute} (005, anime series only) and {episodetitle}.
+    /// </summary>
+    public string EpisodeFileNameTemplate { get; set; } = DefaultEpisodeFileName;
+
+    public const string DefaultEpisodeFileName =
+        "{title} {episode}{ (absolute)} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{ - episodetitle}";
+
+    /// <summary>A TV episode's MKV title.</summary>
+    public string EpisodeTitleTemplate { get; set; } = DefaultEpisodeTitle;
+
+    public const string DefaultEpisodeTitle = "{title} {episode}{ - episodetitle}";
+
     /// <summary>Write TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION... as MKV global tags, as tag_release does.</summary>
     public bool WriteTags { get; set; } = true;
 

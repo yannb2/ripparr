@@ -234,4 +234,75 @@ public class SmallPartsTests
             File.Delete(path);
         }
     }
+
+    [TestMethod]
+    public void EpisodesAreNamedAndFiledAsSonarrDoes()
+    {
+        var job = new Ripparr.Jobs.Job
+        {
+            Title = "Test Show", Year = 2019, TvdbId = 12345, TmdbId = 678, Season = 1, Episode = 5, AbsoluteEpisode = 5,
+            EpisodeTitle = "Chapter 5: The Bridge", Profile = new Ripparr.Profiles.RipProfile()
+        };
+        var values = Ripparr.Jobs.MuxBuilder.NameValues(job, []);
+        values["resolution"] = "1080p";
+
+        Assert.AreEqual("/done/Test Show (2019)/Season 01", Ripparr.Jobs.JobPipeline.DoneFolder("/done", job, values));
+        Assert.AreEqual("Test Show S01E05 (005) [1080p][BDRemux] - Chapter 5 - The Bridge.mkv", Ripparr.Jobs.JobPipeline.FileName(job, values));
+        Assert.AreEqual("Test Show S01E05 - Chapter 5: The Bridge", Ripparr.Jobs.JobPipeline.MkvTitle(job, values));
+        Assert.AreEqual("Test Show (2019) · S01E05 - Chapter 5: The Bridge", job.DisplayTitle);
+
+        var tags = Ripparr.Jobs.MuxBuilder.TagsXml(job, []);
+        StringAssert.Contains(tags, "<Name>TMDB</Name><String>tv/678</String>");
+        StringAssert.Contains(tags, "<Name>TVDB2</Name><String>series/12345</String>");
+        StringAssert.Contains(tags, "<Name>ABSOLUTE_EPISODE</Name><String>5</String>");
+
+        // Not anime: no absolute number in the name. Season 0 is Sonarr's Specials folder.
+        job.AbsoluteEpisode = null;
+        job.Season = 0;
+        values = Ripparr.Jobs.MuxBuilder.NameValues(job, []);
+        Assert.AreEqual("/done/Test Show (2019)/Specials", Ripparr.Jobs.JobPipeline.DoneFolder("/done", job, values));
+        StringAssert.StartsWith(Ripparr.Jobs.JobPipeline.FileName(job, values), "Test Show S00E05 [BDRemux]");
+
+        // A TV extra put with its season.
+        var extra = new Ripparr.Jobs.Job { Title = "Test Show", Year = 2019, TvdbId = 12345, Season = 1, ExtraType = "extras", ExtraName = "Creditless Opening" };
+        Assert.AreEqual("/done/Test Show (2019)/Season 01/extras",
+            Ripparr.Jobs.JobPipeline.DoneFolder("/done", extra, Ripparr.Jobs.MuxBuilder.NameValues(extra, [])));
+        Assert.IsFalse(extra.IsEpisode);
+    }
+
+    [TestMethod]
+    public void ReadsSonarrSeriesAndEpisodes()
+    {
+        var series = Ripparr.Arr.SonarrClient.ParseSeries("""
+            [{"title":"Test Show","year":2019,"tvdbId":12345,"tmdbId":678,"imdbId":"tt0000001","id":7,"path":"/tv/anime/Test Show (2019)",
+              "seriesType":"anime","originalLanguage":{"id":8,"name":"Japanese"},"seasons":[{"seasonNumber":1},{"seasonNumber":0}]},
+             {"title":"Not Added","year":2021,"tvdbId":99,"seriesType":"standard","originalLanguage":{"name":"English"}},
+             {"title":"No TVDB","tvdbId":0}]
+            """);
+        Assert.HasCount(2, series);
+        Assert.IsTrue(series[0].Anime);
+        Assert.AreEqual(7, series[0].SonarrId);
+        Assert.AreEqual("jpn", series[0].OriginalLanguage);
+        CollectionAssert.AreEqual(new[] { 0, 1 }, series[0].Seasons.ToArray());
+        Assert.IsNull(series[1].SonarrId);
+        Assert.IsNull(series[1].LibraryPath);
+
+        var episodes = Ripparr.Arr.SonarrClient.ParseEpisodes("""
+            [{"seasonNumber":1,"episodeNumber":2,"absoluteEpisodeNumber":2,"title":"Two"},
+             {"seasonNumber":1,"episodeNumber":1,"title":"One"}]
+            """);
+        Assert.AreEqual("One", episodes[0].Title);
+        Assert.IsNull(episodes[0].Absolute);
+        Assert.AreEqual(2, episodes[1].Absolute);
+    }
+
+    [TestMethod]
+    public void TheQueueKeepsWhatIsActiveOrNeedsALook()
+    {
+        Assert.IsTrue(new Ripparr.Jobs.Job { Status = Ripparr.Jobs.JobStatus.Running }.InQueue);
+        Assert.IsTrue(new Ripparr.Jobs.Job { Status = Ripparr.Jobs.JobStatus.Failed }.InQueue);
+        Assert.IsFalse(new Ripparr.Jobs.Job { Status = Ripparr.Jobs.JobStatus.Failed, Dismissed = true }.InQueue);
+        Assert.IsFalse(new Ripparr.Jobs.Job { Status = Ripparr.Jobs.JobStatus.Done }.InQueue);
+        Assert.IsFalse(new Ripparr.Jobs.Job { Status = Ripparr.Jobs.JobStatus.Cancelled }.InQueue);
+    }
 }

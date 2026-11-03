@@ -208,8 +208,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         Directory.CreateDirectory(context.OutFolder);
         var values = MuxBuilder.NameValues(job, outputs);
         // An extra is named by hand ("Making Of"): Jellyfin shows the file name.
-        var fileName = Naming.SafeFileName(job.IsExtra ? job.ExtraName! : Naming.Apply(job.Profile.FileNameTemplate, values)) + ".mkv";
-        var title = job.IsExtra ? job.ExtraName!.Trim() : Naming.Apply(job.Profile.TitleTemplate, values);
+        var fileName = FileName(job, values);
+        var title = MkvTitle(job, values);
         var outPath = Path.Combine(context.OutFolder, fileName);
 
         string? chaptersPath = null;
@@ -285,12 +285,32 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         }
     }
 
-    /// <summary>done/Title (Year)/, and for an extra done/Title (Year)/featurettes/ (its type's folder).</summary>
+    /// <summary>
+    /// done/Title (Year)/; for an extra done/Title (Year)/featurettes/ (its type's folder); for an
+    /// episode done/Series (Year)/Season 01/, as Sonarr lays them out (a TV extra can go in a season
+    /// folder too: Season 01/featurettes/).
+    /// </summary>
     public static string DoneFolder(string doneRoot, Job job, IReadOnlyDictionary<string, string?> values)
     {
         var film = Path.Combine(doneRoot, Naming.SafeFileName(Naming.Apply("{title} ({year})", values)));
+        // An episode, or a TV extra put with its season.
+        if (job.Season is { } season)
+        {
+            film = Path.Combine(film, EpisodeNumbers.SeasonFolder(season));
+        }
+
         return job.IsExtra ? Path.Combine(film, job.ExtraType!) : film;
     }
+
+    /// <summary>The MKV's file name: an extra's own name, an episode's or the film's template.</summary>
+    public static string FileName(Job job, IReadOnlyDictionary<string, string?> values) =>
+        Naming.SafeFileName(job.IsExtra ? job.ExtraName!
+            : Naming.Apply(job.IsEpisode ? job.Profile.EpisodeFileNameTemplate : job.Profile.FileNameTemplate, values)) + ".mkv";
+
+    /// <summary>The MKV title.</summary>
+    public static string MkvTitle(Job job, IReadOnlyDictionary<string, string?> values) =>
+        job.IsExtra ? job.ExtraName!.Trim()
+            : Naming.Apply(job.IsEpisode ? job.Profile.EpisodeTitleTemplate : job.Profile.TitleTemplate, values);
 
     public enum Prepare
     {
@@ -597,6 +617,14 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         {
             context.Log($"Then: the extra goes to {Path.Combine(DoneFolder(context.Options.DoneFolder, context.Job,
                 MuxBuilder.NameValues(context.Job, [])), Naming.SafeFileName(context.Job.ExtraName!) + ".mkv")}");
+        }
+
+        if (context.Job.IsEpisode)
+        {
+            var values = MuxBuilder.NameValues(context.Job, []);
+            context.Log($"Then: the episode goes to {DoneFolder(context.Options.DoneFolder, context.Job, values)}/ as " +
+                        $"{FileName(context.Job, values)} (the specs in brackets come from the demuxed tracks), " +
+                        $"MKV title \"{MkvTitle(context.Job, values)}\"");
         }
 
         context.Log("Dry run: nothing was run.");

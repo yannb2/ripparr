@@ -128,10 +128,9 @@ public sealed class DiscAnalysis
     /// </summary>
     private static void MarkPlayAll(List<PlaylistInfo> playlists)
     {
-        foreach (var all in playlists.Where(p => p.Mpls.Clips.Count >= 2))
+        foreach (var all in playlists)
         {
-            var clips = all.Mpls.Clips;
-            var parts = playlists.Where(p => p != all && p.Mpls.Clips.Count < clips.Count && Contains(clips, p.Mpls.Clips)).ToList();
+            var parts = playlists.Where(p => p != all && p.Duration < all.Duration && Contains(all.Mpls.Items, p.Mpls.Items)).ToList();
             var covered = parts.Sum(p => p.Duration.TotalSeconds);
             if (parts.Count >= 2 && covered >= all.Duration.TotalSeconds * 0.8)
             {
@@ -140,15 +139,21 @@ public sealed class DiscAnalysis
         }
     }
 
-    /// <summary>Whether <paramref name="part"/> appears in <paramref name="clips"/> as a run of consecutive clips.</summary>
-    private static bool Contains(IReadOnlyList<string> clips, IReadOnlyList<string> part)
+    /// <summary>
+    /// Whether <paramref name="part"/> plays inside <paramref name="items"/>: the same clips back to
+    /// back, each within the matching item's in and out times. TV discs often cut every episode out
+    /// of one big clip, which their "play all" plays whole.
+    /// </summary>
+    private static bool Contains(IReadOnlyList<PlayItem> items, IReadOnlyList<PlayItem> part)
     {
-        for (var start = 0; start + part.Count <= clips.Count; start++)
+        for (var start = 0; start + part.Count <= items.Count; start++)
         {
             var match = true;
             for (var i = 0; i < part.Count && match; i++)
             {
-                match = string.Equals(clips[start + i], part[i], StringComparison.OrdinalIgnoreCase);
+                var outer = items[start + i];
+                match = string.Equals(outer.Clip, part[i].Clip, StringComparison.OrdinalIgnoreCase)
+                        && outer.InTime <= part[i].InTime && part[i].OutTime <= outer.OutTime;
             }
 
             if (match)
@@ -162,8 +167,10 @@ public sealed class DiscAnalysis
 
     private static bool SameContent(PlaylistInfo a, PlaylistInfo b)
     {
+        // Same clips from the same points: TV discs cut episodes of one length out of one clip.
         return Math.Abs((a.Duration - b.Duration).TotalSeconds) < 1
                && a.Mpls.Clips.SequenceEqual(b.Mpls.Clips, StringComparer.OrdinalIgnoreCase)
+               && a.Mpls.Items.Zip(b.Mpls.Items).All(x => Math.Abs((long)x.First.InTime - x.Second.InTime) < Mpls.ClockRate)
                && a.Mpls.Streams.Count == b.Mpls.Streams.Count;
     }
 }

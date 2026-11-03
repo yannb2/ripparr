@@ -74,4 +74,44 @@ public class DiscAnalysisTests
         Assert.IsFalse(disc.Find("00030")!.PlayAll);
         Assert.AreEqual("00800", disc.MainFeature?.Name);
     }
+
+    private static MplsBuilder Cut(string clip, uint from, uint to)
+    {
+        var builder = new MplsBuilder();
+        builder.Items.Add(new MplsBuilder.Item(clip, 27_000_000 + from * 45000, 27_000_000 + to * 45000));
+        return builder;
+    }
+
+    [TestMethod]
+    public void FindsEpisodesCutOutOfOneClip()
+    {
+        // A "play all" of the whole clip, three 22-minute episodes cut out of it, an extra and a menu.
+        var disc = Disc(
+            Playlist("00001", Cut("00001", 0, 3960)),
+            Playlist("00002", Cut("00001", 0, 1320)),
+            Playlist("00003", Cut("00001", 1320, 2640)),
+            Playlist("00004", Cut("00001", 2640, 3960)),
+            Playlist("00005", MplsBuilder.Feature(("00002", 240))),
+            Playlist("00006", MplsBuilder.Feature(("00003", 15))));
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        Assert.IsNull(disc.Find("00003")!.DuplicateOf, "same length and clip, but another part of it: not a duplicate");
+        Assert.IsTrue(disc.Find("00001")!.PlayAll);
+        CollectionAssert.AreEqual(new[] { "00002", "00003", "00004" }, EpisodeFinder.Find(disc).Select(p => p.Name).ToArray());
+        Assert.IsTrue(EpisodeFinder.LooksLikeTv(disc));
+    }
+
+    [TestMethod]
+    public void AFilmWithFeaturettesIsNotATvDisc()
+    {
+        var disc = Disc(
+            Playlist("00800", MplsBuilder.Feature(("00055", 7200))),
+            Playlist("00010", MplsBuilder.Feature(("00002", 1200))),
+            Playlist("00011", MplsBuilder.Feature(("00003", 1100))),
+            Playlist("00012", MplsBuilder.Feature(("00004", 1300))));
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        Assert.HasCount(3, EpisodeFinder.Find(disc));
+        Assert.IsFalse(EpisodeFinder.LooksLikeTv(disc), "the film is much longer than the 'episodes'");
+    }
 }

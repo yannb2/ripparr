@@ -1,0 +1,208 @@
+@page "/history"
+@implements IDisposable
+@inject JobStore Store
+@inject JobRunner Runner
+@inject JobEvents Events
+@inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<RipparrOptions> Options
+
+<PageTitle>History · Ripparr</PageTitle>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+    <h2 class="mb-0 me-auto">History</h2>
+    <input class="form-control form-control-sm" style="max-width: 16rem" placeholder="Search title, disc or file"
+           @bind="_search" @bind:event="oninput"/>
+    <select class="form-select form-select-sm" style="max-width: 10rem" @bind="_status">
+        <option value="">All</option>
+        <option value="Done">Done</option>
+        <option value="Failed">Failed</option>
+        <option value="Cancelled">Cancelled</option>
+    </select>
+    <div class="form-check form-switch mb-0 small">
+        <input class="form-check-input" type="checkbox" id="historyDry" @bind="_showDryRuns"/>
+        <label class="form-check-label" for="historyDry">Show dry runs</label>
+    </div>
+</div>
+
+@{
+    var shown = Shown.ToList();
+}
+<div class="d-flex flex-wrap gap-3 small text-body-secondary mb-2">
+    <span>@shown.Count job@(shown.Count == 1 ? "" : "s")</span>
+    <span>@shown.Count(j => j.Status == JobStatus.Done && !j.DryRun) ripped</span>
+    @if (shown.Any(j => j.Status == JobStatus.Done && !j.DryRun && j.Elapsed != null))
+    {
+        <span>@Format.Duration(TimeSpan.FromSeconds(shown.Where(j => j.Status == JobStatus.Done && !j.DryRun).Sum(j => j.Elapsed?.TotalSeconds ?? 0))) of work</span>
+    }
+    @if (_jobs.Any(j => !j.InQueue && j.DryRun))
+    {
+        <button class="btn btn-sm btn-link p-0 ms-auto" @onclick="ClearDryRuns">Clear the dry runs</button>
+    }
+</div>
+
+@if (shown.Count == 0)
+{
+    <div class="alert alert-secondary">Nothing here yet: finished, failed and cancelled jobs show here once they leave the <a href="queue">Queue</a>.</div>
+}
+else
+{
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Status</th>
+                    <th>Title</th>
+                    <th>Source</th>
+                    <th>Result</th>
+                    <th>Finished</th>
+                    <th>Took</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var job in shown)
+                {
+                    <tr class="sv-clickable-row" @onclick="() => Open(job)">
+                        <td class="text-body-secondary">@job.Id</td>
+                        <td><JobStatusBadge Job="job"/></td>
+                        <td class="fw-semibold sv-file-name">@job.DisplayTitle</td>
+                        <td class="small sv-file-name">@job.SourceName <span class="text-body-secondary">· @job.Playlist</span></td>
+                        <td class="small sv-file-name">
+                            @if (job.OutputPath != null)
+                            {
+                                <span title="@job.OutputPath">@System.IO.Path.GetFileName(job.OutputPath)</span>
+                            }
+                            else if (job.Error != null)
+                            {
+                                <span class="text-danger" title="@job.Error">@job.Step: @Short(job.Error)</span>
+                            }
+                        </td>
+                        <td class="small text-nowrap" title="@(job.Finished is { } f ? Format.LocalDate(f) : "")">
+                            @(job.Finished is { } finished ? Format.TimeAgo(finished) : "")
+                        </td>
+                        <td class="small text-nowrap">@(job.Elapsed is { } e ? Format.Duration(e) : "")</td>
+                        <td class="text-nowrap" @onclick:stopPropagation="true">
+                            @if (job.CanRetry)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => Retry(job)">Retry</button>
+                            }
+                            <button class="btn btn-sm btn-outline-danger" title="Forget the job and its log (the MKV stays)" @onclick="() => Delete(job)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<ConfirmDialog @ref="_confirm"/>
+
+@code {
+    private ConfirmDialog _confirm = null!;
+    private List<Job> _jobs = [];
+    private string _search = "";
+    private string _status = "";
+    private bool _showDryRuns;
+    private DateTime _lastLoad = DateTime.MinValue;
+
+    private IEnumerable<Job> Shown => _jobs
+        .Where(j => !j.InQueue && (_showDryRuns || !j.DryRun))
+        .Where(j => _status.Length == 0 || _status == "Failed" && j.Status is JobStatus.Failed or JobStatus.Interrupted or JobStatus.Waiting
+                    || j.Status.ToString() == _status)
+        .Where(j => _search.Length == 0 || Matches(j, _search))
+        .OrderByDescending(j => j.Finished ?? j.Created);
+
+    private static bool Matches(Job job, string text) =>
+        job.DisplayTitle.Contains(text, StringComparison.OrdinalIgnoreCase)
+        || job.SourceName.Contains(text, StringComparison.OrdinalIgnoreCase)
+        || (job.OutputPath?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private void Open(Job job) => Navigation.NavigateTo("job/" + job.Id);
+
+    private static string Short(string text) => text.Length > 80 ? text[..77] + "…" : text;
+
+    protected override void OnInitialized()
+    {
+        Load();
+        Events.Changed += OnChanged;
+    }
+
+    private void Load()
+    {
+        _jobs = Store.List(2000);
+        _lastLoad = DateTime.UtcNow;
+    }
+
+    private void OnChanged(long id)
+    {
+        if (DateTime.UtcNow - _lastLoad < TimeSpan.FromSeconds(1))
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            Load();
+            StateHasChanged();
+        });
+    }
+
+    private void Retry(Job job)
+    {
+        Runner.Retry(job);
+        Navigation.NavigateTo("queue");
+    }
+
+    private async Task Delete(Job job)
+    {
+        if (!await _confirm.Ask("Delete job", $"Forget job {job.Id} ({job.DisplayTitle}) and its log? The MKV stays where it is.", "Delete", danger: true))
+        {
+            return;
+        }
+
+        Forget(job);
+        Load();
+    }
+
+    private async Task ClearDryRuns()
+    {
+        var dry = _jobs.Where(j => !j.InQueue && j.DryRun).ToList();
+        if (!await _confirm.Ask("Clear the dry runs", $"Forget the {dry.Count} finished dry run(s) and their logs?", "Clear", danger: true))
+        {
+            return;
+        }
+
+        foreach (var job in dry)
+        {
+            Forget(job);
+        }
+
+        Load();
+    }
+
+    /// <summary>Deletes the job, its log and its subtitle previews. Never the MKV.</summary>
+    private void Forget(Job job)
+    {
+        Store.Delete(job.Id);
+        try
+        {
+            File.Delete(Events.LogPath(job.Id));
+            var subtitles = Path.Combine(Options.Value.SubtitleFolder, $"job-{job.Id}");
+            if (Directory.Exists(subtitles))
+            {
+                Directory.Delete(subtitles, recursive: true);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The record is gone; a leftover log does no harm.
+        }
+    }
+
+    public void Dispose() => Events.Changed -= OnChanged;
+}

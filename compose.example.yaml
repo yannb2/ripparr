@@ -14,6 +14,8 @@ services:
       TZ: America/Toronto
       Ripparr__Radarr__Url: http://radarr:7878
       Ripparr__Radarr__ApiKey: ${RADARR_API_KEY}
+      Ripparr__Sonarr__Url: http://sonarr:8989
+      Ripparr__Sonarr__ApiKey: ${SONARR_API_KEY}
       # Defaults, shown here to make them easy to change:
       # Ripparr__WorkFolder: /downloads/ripparr/work
       # Ripparr__DoneFolder: /downloads/ripparr/done

@@ -65,6 +65,26 @@ public sealed class Job
     [JsonIgnore]
     public bool IsExtra => !string.IsNullOrWhiteSpace(ExtraType);
 
+    /// <summary>For a TV episode: the series' TVDB ID. Title and Year are the series'.</summary>
+    public int? TvdbId { get; set; }
+
+    /// <summary>For a TV episode: its season (0 = specials) and number in the season.</summary>
+    public int? Season { get; set; }
+
+    public int? Episode { get; set; }
+
+    /// <summary>The absolute number, kept for anime series (Sonarr's Anime type puts it in the name).</summary>
+    public int? AbsoluteEpisode { get; set; }
+
+    public string? EpisodeTitle { get; set; }
+
+    [JsonIgnore]
+    public bool IsEpisode => Season != null && Episode != null;
+
+    /// <summary>"S01E05".</summary>
+    [JsonIgnore]
+    public string? EpisodeCode => IsEpisode ? EpisodeNumbers.Code(Season!.Value, Episode!.Value) : null;
+
     /// <summary>ISO 639-2 code of the film's language ("eng").</summary>
     public string? OriginalLanguage { get; set; }
 
@@ -114,6 +134,17 @@ public sealed class Job
     /// <summary>The subtitle tracks kept for the preview (SubtitleFolder/job-12/).</summary>
     public List<JobSubtitle> Subtitles { get; set; } = [];
 
+    /// <summary>Taken off the queue page with Remove (a failed, interrupted or waiting job): it shows in History only.</summary>
+    public bool Dismissed { get; set; }
+
+    /// <summary>
+    /// On the queue page: waiting to run, running, or needing a look (failed, interrupted, waiting for
+    /// an answer) until removed. Done and cancelled jobs go to History.
+    /// </summary>
+    [JsonIgnore]
+    public bool InQueue => Status is JobStatus.Queued or JobStatus.Running
+                           || !Dismissed && Status is JobStatus.Waiting or JobStatus.Failed or JobStatus.Interrupted;
+
     [JsonIgnore]
     public bool IsFinished => Status is JobStatus.Done or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Interrupted or JobStatus.Waiting;
 
@@ -132,7 +163,8 @@ public sealed class Job
     public string DisplayTitle => (string.IsNullOrWhiteSpace(Title)
         ? SourceName
         : Year is { } y ? $"{Title} ({y}){(string.IsNullOrWhiteSpace(Edition) ? "" : " - " + Edition)}" : Title)
-        + (IsExtra ? $" · {ExtraName}" : "");
+        + (IsExtra ? $" · {ExtraName}" : "")
+        + (IsEpisode ? $" · {EpisodeCode}{(string.IsNullOrWhiteSpace(EpisodeTitle) ? "" : " - " + EpisodeTitle)}" : "");
 
     /// <summary>
     /// A new job with this one's source, playlist, title, profile, track plan and tags, not a dry
@@ -157,7 +189,12 @@ public sealed class Job
             Plan = copy.Plan,
             Tags = copy.Tags,
             ExtraType = copy.ExtraType,
-            ExtraName = copy.ExtraName
+            ExtraName = copy.ExtraName,
+            TvdbId = copy.TvdbId,
+            Season = copy.Season,
+            Episode = copy.Episode,
+            AbsoluteEpisode = copy.AbsoluteEpisode,
+            EpisodeTitle = copy.EpisodeTitle
         };
     }
 
@@ -267,4 +304,18 @@ public static class JobSteps
     public const string Finish = "Finish";
 
     public static readonly string[] All = [Check, Prepare, Demux, ReadStreams, Subtitles, DolbyVision, Mux, Verify, Finish];
+}
+
+/// <summary>Episode numbers as Sonarr writes them.</summary>
+public static class EpisodeNumbers
+{
+    public static string Code(int season, int episode) =>
+        $"S{season.ToString("00", System.Globalization.CultureInfo.InvariantCulture)}E{episode.ToString("00", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    /// <summary>"005", as Sonarr's {absolute:000}.</summary>
+    public static string Absolute(int absolute) => absolute.ToString("000", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Sonarr's season folder: "Season 01", and "Specials" for season 0.</summary>
+    public static string SeasonFolder(int season) =>
+        season == 0 ? "Specials" : $"Season {season.ToString("00", System.Globalization.CultureInfo.InvariantCulture)}";
 }
