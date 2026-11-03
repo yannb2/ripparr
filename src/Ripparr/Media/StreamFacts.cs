@@ -27,6 +27,112 @@ public sealed record StreamFacts
     public string? Language { get; init; }
     public string? Title { get; init; }
 
+    /// <summary>Bits per second as mediainfo reads it; 0 when it gives none (often for raw streams).</summary>
+    public long BitRate { get; init; }
+
+    /// <summary>VBR or CBR.</summary>
+    public string? BitRateMode { get; init; }
+
+    public long BitRateMaximum { get; init; }
+
+    /// <summary>Bytes of this stream; 0 when mediainfo gives none.</summary>
+    public long StreamSize { get; init; }
+
+    /// <summary>Hz (48000), audio only.</summary>
+    public int SamplingRate { get; init; }
+
+    /// <summary>10 for 10-bit video, 24 for 24-bit audio.</summary>
+    public int BitDepth { get; init; }
+
+    public string? ChromaSubsampling { get; init; }
+
+    /// <summary>Subtitle events (captions), when mediainfo counts them.</summary>
+    public int ElementCount { get; init; }
+
+    /// <summary>
+    /// The bit rate to show: mediainfo's, or else worked out from the file size and the duration.
+    /// </summary>
+    public long BitRateFor(long fileSize) =>
+        BitRate > 0 ? BitRate : fileSize > 0 && DurationSeconds > 0 ? (long)(fileSize * 8 / DurationSeconds) : 0;
+
+    /// <summary>
+    /// The facts that are not in the codec column: picture size, frame rate, bit depth and HDR
+    /// for video; sample rate and bit depth for audio; the number of captions for subtitles.
+    /// </summary>
+    public string Details
+    {
+        get
+        {
+            var parts = new List<string>();
+            switch (Kind)
+            {
+                case StreamKind.Video:
+                    if (Width > 0 && Height > 0)
+                    {
+                        parts.Add($"{Width}x{Height}");
+                    }
+
+                    if (double.TryParse(FrameRate, NumberStyles.Float, CultureInfo.InvariantCulture, out var fps) && fps > 0)
+                    {
+                        parts.Add(fps.ToString("0.###", CultureInfo.InvariantCulture) + " fps");
+                    }
+
+                    if (BitDepth > 0)
+                    {
+                        parts.Add($"{BitDepth}-bit");
+                    }
+
+                    if (!string.IsNullOrEmpty(ChromaSubsampling))
+                    {
+                        parts.Add(ChromaSubsampling);
+                    }
+
+                    if (DolbyVisionProfile is { } profile)
+                    {
+                        parts.Add($"DV profile {profile}" + (DualLayer ? " (BL+EL)" : ""));
+                    }
+
+                    break;
+                case StreamKind.Audio:
+                    if (SamplingRate > 0)
+                    {
+                        parts.Add((SamplingRate / 1000.0).ToString("0.#", CultureInfo.InvariantCulture) + " kHz");
+                    }
+
+                    if (BitDepth > 0)
+                    {
+                        parts.Add($"{BitDepth}-bit");
+                    }
+
+                    if (Channels > 0)
+                    {
+                        parts.Add($"{Channels} ch");
+                    }
+
+                    break;
+                case StreamKind.Subtitle:
+                    if (!string.IsNullOrEmpty(Format))
+                    {
+                        parts.Add(Format);
+                    }
+
+                    if (ElementCount > 0)
+                    {
+                        parts.Add($"{ElementCount} captions");
+                    }
+
+                    break;
+            }
+
+            if (!string.IsNullOrEmpty(BitRateMode))
+            {
+                parts.Add(BitRateMode);
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
     /// <summary>Radarr's words: TrueHD Atmos, DTS-HD MA, DTS-X, EAC3 Atmos, AC3, PCM, FLAC...</summary>
     public string AudioCodec
     {
@@ -234,7 +340,15 @@ public static class MediaInfoReader
                 HdrProfile = Get(track, "HDR_Format_Profile"),
                 Transfer = Get(track, "transfer_characteristics"),
                 Language = Get(track, "Language"),
-                Title = Get(track, "Title")
+                Title = Get(track, "Title"),
+                BitRate = Long(Get(track, "BitRate")),
+                BitRateMode = Get(track, "BitRate_Mode")?.Split('/')[0].Trim(),
+                BitRateMaximum = Long(Get(track, "BitRate_Maximum")),
+                StreamSize = Long(Get(track, "StreamSize")),
+                SamplingRate = Int(Get(track, "SamplingRate")),
+                BitDepth = Int(Get(track, "BitDepth")),
+                ChromaSubsampling = Get(track, "ChromaSubsampling"),
+                ElementCount = Int(Get(track, "ElementCount") ?? Get(track, "Count_Elements"))
             });
         }
 
@@ -245,11 +359,17 @@ public static class MediaInfoReader
     {
         // "8 / 6" for a TrueHD track with its AC-3 core: take the first.
         var first = value?.Split('/')[0].Trim();
-        return int.TryParse(first, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0;
+        return int.TryParse(first, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n
+            : double.TryParse(first, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? (int)d : 0;
     }
 
-    private static long Long(string? value) =>
-        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0;
+    private static long Long(string? value)
+    {
+        var first = value?.Split('/')[0].Trim();
+        // Some fields come as "48000.000": keep the whole part.
+        return long.TryParse(first, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n
+            : double.TryParse(first, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? (long)d : 0;
+    }
 
     private static string? Get(Track track, string key)
     {

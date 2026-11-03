@@ -151,4 +151,15 @@ public class MuxBuilderTests
         CollectionAssert.AreEqual(new[] { "-i", "/d/BDMV/PLAYLIST/00800.mpls", "-o", "/w/00800" },
             JobPipeline.ExpandArguments("-i {input} -o {output}", "/d/BDMV/PLAYLIST/00800.mpls", "/w/00800"));
     }
+
+    [TestMethod]
+    public void AProfileCanHaveItsOwnDgDemuxArguments()
+    {
+        var options = new Ripparr.Options.RipparrOptions();
+        var profile = new Ripparr.Profiles.RipProfile();
+        Assert.AreEqual(options.DgDemuxArguments, JobPipeline.DgDemuxTemplate(profile, options));
+        profile.DgDemuxArguments = " -i {input} -o {output} -ac3 ";
+        Assert.AreEqual("-i {input} -o {output} -ac3", JobPipeline.DgDemuxTemplate(profile, options));
+        Assert.AreEqual(profile.DgDemuxArguments, profile.Copy().DgDemuxArguments);
+    }
 }

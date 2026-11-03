@@ -96,6 +96,7 @@ jobs:
           docker exec smoke sh -c 'dovi_tool --version | grep "$RIPPARR_PIN_DOVI_TOOL"'
           docker exec smoke sh -c 'ffprobe -version | head -n 1'
           docker exec smoke sh -c '7z | grep "$RIPPARR_PIN_7ZIP"'
+          docker exec smoke sh -c 'tesseract --version 2>&1 | head -n 1 && tesseract --list-langs 2>&1 | grep -x fra'
           docker logs smoke
           docker rm -f smoke
 

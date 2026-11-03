@@ -16,10 +16,18 @@ public enum JobStatus
     Interrupted
 }
 
-/// <summary>One check of the verify step.</summary>
-/// <summary>One track of the finished MKV, for the job page.</summary>
-public sealed record WrittenTrack(string Kind, string Codec, string Language, string Name, string Flags);
+/// <summary>One track of the finished MKV, for the job page. Jobs saved before 0.1.3 have no details, size or bit rate.</summary>
+public sealed record WrittenTrack(string Kind, string Codec, string Language, string Name, string Flags,
+    string Details = "", long Size = 0, long BitRate = 0, long BitRateMaximum = 0, string File = "");
 
+/// <summary>
+/// A subtitle track kept for the preview: Key.sup (the pictures), and with OCR Key.ocr.json
+/// (what Tesseract read, before and after the SDH removal) and Key.srt (what went into the MKV).
+/// </summary>
+public sealed record JobSubtitle(string Key, string Language, string Name, bool Forced, int Captions,
+    bool Ocr = false, string? SrtName = null, string? OcrSummary = null);
+
+/// <summary>One check of the verify step.</summary>
 public sealed record VerifyCheck(string Name, bool Passed, string Detail, bool Warning = false);
 
 /// <summary>A remux job: one playlist of one source into one MKV. Stored as JSON.</summary>
@@ -67,6 +75,9 @@ public sealed class Job
     /// <summary>The tracks as they went into the MKV (filled when the MKV is built).</summary>
     public List<WrittenTrack> Written { get; set; } = [];
 
+    /// <summary>The subtitle tracks kept for the preview (SubtitleFolder/job-12/).</summary>
+    public List<JobSubtitle> Subtitles { get; set; } = [];
+
     [JsonIgnore]
     public bool IsFinished => Status is JobStatus.Done or JobStatus.Failed or JobStatus.Cancelled or JobStatus.Interrupted;
 
@@ -89,10 +100,11 @@ public static class JobSteps
     public const string Prepare = "Prepare";
     public const string Demux = "Demux";
     public const string ReadStreams = "Read streams";
+    public const string Subtitles = "Subtitles";
     public const string DolbyVision = "Dolby Vision";
     public const string Mux = "Build the MKV";
     public const string Verify = "Verify";
     public const string Finish = "Finish";
 
-    public static readonly string[] All = [Check, Prepare, Demux, ReadStreams, DolbyVision, Mux, Verify, Finish];
+    public static readonly string[] All = [Check, Prepare, Demux, ReadStreams, Subtitles, DolbyVision, Mux, Verify, Finish];
 }

@@ -19,6 +19,9 @@ public sealed class PlannedTrack
     /// <summary>"2.0", "Multi"..., audio only.</summary>
     public string? Layout { get; set; }
 
+    /// <summary>Resolution and frame rate, or sample rate, as the playlist gives them.</summary>
+    public string? Details { get; set; }
+
     /// <summary>The disc's language code.</summary>
     public string? DiscLanguage { get; set; }
 
@@ -92,6 +95,7 @@ public static class TrackPlanner
             Pid = s.Pid,
             Codec = s.CodecName,
             Layout = s.Kind == StreamKind.Audio ? StreamCoding.AudioLayout(s.Format) : null,
+            Details = StreamCoding.Details(s),
             DiscLanguage = s.Language,
             Language = s.Language ?? "und",
             DolbyVisionLayer = s.DolbyVisionEnhancementLayer

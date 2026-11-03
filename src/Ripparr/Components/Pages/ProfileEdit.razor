@@ -1,6 +1,7 @@
 @page "/profiles/{Id}"
 @inject JobStore Store
 @inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<RipparrOptions> Options
 
 <PageTitle>@(_profile?.Name ?? "Profile") · Ripparr</PageTitle>
 
@@ -104,6 +105,30 @@
                 <input class="form-control form-control-sm" @bind="_profile.ForcedSubtitleNameTemplate"/>
             </div>
         </div>
+
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Text subtitles (SRT by OCR)</div>
+            <div class="card-body">
+                <p class="small text-body-secondary mb-2">
+                    Blu-ray subtitles are pictures. For these languages, Tesseract reads them and the MKV also gets an SRT track,
+                    right after the picture track. Every job keeps its subtitle pictures for the preview.
+                </p>
+                <label class="form-label small mb-1">Languages (<code>original</code> = the film's language), empty for none</label>
+                <input class="form-control form-control-sm mb-2" @bind="SrtLanguages" placeholder="eng, fre"/>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="sdh" @bind="_profile.SrtRemoveSdh"/>
+                    <label class="form-check-label" for="sdh">Remove the text for the hard of hearing: [door slams], (laughs), JOHN:, ♪ lyrics</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="srtForced" @bind="_profile.SrtForForced"/>
+                    <label class="form-check-label" for="srtForced">Also for forced subtitle tracks</label>
+                </div>
+                <label class="form-label small mb-1">Track name: <code>{language}</code></label>
+                <input class="form-control form-control-sm mb-2" @bind="_profile.SrtNameTemplate"/>
+                <label class="form-label small mb-1">Forced track name</label>
+                <input class="form-control form-control-sm" @bind="_profile.ForcedSrtNameTemplate"/>
+            </div>
+        </div>
     </div>
 
     <div class="col-12">
@@ -125,6 +150,58 @@
                     <input class="form-check-input" type="checkbox" id="tags" @bind="_profile.WriteTags"/>
                     <label class="form-check-label" for="tags">Write MKV global tags (TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION, HDR_FORMAT, DV_PROFILE…)</label>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card mb-3">
+            <div class="card-header d-flex align-items-center">
+                <span class="fw-semibold me-auto">DGDemux</span>
+                @if (string.IsNullOrWhiteSpace(_profile.DgDemuxArguments))
+                {
+                    <span class="badge text-bg-secondary">global default</span>
+                }
+                else
+                {
+                    <span class="badge text-bg-primary">this profile's own</span>
+                }
+            </div>
+            <div class="card-body">
+                <label class="form-label small mb-1">
+                    Arguments: <code>{input}</code> is the playlist (.mpls), <code>{output}</code> the file name prefix in the job's demux folder.
+                    Empty = the global default, <code>@Options.Value.DgDemuxArguments</code> (<code>Ripparr__DgDemuxArguments</code>).
+                </label>
+                <div class="input-group input-group-sm mb-1">
+                    <input class="form-control font-monospace" placeholder="@Options.Value.DgDemuxArguments" @bind="_profile.DgDemuxArguments" @bind:event="oninput"/>
+                    <button class="btn btn-outline-secondary" title="Use the global default" disabled="@string.IsNullOrWhiteSpace(_profile.DgDemuxArguments)"
+                            @onclick="() => _profile.DgDemuxArguments = string.Empty">Reset</button>
+                </div>
+                @if (MissingTokens is { Count: > 0 } missing)
+                {
+                    <div class="small text-warning mb-1"><i class="bi bi-exclamation-triangle"></i> No @string.Join(" or ", missing): DGDemux would not know @(missing.Count == 2 ? "what to read or where to write" : missing[0] == "{input}" ? "what to read" : "where to write").</div>
+                }
+                <div class="small text-body-secondary mb-2">A job runs, in its demux folder:</div>
+                <pre class="small bg-body-tertiary border rounded p-2 mb-3 text-wrap">@CommandPreview</pre>
+
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ShowHelp" disabled="@_helpRunning">
+                        @if (_helpRunning)
+                        {
+                            <span class="spinner-border spinner-border-sm"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-question-circle"></i>
+                        }
+                        Show DGDemux's own options
+                    </button>
+                    <span class="small text-body-secondary">Runs <code>@Options.Value.Tools.DgDemux</code> with no arguments and shows what it prints.</span>
+                </div>
+                @if (_help != null)
+                {
+                    <pre class="small bg-body-tertiary border rounded p-2 mb-0" style="max-height: 24rem; overflow: auto">@_help</pre>
+                }
             </div>
         </div>
     </div>
@@ -150,6 +227,12 @@
         set => _profile!.SubtitleLanguages = SplitList(value);
     }
 
+    private string SrtLanguages
+    {
+        get => string.Join(", ", _profile!.SrtLanguages);
+        set => _profile!.SrtLanguages = SplitList(value);
+    }
+
     private static List<string> SplitList(string value) =>
         value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(v => v.ToLowerInvariant()).Distinct().ToList();
@@ -159,6 +242,53 @@
         ["title"] = "Blade Runner", ["year"] = "1982", ["edition"] = "Final Cut", ["resolution"] = "2160p",
         ["videocodec"] = "HEVC", ["hdr"] = "DV HDR10", ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux"
     });
+
+    private string? _help;
+    private bool _helpRunning;
+
+    private string Template => JobPipeline.DgDemuxTemplate(_profile!, Options.Value);
+
+    private List<string> MissingTokens =>
+        new[] { "{input}", "{output}" }.Where(t => !Template.Contains(t, StringComparison.Ordinal)).ToList();
+
+    private string CommandPreview
+    {
+        get
+        {
+            var demux = System.IO.Path.Combine(Options.Value.WorkFolder, "job-12", "demux");
+            var mpls = System.IO.Path.Combine(Options.Value.WorkFolder, "job-12", "disc", "BDMV", "PLAYLIST", "00800.mpls");
+            return new ProcessSpec(Options.Value.Tools.DgDemux,
+                JobPipeline.ExpandArguments(Template, mpls, System.IO.Path.Combine(demux, "00800"))).CommandLine;
+        }
+    }
+
+    private async Task ShowHelp()
+    {
+        _helpRunning = true;
+        try
+        {
+            var result = await ProcessRunner.RunAsync(Options.Value.Tools.DgDemux, [], TimeSpan.FromSeconds(15));
+            if (!result.NotStarted && (result.Output + result.Error).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length < 4)
+            {
+                // Only a banner: ask for the help explicitly.
+                var help = await ProcessRunner.RunAsync(Options.Value.Tools.DgDemux, ["-h"], TimeSpan.FromSeconds(15));
+                if ((help.Output + help.Error).Length > (result.Output + result.Error).Length)
+                {
+                    result = help;
+                }
+            }
+
+            _help = result.NotStarted
+                ? $"{Options.Value.Tools.DgDemux} is not there. Put the Linux binary in /config/tools/dgdemux and restart the container."
+                : string.Join("\n", new[] { result.Output.TrimEnd(), result.Error.TrimEnd() }.Where(t => t != "")) is { Length: > 0 } text
+                    ? text
+                    : $"DGDemux printed nothing (exit code {result.ExitCode}).";
+        }
+        finally
+        {
+            _helpRunning = false;
+        }
+    }
 
     private void Save()
     {

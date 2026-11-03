@@ -5,7 +5,7 @@ ARG DGDEMUX_VERSION=1.0.0.85
 ARG MKVTOOLNIX_VERSION=103.0
 ARG MEDIAINFO_VERSION=26.10
 ARG DOVI_TOOL_VERSION=2.3.4
-ARG FFMPEG_VERSION=8.1
+ARG FFMPEG_VERSION=9.0
 ARG SEVENZIP_VERSION=26.05
 
 # MakeMKV built from its own source (versions older than the newest move to /download/old/) on the same Ubuntu as the final image, command line only (no Qt).
@@ -118,11 +118,14 @@ ARG DOVI_TOOL_VERSION
 ARG FFMPEG_VERSION
 ARG SEVENZIP_VERSION
 
+# Tesseract (Ubuntu's package, with English, French, German, Spanish and Italian) reads the
+# picture subtitles for the SRT tracks.
 # MKVToolNix from the project's own repo (Ubuntu's is v82 from 2024), key checked against the
 # fingerprint on mkvtoolnix.download/authenticity.html, as in Muxarr. libavcodec, libexpat and
 # libssl are what makemkvcon links to.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates gnupg tzdata libexpat1 libavcodec60 \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa tesseract-ocr-ita \
     && . /etc/os-release \
     && curl -fsSL https://mkvtoolnix.download/gpg-pub-moritzbunkus.gpg -o /usr/share/keyrings/mkvtoolnix.gpg \
     && gpg --show-keys --with-colons /usr/share/keyrings/mkvtoolnix.gpg | grep -q '^fpr:::::::::D9199745B0545F2E8197062B0F92290A445B9007:' \

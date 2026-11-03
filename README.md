@@ -15,13 +15,17 @@ and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yan
    backup with `makemkvcon backup --decrypt` when the source is encrypted.
 3. **Demux**: DGDemux writes each stream of the playlist, the Dolby Vision enhancement layer included.
 4. **Read streams**: MediaInfo reads every stream (codec, channels, Atmos, DTS:X, HDR format).
-5. **Dolby Vision**: a separate enhancement layer is merged back into the video with `dovi_tool mux`
+5. **Subtitles**: every picture subtitle track (PGS) is kept in `/config/subtitles/job-<id>/` for the preview
+   page (each caption's picture and time). For the profile's SRT languages, Tesseract reads the pictures, the
+   text for the hard of hearing is removed ([door slams], (laughs), `JOHN:`, ♪ lyrics) and an SRT track goes in
+   right after the picture track. An OCR problem is a warning, not a failure.
+6. **Dolby Vision**: a separate enhancement layer is merged back into the video with `dovi_tool mux`
    (profile 7 FEL stays FEL), when the profile keeps it.
-6. **Build the MKV**: mkvmerge with the track plan (languages, names, default/forced/commentary flags, order),
+7. **Build the MKV**: mkvmerge with the track plan (languages, names, default/forced/commentary flags, order),
    chapters from the playlist, the frame rate from the playlist and the global tags.
-7. **Verify**: tracks, languages, duration and chapters against the plan; HDR format; for Dolby Vision, the RPU
+8. **Verify**: tracks, languages, duration and chapters against the plan; HDR format; for Dolby Vision, the RPU
    frame count against the video.
-8. **Finish**: moves the file to `done/Title (Year)/`.
+9. **Finish**: moves the file to `done/Title (Year)/`.
 
 Each step logs the exact command it ran, on the job page and in `/config/logs/job-<id>.log`.
 
@@ -29,7 +33,9 @@ Each step logs the exact command it ran, on the job page and in `/config/logs/jo
 
 A profile decides the track plan: audio and subtitle languages in order (`original` is the film's own language
 from Radarr), commentaries, lossy tracks next to lossless ones, the TrueHD AC-3 core, track name templates,
-chapter names, the file name and MKV title templates and the global tags. Two come built in (UHD remux and
+chapter names, the file name and MKV title templates, the global tags, the SRT (OCR) languages and the
+DGDemux arguments (empty = the global default; the profile page shows the exact command and DGDemux's own
+options). Two come built in (UHD remux and
 Blu-ray remux), and they can be copied and changed. The plan can still be edited per job on the disc page.
 
 The default file name follows Radarr's Standard Movie Format in this library:
@@ -66,7 +72,9 @@ the queue, the current job and its progress for a Homepage tile.
 | `Ripparr__MaxParallelJobs` | `1` |
 | `Ripparr__CleanWorkFolder` | `true` (a failed job always keeps its folder) |
 | `Ripparr__SpareSpaceGb` | `20` |
-| `Ripparr__DgDemuxArguments` | `-i {input} -o {output}` |
+| `Ripparr__DgDemuxArguments` | `-i {input} -o {output}` (a profile can have its own) |
+| `Ripparr__SubtitleFolder` | `/config/subtitles` |
+| `Ripparr__KeepSubtitlePreviews` | `30` (jobs whose subtitle pictures are kept) |
 | `Ripparr__Radarr__Url` / `__ApiKey` | not set: title, year and IDs are typed by hand |
 
 ## Building

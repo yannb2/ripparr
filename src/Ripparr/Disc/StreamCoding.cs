@@ -77,4 +77,35 @@ public static class StreamCoding
         7 => (60000, 1001),
         _ => null
     };
+
+    /// <summary>Audio sampling frequency code: 1 48 kHz, 4 96 kHz, 5 192 kHz, 12 and 14 with a 48 kHz core.</summary>
+    public static string? SampleRate(byte rate) => rate switch
+    {
+        1 => "48 kHz",
+        4 => "96 kHz",
+        5 => "192 kHz",
+        12 => "192 kHz",
+        14 => "96 kHz",
+        _ => null
+    };
+
+    /// <summary>What the playlist says about a stream beyond its codec: 2160p · 23.976 fps, or 48 kHz.</summary>
+    public static string Details(PlaylistStream stream)
+    {
+        var parts = new List<string?>();
+        if (stream.Kind == StreamKind.Video)
+        {
+            parts.Add(Resolution(stream.Format));
+            if (FrameRate(stream.Rate) is { } fps)
+            {
+                parts.Add((fps.Numerator / (double)fps.Denominator).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " fps");
+            }
+        }
+        else if (stream.Kind == StreamKind.Audio)
+        {
+            parts.Add(SampleRate(stream.Rate));
+        }
+
+        return string.Join(" · ", parts.Where(p => !string.IsNullOrEmpty(p)));
+    }
 }

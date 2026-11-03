@@ -22,6 +22,14 @@ public sealed class RipProfile
     /// <summary>The SOURCE tag and the last bracket of the file name (BDRemux, DVDRemux).</summary>
     public string Source { get; set; } = "BDRemux";
 
+    // ---- DGDemux ----
+
+    /// <summary>
+    /// The DGDemux arguments for this profile, with {input} (the .mpls) and {output} (the file
+    /// name prefix in the work folder). Empty = the global default, Ripparr__DgDemuxArguments.
+    /// </summary>
+    public string DgDemuxArguments { get; set; } = "";
+
     // ---- Video ----
 
     /// <summary>Keep the Dolby Vision enhancement layer: BL and EL are combined into one track (profile 7 FEL stays FEL).</summary>
@@ -64,6 +72,23 @@ public sealed class RipProfile
     public string SubtitleNameTemplate { get; set; } = "{language}";
 
     public string ForcedSubtitleNameTemplate { get; set; } = "{language} - Forced";
+
+    /// <summary>
+    /// Languages that also get a text (SRT) track, read from the picture subtitles with OCR
+    /// (Tesseract). Empty = no SRT tracks. "original" stands for the film's own language.
+    /// </summary>
+    public List<string> SrtLanguages { get; set; } = [];
+
+    /// <summary>Remove the text for the deaf and hard of hearing from the SRT tracks ([door slams], JOHN:, ♪ lyrics).</summary>
+    public bool SrtRemoveSdh { get; set; } = true;
+
+    /// <summary>Also make an SRT of forced subtitle tracks.</summary>
+    public bool SrtForForced { get; set; } = true;
+
+    /// <summary>Tokens: {language}.</summary>
+    public string SrtNameTemplate { get; set; } = "{language} - SRT";
+
+    public string ForcedSrtNameTemplate { get; set; } = "{language} - Forced - SRT";
 
     // ---- Chapters ----
 

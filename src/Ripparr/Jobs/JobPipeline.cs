@@ -73,7 +73,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         context.Step(JobSteps.Demux);
         Directory.CreateDirectory(context.DemuxFolder);
         var prefix = Path.Combine(context.DemuxFolder, playlist.Name);
-        var demuxArguments = ExpandArguments(context.Options.DgDemuxArguments, mplsPath, prefix);
+        var demuxArguments = ExpandArguments(DgDemuxTemplate(job.Profile, context.Options), mplsPath, prefix);
         await context.RunAsync(new ProcessSpec(tools.DgDemux, demuxArguments) { WorkingDirectory = context.DemuxFolder }, Long,
             line =>
             {
@@ -117,6 +117,18 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         }
 
         var outputs = MuxBuilder.Outputs(job.Plan, mapping, job.Profile);
+        var missing = job.Plan.Kept.Where(t => !mapping.Files.ContainsKey(t.StreamIndex)).ToList();
+        if (missing.Count > 0)
+        {
+            throw new JobFailedException($"No demuxed file for {missing.Count} kept track(s): " +
+                                         string.Join(", ", missing.Select(t => $"{t.Kind} {t.Language} {t.Codec}")));
+        }
+
+        // ---- Subtitles ----
+        context.Step(JobSteps.Subtitles);
+        outputs = await SubtitleStep.RunAsync(context, outputs);
+        context.Save();
+
         job.Written = outputs.Select(o => new WrittenTrack(
             o.Planned.Kind.ToString(),
             o.Planned.Kind switch
@@ -128,17 +140,15 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             o.Planned.Language,
             o.Name,
             string.Join(' ', new[] { o.Planned.Default ? "default" : "", o.Planned.Forced ? "forced" : "",
-                                     o.Planned.Commentary ? "commentary" : "" }.Where(w => w != "")))).ToList();
+                                     o.Planned.Commentary ? "commentary" : "" }.Where(w => w != "")),
+            o.File.Facts.Details,
+            FileSize(o.File.Path, o.File.Facts),
+            o.File.Facts.BitRateFor(FileSize(o.File.Path, o.File.Facts)),
+            o.File.Facts.BitRateMaximum,
+            o.File.FileName)).ToList();
         foreach (var output in outputs)
         {
             context.Log($"  track: {output.Planned.Kind} {output.Planned.Language} \"{output.Name}\" <- {output.File.FileName}");
-        }
-
-        var missing = job.Plan.Kept.Where(t => !mapping.Files.ContainsKey(t.StreamIndex)).ToList();
-        if (missing.Count > 0)
-        {
-            throw new JobFailedException($"No demuxed file for {missing.Count} kept track(s): " +
-                                         string.Join(", ", missing.Select(t => $"{t.Kind} {t.Language} {t.Codec}")));
         }
 
         // ---- Dolby Vision ----
@@ -412,7 +422,14 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         var mpls = Path.Combine(disc, "BDMV", "PLAYLIST", playlist.Name + ".mpls");
         context.Log("$ " + new ProcessSpec(tools.DgDemux,
-            ExpandArguments(context.Options.DgDemuxArguments, mpls, Path.Combine(context.DemuxFolder, playlist.Name))).CommandLine);
+            ExpandArguments(DgDemuxTemplate(context.Job.Profile, context.Options), mpls, Path.Combine(context.DemuxFolder, playlist.Name))).CommandLine);
+        var srt = context.Job.Plan.Kept.Where(t => SubtitleStep.WantsSrt(context.Job.Profile, t, context.Job.OriginalLanguage)).ToList();
+        if (srt.Count > 0)
+        {
+            context.Log($"Then: Tesseract OCR of {srt.Count} subtitle track(s) into SRT{(context.Job.Profile.SrtRemoveSdh ? ", SDH text removed" : "")}: " +
+                        string.Join(", ", srt.Select(t => $"\"{SubtitleStep.SrtName(context.Job.Profile, t)}\"")));
+        }
+
         context.Log("Then: mediainfo on each stream, dovi_tool mux for the Dolby Vision layer, mkvmerge with these tracks:");
         foreach (var track in context.Job.Plan.Kept)
         {
@@ -429,6 +446,23 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
     }
 
     /// <summary>Splits the DGDemux argument setting on spaces and fills {input} and {output}.</summary>
+    /// <summary>The profile's DGDemux arguments, or the global default (Ripparr__DgDemuxArguments) when it has none.</summary>
+    public static string DgDemuxTemplate(RipProfile profile, RipparrOptions options) =>
+        string.IsNullOrWhiteSpace(profile.DgDemuxArguments) ? options.DgDemuxArguments : profile.DgDemuxArguments.Trim();
+
+    /// <summary>The stream's size on disk; mediainfo's figure when the file is gone.</summary>
+    private static long FileSize(string path, StreamFacts facts)
+    {
+        try
+        {
+            return new FileInfo(path).Length;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return facts.StreamSize;
+        }
+    }
+
     public static List<string> ExpandArguments(string template, string input, string output) =>
         template.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(a => a.Replace("{input}", input).Replace("{output}", output))

@@ -32,6 +32,10 @@
                 </td>
                 <td class="text-nowrap">
                     @track.Codec @track.Layout
+                    @if (!string.IsNullOrEmpty(track.Details))
+                    {
+                        <span class="text-body-secondary">· @track.Details</span>
+                    }
                     @if (!string.IsNullOrEmpty(track.DiscLanguage))
                     {
                         <span class="text-body-secondary">· @track.DiscLanguage</span>

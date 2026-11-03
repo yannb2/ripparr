@@ -95,7 +95,19 @@ public static partial class ToolCatalog
         {
             Id = "ffprobe", Name = "ffprobe", Purpose = "Reads the streams of a file (BtbN static build).",
             Command = t => t.FFprobe, VersionArguments = ["-version"],
-            VersionPattern = FfprobeVersion()
+            VersionPattern = FfprobeVersion(),
+            // BtbN keeps one "latest" release; its asset names hold the newest release branch (n9.0).
+            Upstream = UpstreamKind.Page,
+            UpstreamSources = ["https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest"],
+            UpstreamPattern = BtbNBranch(),
+            ReleaseNotes = "https://ffmpeg.org/download.html#releases"
+        },
+        new()
+        {
+            Id = "tesseract", Name = "Tesseract", Purpose = "Reads picture subtitles (OCR) for the SRT tracks.",
+            Command = t => t.Tesseract, VersionArguments = ["--version"],
+            VersionPattern = TesseractVersion()
+            // From Ubuntu's packages: it moves with the base image, not with a pin.
         },
         new()
         {
@@ -122,13 +134,27 @@ public static partial class ToolCatalog
             .FirstOrDefault();
     }
 
-    /// <summary>The tag of a GitHub latest-release answer, without its "v".</summary>
+    /// <summary>
+    /// The highest plain version tag (1.2.3 or v1.2.3) of a GitHub releases answer, a list or a single
+    /// release. Other tags are skipped: dovi_tool's repository also has libdovi-3.x releases.
+    /// </summary>
     public static string? GitHubTag(string json)
     {
         try
         {
             using var document = JsonDocument.Parse(json);
-            return document.RootElement.TryGetProperty("tag_name", out var tag) ? tag.GetString()?.TrimStart('v', 'V') : null;
+            var releases = document.RootElement.ValueKind == JsonValueKind.Array
+                ? document.RootElement.EnumerateArray().ToList()
+                : [document.RootElement];
+            return releases
+                .Where(r => r.ValueKind == JsonValueKind.Object
+                            && !(r.TryGetProperty("draft", out var d) && d.ValueKind == JsonValueKind.True)
+                            && !(r.TryGetProperty("prerelease", out var p) && p.ValueKind == JsonValueKind.True))
+                .Select(r => r.TryGetProperty("tag_name", out var tag) ? tag.GetString() ?? "" : "")
+                .Where(t => PlainVersionTag().IsMatch(t))
+                .Select(t => t.TrimStart('v', 'V'))
+                .OrderByDescending(v => v, VersionComparer.Instance)
+                .FirstOrDefault();
         }
         catch (JsonException)
         {
@@ -161,8 +187,17 @@ public static partial class ToolCatalog
     [GeneratedRegex(@"(\d+\.\d+\.\d+)")]
     private static partial Regex ThreePartVersion();
 
+    [GeneratedRegex(@"^[vV]?\d+(?:\.\d+)+$")]
+    private static partial Regex PlainVersionTag();
+
+    [GeneratedRegex(@"ffmpeg-n(\d+\.\d+)-latest-linux64-gpl-\d")]
+    private static partial Regex BtbNBranch();
+
     [GeneratedRegex(@"version n?(\d+\.\d+(?:\.\d+)?)")]
     private static partial Regex FfprobeVersion();
+
+    [GeneratedRegex(@"tesseract v?(\d+\.\d+\.\d+)")]
+    private static partial Regex TesseractVersion();
 
     [GeneratedRegex(@"7-Zip (?:\([az]\) )?(?:\[\d+\] )?(\d+\.\d+)")]
     private static partial Regex SevenZipVersion();
