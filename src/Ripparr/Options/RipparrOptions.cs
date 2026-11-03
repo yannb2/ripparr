@@ -75,7 +75,20 @@ public class RipparrOptions
             MaxParallelJobs = 1;
         }
 
+        // A tool binary placed in /config/tools wins over the one in the image
+        // (DGDemux's site does not let the image build download it).
+        var toolsFolder = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(DatabasePath) ?? "/config", "tools");
+        Tools.DgDemux = InToolsFolder(toolsFolder, "dgdemux", Tools.DgDemux);
+        Tools.MakeMkvCon = InToolsFolder(toolsFolder, "makemkvcon", Tools.MakeMkvCon);
+
         return this;
+    }
+
+    /// <summary>toolsFolder/name when it exists and the setting is still the plain command name.</summary>
+    internal static string InToolsFolder(string toolsFolder, string name, string current)
+    {
+        var candidate = System.IO.Path.Combine(toolsFolder, name);
+        return current == name && File.Exists(candidate) ? candidate : current;
     }
 }
 

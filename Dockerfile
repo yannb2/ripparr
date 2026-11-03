@@ -34,19 +34,23 @@ RUN set -eux; \
     make install DESTDIR=/out PREFIX=/usr; \
     ls -l /out/usr/bin
 
-# DGDemux for Linux from rationalqm.us (Donald Graft).
+# DGDemux for Linux from rationalqm.us (Donald Graft). The site refuses downloads from build
+# servers (403 to GitHub's runners), so the image is built without it when that happens and the
+# binary goes in /config/tools/dgdemux instead (Ripparr uses that file when it exists).
 FROM debian:13-slim AS dgdemux
 ARG DGDEMUX_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip \
     && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
-    curl -fsSL "https://www.rationalqm.us/dgdemux/binaries/dgdemux_linux_${DGDEMUX_VERSION}.zip" -o /tmp/dgdemux.zip; \
     mkdir -p /tmp/dgdemux /out; \
-    unzip -q /tmp/dgdemux.zip -d /tmp/dgdemux; \
-    find /tmp/dgdemux -type f; \
-    bin="$(find /tmp/dgdemux -type f -iname dgdemux | head -n1)"; \
-    test -n "$bin"; \
-    install -m 0755 "$bin" /out/dgdemux
+    if curl -fsSL "https://www.rationalqm.us/dgdemux/binaries/dgdemux_linux_${DGDEMUX_VERSION}.zip" -o /tmp/dgdemux.zip; then \
+        unzip -q /tmp/dgdemux.zip -d /tmp/dgdemux; \
+        bin="$(find /tmp/dgdemux -type f -iname dgdemux | head -n1)"; \
+        test -n "$bin"; \
+        install -m 0755 "$bin" /out/dgdemux; \
+    else \
+        echo "WARNING: DGDemux ${DGDEMUX_VERSION} could not be downloaded; put it in /config/tools/dgdemux" >&2; \
+    fi
 
 # MediaInfo CLI, the static build MediaArea makes for AWS Lambda (no library packages needed).
 FROM debian:13-slim AS mediainfo
@@ -126,7 +130,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=makemkv /out/usr/ /usr/
-COPY --from=dgdemux /out/dgdemux /usr/local/bin/dgdemux
+COPY --from=dgdemux /out/ /usr/local/bin/
 COPY --from=mediainfo /out/mediainfo /usr/local/bin/mediainfo
 COPY --from=ffprobe /out/ffprobe /usr/local/bin/ffprobe
 COPY --from=dovi /out/dovi_tool /usr/local/bin/dovi_tool

@@ -89,7 +89,8 @@ jobs:
           docker exec smoke test -f /config/ripparr.db
           # Every tool runs and reports the version the Dockerfile pinned.
           docker exec smoke sh -c 'makemkvcon -r --cache=1 info disc:9999 | grep "MakeMKV v$RIPPARR_PIN_MAKEMKV"'
-          docker exec smoke sh -c 'dgdemux 2>&1 | head -n 5; true'
+          # DGDemux is missing when rationalqm.us refused the download (see the Dockerfile).
+          docker exec smoke sh -c 'if command -v dgdemux; then dgdemux 2>&1 | head -n 5; else echo "::warning::image built without DGDemux"; fi; true'
           docker exec smoke sh -c 'mkvmerge --version | grep "v$RIPPARR_PIN_MKVTOOLNIX"'
           docker exec smoke sh -c 'mediainfo --version | grep "v$RIPPARR_PIN_MEDIAINFO"'
           docker exec smoke sh -c 'dovi_tool --version | grep "$RIPPARR_PIN_DOVI_TOOL"'

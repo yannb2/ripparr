@@ -45,6 +45,10 @@ The weekly **Tool updates** workflow opens a pull request that bumps the pins; m
 are rejected, so neither the workflow nor the Dockerfile moves to 2.x unless asked
 (`allow_makemkv_major` on the workflow, `Ripparr__Updates__AllowMakeMkvMajor=true` for the Tools page).
 
+**DGDemux**: rationalqm.us refuses downloads from build servers, so the image may come without it (the build
+log and the Tools page say so). Download `dgdemux_linux_<version>.zip` yourself and put the `dgdemux` binary in
+`/config/tools/dgdemux` (executable); Ripparr uses a binary there instead of the image's.
+
 The MakeMKV key is entered on the Tools page and saved in `/config/makemkv/.MakeMKV/settings.conf`. It never
 belongs in compose, `.env` or git. The image includes MakeMKV, whose licence you accept by building it, so keep
 the image for your own use.

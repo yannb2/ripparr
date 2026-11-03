@@ -58,6 +58,10 @@
                         @if (status.Missing)
                         {
                             <span class="badge text-bg-danger">not installed</span>
+                            @if (status.Tool.Id is "dgdemux" or "makemkv")
+                            {
+                                <div class="small text-body-secondary">put it in <code>/config/tools</code></div>
+                            }
                         }
                         else
                         {

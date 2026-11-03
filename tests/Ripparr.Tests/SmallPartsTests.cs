@@ -2,6 +2,7 @@ using Ripparr.Arr;
 using Ripparr.Disc;
 using Ripparr.Jobs;
 using Ripparr.Media;
+using Ripparr.Options;
 
 namespace Ripparr.Tests;
 
@@ -122,6 +123,25 @@ public class SmallPartsTests
             {
                 File.Delete(file);
             }
+        }
+    }
+
+    [TestMethod]
+    public void UsesAToolPlacedInTheConfigFolder()
+    {
+        var folder = Directory.CreateTempSubdirectory("ripparr-tools").FullName;
+        try
+        {
+            Assert.AreEqual("dgdemux", RipparrOptions.InToolsFolder(folder, "dgdemux", "dgdemux"));
+            var file = Path.Combine(folder, "dgdemux");
+            File.WriteAllText(file, "");
+            Assert.AreEqual(file, RipparrOptions.InToolsFolder(folder, "dgdemux", "dgdemux"));
+            // A path set by hand stays.
+            Assert.AreEqual("/opt/dgdemux", RipparrOptions.InToolsFolder(folder, "dgdemux", "/opt/dgdemux"));
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
         }
     }
 }
