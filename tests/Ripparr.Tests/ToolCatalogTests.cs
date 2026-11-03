@@ -43,6 +43,24 @@ public class ToolCatalogTests
     }
 
     [TestMethod]
+    public void TakesOnlyPlainReleaseTags()
+    {
+        const string releases = """
+            [{"tag_name":"libdovi-3.3.2"},{"tag_name":"2.3.4"},{"tag_name":"2.4.0","prerelease":true},{"tag_name":"v2.3.3"}]
+            """;
+        Assert.AreEqual("2.3.4", ToolCatalog.GitHubTag(releases));
+        Assert.IsNull(ToolCatalog.GitHubTag("{\"tag_name\":\"libdovi-3.3.2\"}"));
+    }
+
+    [TestMethod]
+    public void ReadsTheFfmpegBranchFromBtbNAssets()
+    {
+        var ffprobe = ToolCatalog.All.Single(t => t.Id == "ffprobe");
+        const string assets = "\"name\":\"ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz\" \"name\":\"ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz\" \"name\":\"ffmpeg-master-latest-linux64-gpl.tar.xz\"";
+        Assert.AreEqual("9.0", ToolCatalog.HighestOnPage(ffprobe.UpstreamPattern!, assets));
+    }
+
+    [TestMethod]
     public void UpdateAvailableComparesWithWhatIsInstalled()
     {
         var status = new ToolStatus { Tool = Tool("dovi_tool"), Installed = "2.3.4", Latest = "2.3.5" };

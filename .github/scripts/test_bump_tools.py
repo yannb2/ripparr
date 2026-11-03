@@ -27,6 +27,17 @@ class BumpToolsTests(unittest.TestCase):
         dgdemux = next(t for t in b.TOOLS if t.arg == "DGDEMUX_VERSION")
         self.assertEqual(re.findall(dgdemux.pattern, "dgdemux_linux_1.0.0.78.zip dgdemux_win_1.0.0.79.zip"), ["1.0.0.78"])
 
+    def test_plain_tags_skip_other_release_lines(self):
+        releases = [{"tag_name": "libdovi-3.3.2"}, {"tag_name": "2.3.4"}, {"tag_name": "v2.4.0", "prerelease": True},
+                    {"tag_name": "2.3.5", "draft": True}, {"tag_name": "v2.3.3"}]
+        self.assertEqual(b.plain_tags(releases), ["2.3.4", "2.3.3"])
+
+    def test_btbn_branch_from_asset_names(self):
+        ffmpeg = next(t for t in b.TOOLS if t.arg == "FFMPEG_VERSION")
+        assets = '"name":"ffmpeg-n8.1-latest-linux64-gpl-8.1.tar.xz" "name":"ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz" ' \
+                 '"name":"ffmpeg-master-latest-linux64-gpl.tar.xz"'
+        self.assertEqual(b.newest(re.findall(ffmpeg.pattern, assets)), "9.0")
+
     def test_every_tool_has_an_arg_in_the_dockerfile(self):
         pins = b.read_args(b.DOCKERFILE.read_text())
         for tool in b.TOOLS:

@@ -111,7 +111,20 @@
         <span class="fw-semibold me-auto">Tracks</span>
         <span class="small text-body-secondary">@(_job.Written.Count > 0 ? _job.Written.Count : _job.Plan.Kept.Count()) kept</span>
     </div>
-    <table class="table table-sm mb-0 small">
+    <div class="table-responsive">
+    <table class="table table-sm mb-0 small align-middle">
+        <thead>
+        <tr>
+            <th>Track</th>
+            <th>Codec</th>
+            <th>Details</th>
+            <th class="text-end">Bit rate</th>
+            <th class="text-end">Size</th>
+            <th>Language</th>
+            <th>Name</th>
+            <th>Flags</th>
+        </tr>
+        </thead>
         <tbody>
         @if (_job.Written.Count > 0)
         {
@@ -119,10 +132,21 @@
             {
                 <tr>
                     <td>@track.Kind</td>
-                    <td>@track.Codec</td>
+                    <td class="text-nowrap">@track.Codec</td>
+                    <td class="text-body-secondary" title="@track.File">@track.Details</td>
+                    <td class="text-end text-nowrap" title="@(track.BitRateMaximum > 0 ? $"maximum {Format.BitRate(track.BitRateMaximum)}" : "")">@(track.BitRate > 0 ? Format.BitRate(track.BitRate) : "")</td>
+                    <td class="text-end text-nowrap">@(track.Size > 0 ? Format.Size(track.Size) : "")</td>
                     <td>@track.Language</td>
                     <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
                     <td>@track.Flags</td>
+                </tr>
+            }
+            @if (_job.Written.Sum(t => t.Size) is > 0 and var total)
+            {
+                <tr class="fw-semibold">
+                    <td colspan="4">Total of the streams</td>
+                    <td class="text-end text-nowrap">@Format.Size(total)</td>
+                    <td colspan="3"></td>
                 </tr>
             }
         }
@@ -132,7 +156,9 @@
             {
                 <tr>
                     <td>@track.Kind</td>
-                    <td>@track.Codec @(track.Layout == "Multi" ? "" : track.Layout)</td>
+                    <td class="text-nowrap">@track.Codec @(track.Layout == "Multi" ? "" : track.Layout)</td>
+                    <td class="text-body-secondary">@track.Details</td>
+                    <td class="text-end text-body-secondary" colspan="2">after the demux</td>
                     <td>@track.Language</td>
                     <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
                     <td>@(track.Default ? "default " : "")@(track.Forced ? "forced " : "")@(track.Commentary ? "commentary" : "")</td>
@@ -142,11 +168,12 @@
         @if (_job.Plan.MergeDolbyVisionLayer)
         {
             <tr>
-                <td colspan="5"><span class="badge sv-dv">DV layer</span> merged into the video</td>
+                <td colspan="8"><span class="badge sv-dv">DV layer</span> merged into the video</td>
             </tr>
         }
         </tbody>
     </table>
+    </div>
 </div>
 
 <div class="card">

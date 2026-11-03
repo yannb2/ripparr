@@ -16,10 +16,11 @@ public enum JobStatus
     Interrupted
 }
 
-/// <summary>One check of the verify step.</summary>
-/// <summary>One track of the finished MKV, for the job page.</summary>
-public sealed record WrittenTrack(string Kind, string Codec, string Language, string Name, string Flags);
+/// <summary>One track of the finished MKV, for the job page. Jobs saved before 0.1.3 have no details, size or bit rate.</summary>
+public sealed record WrittenTrack(string Kind, string Codec, string Language, string Name, string Flags,
+    string Details = "", long Size = 0, long BitRate = 0, long BitRateMaximum = 0, string File = "");
 
+/// <summary>One check of the verify step.</summary>
 public sealed record VerifyCheck(string Name, bool Passed, string Detail, bool Warning = false);
 
 /// <summary>A remux job: one playlist of one source into one MKV. Stored as JSON.</summary>

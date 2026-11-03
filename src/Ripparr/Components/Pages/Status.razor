@@ -35,7 +35,7 @@
                 <tr><td class="text-body-secondary">Shortest playlist listed</td><td>@Options.Value.MinPlaylistSeconds s</td></tr>
                 <tr><td class="text-body-secondary">Clean the job folder after a good job</td><td>@(Options.Value.CleanWorkFolder ? "yes" : "no")</td></tr>
                 <tr><td class="text-body-secondary">Spare space kept</td><td>@Options.Value.SpareSpaceGb GB</td></tr>
-                <tr><td class="text-body-secondary">DGDemux arguments</td><td><code>@Options.Value.DgDemuxArguments</code></td></tr>
+                <tr><td class="text-body-secondary">DGDemux arguments (default; a profile can change them)</td><td><code>@Options.Value.DgDemuxArguments</code></td></tr>
                 <tr><td class="text-body-secondary">Radarr</td><td>@(Radarr.Configured ? Options.Value.Radarr.Url : "not set up")</td></tr>
                 <tr><td class="text-body-secondary">Jobs in the database</td><td>@_jobCount</td></tr>
                 <tr><td class="text-body-secondary">Version</td><td>@AppInfo.Version</td></tr>

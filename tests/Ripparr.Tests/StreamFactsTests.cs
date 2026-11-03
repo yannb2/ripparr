@@ -57,4 +57,40 @@ public class StreamFactsTests
         Assert.IsEmpty(MediaInfoReader.Parse("not json"));
         Assert.IsEmpty(MediaInfoReader.Parse(null));
     }
+
+    [TestMethod]
+    public void ReadsBitRatesSizesAndDetails()
+    {
+        const string json = """
+            {"media":{"track":[
+              {"@type":"Video","Format":"HEVC","Width":"3840","Height":"2160","FrameRate":"23.976","BitDepth":"10","ChromaSubsampling":"4:2:0",
+               "BitRate":"58000000","StreamSize":"50000000000","Duration":"7200.000",
+               "HDR_Format":"Dolby Vision / SMPTE ST 2086","HDR_Format_Profile":"dvhe.07.06 / ","HDR_Format_Settings":"BL+EL+RPU / "},
+              {"@type":"Audio","Format":"MLP FBA","Channels":"8","SamplingRate":"48000","BitDepth":"24","BitRate_Mode":"VBR",
+               "BitRate_Maximum":"12000000 / 640000","Duration":"7200.000"},
+              {"@type":"Text","Format":"PGS","ElementCount":"1534"}
+            ]}}
+            """;
+        var facts = MediaInfoReader.Parse(json);
+        Assert.AreEqual(58_000_000, facts[0].BitRate);
+        Assert.AreEqual(50_000_000_000, facts[0].StreamSize);
+        Assert.AreEqual("3840x2160 · 23.976 fps · 10-bit · 4:2:0 · DV profile 7 (BL+EL)", facts[0].Details);
+
+        // No bit rate from mediainfo: worked out from the file's size and the duration.
+        Assert.AreEqual(0, facts[1].BitRate);
+        Assert.AreEqual(12_000_000, facts[1].BitRateMaximum);
+        Assert.AreEqual(4_000_000, facts[1].BitRateFor(3_600_000_000));
+        Assert.AreEqual("48 kHz · 24-bit · 8 ch · VBR", facts[1].Details);
+
+        Assert.AreEqual("PGS · 1534 captions", facts[2].Details);
+        Assert.AreEqual(0, facts[2].BitRateFor(1000), "no duration, no bit rate");
+    }
+
+    [TestMethod]
+    public void PlaylistDetails()
+    {
+        Assert.AreEqual("2160p · 23.976 fps", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Video, Coding = 0x24, Format = 8, Rate = 1 }));
+        Assert.AreEqual("96 kHz", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Audio, Coding = 0x83, Format = 6, Rate = 4 }));
+        Assert.AreEqual("", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Subtitle, Coding = 0x90 }));
+    }
 }

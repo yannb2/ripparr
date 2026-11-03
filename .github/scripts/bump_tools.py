@@ -48,7 +48,13 @@ TOOLS = [
     Tool("DOVI_TOOL_VERSION", "dovi_tool", "quietvoid/dovi_tool", github=True,
          notes="https://github.com/quietvoid/dovi_tool/releases"),
     Tool("SEVENZIP_VERSION", "7-Zip", "ip7z/7zip", github=True, notes="https://www.7-zip.org/history.txt"),
+    # BtbN keeps a single "latest" release whose asset names carry the newest release branch (n9.0).
+    Tool("FFMPEG_VERSION", "FFmpeg (ffprobe)", "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest",
+         r"ffmpeg-n(\d+\.\d+)-latest-linux64-gpl-\d", notes="https://ffmpeg.org/download.html#releases"),
 ]
+
+# A plain release tag: 1.2.3 or v1.2.3 (dovi_tool's repository also has libdovi-3.x tags).
+PLAIN_TAG = re.compile(r"^[vV]?\d+(?:\.\d+)+$")
 
 
 def version_key(version: str) -> tuple[int, ...]:
@@ -78,10 +84,15 @@ def fetch(url: str) -> str:
         return response.read().decode("utf-8", "replace")
 
 
+def plain_tags(releases: list[dict]) -> list[str]:
+    """The plain version tags of a GitHub releases list, drafts and pre-releases left out."""
+    return [r["tag_name"].lstrip("vV") for r in releases
+            if not r.get("draft") and not r.get("prerelease") and PLAIN_TAG.match(r.get("tag_name", ""))]
+
+
 def upstream(tool: Tool) -> list[str]:
     if tool.github:
-        tag = json.loads(fetch(f"https://api.github.com/repos/{tool.source}/releases/latest"))["tag_name"]
-        return [tag.lstrip("vV")]
+        return plain_tags(json.loads(fetch(f"https://api.github.com/repos/{tool.source}/releases?per_page=30")))
     return re.findall(tool.pattern, fetch(tool.source))
 
 

@@ -22,6 +22,14 @@ public sealed class RipProfile
     /// <summary>The SOURCE tag and the last bracket of the file name (BDRemux, DVDRemux).</summary>
     public string Source { get; set; } = "BDRemux";
 
+    // ---- DGDemux ----
+
+    /// <summary>
+    /// The DGDemux arguments for this profile, with {input} (the .mpls) and {output} (the file
+    /// name prefix in the work folder). Empty = the global default, Ripparr__DgDemuxArguments.
+    /// </summary>
+    public string DgDemuxArguments { get; set; } = "";
+
     // ---- Video ----
 
     /// <summary>Keep the Dolby Vision enhancement layer: BL and EL are combined into one track (profile 7 FEL stays FEL).</summary>

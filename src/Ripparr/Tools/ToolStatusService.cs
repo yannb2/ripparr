@@ -140,7 +140,7 @@ public sealed class ToolStatusService(IOptions<RipparrOptions> options, ILogger<
         {
             if (tool.Upstream == UpstreamKind.GitHubRelease)
             {
-                var json = await Http.GetStringAsync($"https://api.github.com/repos/{tool.UpstreamSources[0]}/releases/latest", cancellationToken);
+                var json = await Http.GetStringAsync($"https://api.github.com/repos/{tool.UpstreamSources[0]}/releases?per_page=30", cancellationToken);
                 return (ToolCatalog.GitHubTag(json), null, null);
             }
 
