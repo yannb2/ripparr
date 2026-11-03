@@ -102,25 +102,43 @@
             Kept in <code>@MakeMkv.SettingsPath(Options.Value.MakeMkvHome)</code> (<code>app_Key</code>), never in compose or git.
             MakeMKV only runs for encrypted sources.
         </p>
-        <div class="mb-2">
-            <span class="text-body-secondary small">Key now:</span>&nbsp;
-            @if (Tools.MakeMkv?.MaskedKey is { } masked)
-            {
-                <code>@masked</code>
-            }
-            else
-            {
-                <span class="badge text-bg-warning">none</span>
-            }
-        </div>
-        @if (Tools.MakeMkv?.Messages is { Count: > 0 } messages)
+        @if (Tools.MakeMkv is { } state)
         {
-            <ul class="small mb-2">
-                @foreach (var message in messages)
-                {
-                    <li>@message</li>
-                }
-            </ul>
+            var (css, word) = state.Check.Status switch
+            {
+                KeyStatus.Good => ("success", "Key OK"),
+                KeyStatus.Bad => ("danger", "Key not working"),
+                KeyStatus.Evaluation => ("warning", "Evaluation, no key"),
+                KeyStatus.Missing => ("warning", "No key"),
+                _ => ("secondary", "Not checked")
+            };
+            <div class="alert alert-@css d-flex align-items-center gap-3 py-2 mb-2">
+                <span class="badge text-bg-@css fs-6">@word</span>
+                <div class="small">
+                    @if (state.MaskedKey is { } masked)
+                    {
+                        <code class="me-2">@masked</code>
+                    }
+                    @state.Check.Summary
+                </div>
+                <button class="btn btn-sm btn-outline-secondary ms-auto text-nowrap" @onclick="TestKey" disabled="@_testing">
+                    <i class="bi bi-arrow-repeat"></i> Test again
+                </button>
+            </div>
+            @if (state.Messages.Count > 0)
+            {
+                <div class="small text-body-secondary mb-1">What MakeMKV said:</div>
+                <ul class="small mb-2">
+                    @foreach (var message in state.Messages)
+                    {
+                        <li>@message</li>
+                    }
+                </ul>
+            }
+        }
+        else
+        {
+            <div class="small text-body-secondary mb-2">Checking MakeMKV…</div>
         }
         <div class="input-group input-group-sm mb-2" style="max-width: 40rem">
             <input class="form-control font-monospace" type="password" placeholder="T-… or M-…" @bind="_key"/>
@@ -143,6 +161,7 @@
     private string? _keyMessage;
     private bool _keyError;
     private bool _fetching;
+    private bool _testing;
 
     protected override void OnInitialized() => Tools.Changed += OnChanged;
 
@@ -162,7 +181,16 @@
         _key = null;
         (_keyMessage, _keyError) = ("Saved. Checking what MakeMKV says about it…", false);
         await Tools.RefreshAsync(false, CancellationToken.None);
-        _keyMessage = "Saved.";
+        (_keyMessage, _keyError) = Tools.MakeMkv?.Check.Status == KeyStatus.Good
+            ? ("Saved, and MakeMKV accepts it.", false)
+            : ("Saved, but MakeMKV does not accept it: see above.", true);
+    }
+
+    private async Task TestKey()
+    {
+        _testing = true;
+        await Tools.RefreshAsync(false, CancellationToken.None);
+        _testing = false;
     }
 
     private async Task RemoveKey()
