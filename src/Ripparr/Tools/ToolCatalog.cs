@@ -104,6 +104,13 @@ public static partial class ToolCatalog
         },
         new()
         {
+            Id = "tesseract", Name = "Tesseract", Purpose = "Reads picture subtitles (OCR) for the SRT tracks.",
+            Command = t => t.Tesseract, VersionArguments = ["--version"],
+            VersionPattern = TesseractVersion()
+            // From Ubuntu's packages: it moves with the base image, not with a pin.
+        },
+        new()
+        {
             Id = "7zip", Name = "7-Zip", Purpose = "Reads and unpacks ISO files (UDF), no mount needed.",
             Command = t => t.SevenZip,
             VersionPattern = SevenZipVersion(),
@@ -188,6 +195,9 @@ public static partial class ToolCatalog
 
     [GeneratedRegex(@"version n?(\d+\.\d+(?:\.\d+)?)")]
     private static partial Regex FfprobeVersion();
+
+    [GeneratedRegex(@"tesseract v?(\d+\.\d+\.\d+)")]
+    private static partial Regex TesseractVersion();
 
     [GeneratedRegex(@"7-Zip (?:\([az]\) )?(?:\[\d+\] )?(\d+\.\d+)")]
     private static partial Regex SevenZipVersion();

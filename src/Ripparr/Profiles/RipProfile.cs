@@ -73,6 +73,23 @@ public sealed class RipProfile
 
     public string ForcedSubtitleNameTemplate { get; set; } = "{language} - Forced";
 
+    /// <summary>
+    /// Languages that also get a text (SRT) track, read from the picture subtitles with OCR
+    /// (Tesseract). Empty = no SRT tracks. "original" stands for the film's own language.
+    /// </summary>
+    public List<string> SrtLanguages { get; set; } = [];
+
+    /// <summary>Remove the text for the deaf and hard of hearing from the SRT tracks ([door slams], JOHN:, ♪ lyrics).</summary>
+    public bool SrtRemoveSdh { get; set; } = true;
+
+    /// <summary>Also make an SRT of forced subtitle tracks.</summary>
+    public bool SrtForForced { get; set; } = true;
+
+    /// <summary>Tokens: {language}.</summary>
+    public string SrtNameTemplate { get; set; } = "{language} - SRT";
+
+    public string ForcedSrtNameTemplate { get; set; } = "{language} - Forced - SRT";
+
     // ---- Chapters ----
 
     public ChapterNaming Chapters { get; set; } = ChapterNaming.Numbered;

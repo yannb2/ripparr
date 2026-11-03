@@ -117,6 +117,18 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         }
 
         var outputs = MuxBuilder.Outputs(job.Plan, mapping, job.Profile);
+        var missing = job.Plan.Kept.Where(t => !mapping.Files.ContainsKey(t.StreamIndex)).ToList();
+        if (missing.Count > 0)
+        {
+            throw new JobFailedException($"No demuxed file for {missing.Count} kept track(s): " +
+                                         string.Join(", ", missing.Select(t => $"{t.Kind} {t.Language} {t.Codec}")));
+        }
+
+        // ---- Subtitles ----
+        context.Step(JobSteps.Subtitles);
+        outputs = await SubtitleStep.RunAsync(context, outputs);
+        context.Save();
+
         job.Written = outputs.Select(o => new WrittenTrack(
             o.Planned.Kind.ToString(),
             o.Planned.Kind switch
@@ -137,13 +149,6 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         foreach (var output in outputs)
         {
             context.Log($"  track: {output.Planned.Kind} {output.Planned.Language} \"{output.Name}\" <- {output.File.FileName}");
-        }
-
-        var missing = job.Plan.Kept.Where(t => !mapping.Files.ContainsKey(t.StreamIndex)).ToList();
-        if (missing.Count > 0)
-        {
-            throw new JobFailedException($"No demuxed file for {missing.Count} kept track(s): " +
-                                         string.Join(", ", missing.Select(t => $"{t.Kind} {t.Language} {t.Codec}")));
         }
 
         // ---- Dolby Vision ----
@@ -418,6 +423,13 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         var mpls = Path.Combine(disc, "BDMV", "PLAYLIST", playlist.Name + ".mpls");
         context.Log("$ " + new ProcessSpec(tools.DgDemux,
             ExpandArguments(DgDemuxTemplate(context.Job.Profile, context.Options), mpls, Path.Combine(context.DemuxFolder, playlist.Name))).CommandLine);
+        var srt = context.Job.Plan.Kept.Where(t => SubtitleStep.WantsSrt(context.Job.Profile, t, context.Job.OriginalLanguage)).ToList();
+        if (srt.Count > 0)
+        {
+            context.Log($"Then: Tesseract OCR of {srt.Count} subtitle track(s) into SRT{(context.Job.Profile.SrtRemoveSdh ? ", SDH text removed" : "")}: " +
+                        string.Join(", ", srt.Select(t => $"\"{SubtitleStep.SrtName(context.Job.Profile, t)}\"")));
+        }
+
         context.Log("Then: mediainfo on each stream, dovi_tool mux for the Dolby Vision layer, mkvmerge with these tracks:");
         foreach (var track in context.Job.Plan.Kept)
         {

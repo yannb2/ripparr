@@ -1,0 +1,172 @@
+@page "/job/{Id:long}/subtitles/{Key}"
+@using Ripparr.Subtitles
+@inject JobStore Store
+@inject Microsoft.Extensions.Options.IOptions<RipparrOptions> Options
+
+<PageTitle>Subtitles · Job @Id · Ripparr</PageTitle>
+
+<div class="mb-2"><a href="job/@Id" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Job @Id</a></div>
+
+@if (_job == null || _subtitle == null || _captions == null)
+{
+    <div class="alert alert-warning">This subtitle preview is gone (only the last @Options.Value.KeepSubtitlePreviews jobs keep theirs).</div>
+    return;
+}
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <h2 class="mb-0 me-auto">@_subtitle.Name <span class="text-body-secondary fs-5">@_job.DisplayTitle</span></h2>
+    @if (_subtitle.Ocr)
+    {
+        <a class="btn btn-sm btn-outline-secondary" href="api/jobs/@Id/subtitles/@(Key).srt" download><i class="bi bi-download"></i> SRT</a>
+    }
+</div>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3 small">
+    <span>@_captions.Count captions, @_captions.Count(c => c.Forced) forced</span>
+    @if (_subtitle.Ocr)
+    {
+        <span class="text-body-secondary">@_subtitle.OcrSummary</span>
+    }
+    else
+    {
+        <span class="text-body-secondary">No OCR for this track: add @_subtitle.Language to the profile's SRT languages to get text.</span>
+    }
+    <span class="ms-auto d-flex align-items-center gap-2">
+        <select class="form-select form-select-sm" style="width: auto" value="@_filter" @onchange="ChangeFilter">
+            <option value="all">All captions</option>
+            <option value="forced">Forced only</option>
+            @if (_subtitle.Ocr)
+            {
+                <option value="sdh">Changed by the SDH removal</option>
+                <option value="dropped">Dropped (only SDH text)</option>
+            }
+        </select>
+        <input class="form-control form-control-sm" style="width: 12rem" placeholder="Find text" @bind="_find" @bind:event="oninput" @bind:after="() => _page = 0"/>
+    </span>
+</div>
+
+@{
+    var rows = Rows().ToList();
+    var pages = Math.Max(1, (rows.Count + PageSize - 1) / PageSize);
+    var page = Math.Min(_page, pages - 1);
+}
+
+<div class="card mb-3">
+    <div class="table-responsive">
+        <table class="table table-sm mb-0 small align-middle">
+            <thead>
+            <tr>
+                <th class="text-end">#</th>
+                <th>Time</th>
+                <th>Picture</th>
+                @if (_subtitle.Ocr)
+                {
+                    <th>OCR</th>
+                    <th>@(_job.Profile.SrtRemoveSdh ? "In the SRT (SDH removed)" : "In the SRT")</th>
+                }
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var (caption, ocr) in rows.Skip(page * PageSize).Take(PageSize))
+            {
+                <tr>
+                    <td class="text-end text-body-secondary">@caption.Index</td>
+                    <td class="text-nowrap font-monospace">
+                        @Srt.Time(caption.Start)<br/>@Srt.Time(caption.End)
+                        @if (caption.Forced)
+                        {
+                            <br/><span class="badge text-bg-warning">forced</span>
+                        }
+                    </td>
+                    <td style="max-width: 40rem">
+                        <div class="sv-caption">
+                            <img src="api/jobs/@Id/subtitles/@Key/@(caption.Index).png" loading="lazy" alt="caption @caption.Index"/>
+                        </div>
+                    </td>
+                    @if (_subtitle.Ocr)
+                    {
+                        var text = ocr?.Text ?? "";
+                        var clean = _job.Profile.SrtRemoveSdh ? ocr?.Clean ?? "" : text;
+                        <td style="white-space: pre-line">@text</td>
+                        <td style="white-space: pre-line" class="@(clean.Length == 0 ? "text-body-secondary" : _job.Profile.SrtRemoveSdh && SdhCleaner.HasSdh(text) ? "text-success" : "")">@(clean.Length == 0 ? "(dropped)" : clean)</td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (pages > 1)
+{
+    <nav class="d-flex align-items-center gap-2 small">
+        <button class="btn btn-sm btn-outline-secondary" disabled="@(page == 0)" @onclick="() => _page = page - 1"><i class="bi bi-chevron-left"></i></button>
+        <span>Page @(page + 1) of @pages (@rows.Count captions)</span>
+        <button class="btn btn-sm btn-outline-secondary" disabled="@(page >= pages - 1)" @onclick="() => _page = page + 1"><i class="bi bi-chevron-right"></i></button>
+    </nav>
+}
+
+@code {
+    private const int PageSize = 40;
+
+    [Parameter] public long Id { get; set; }
+    [Parameter] public string Key { get; set; } = "";
+
+    private Job? _job;
+    private JobSubtitle? _subtitle;
+    private List<PgsCaption>? _captions;
+    private Dictionary<int, OcrCaption> _ocr = [];
+    private string _filter = "all";
+    private string _find = "";
+    private int _page;
+
+    protected override void OnParametersSet()
+    {
+        _job = Store.Get(Id);
+        _subtitle = _job?.Subtitles.FirstOrDefault(s => s.Key == Key);
+        _captions = null;
+        if (_job == null || _subtitle == null)
+        {
+            return;
+        }
+
+        var sup = SubtitleStep.PreviewFile(Options.Value, _job, Key, ".sup");
+        if (sup != null)
+        {
+            _captions = CaptionCache.Get(sup);
+        }
+
+        var ocr = SubtitleStep.PreviewFile(Options.Value, _job, Key, ".ocr.json");
+        _ocr = ocr == null ? [] : SubtitleStep.ReadOcr(ocr).ToDictionary(c => c.Index);
+    }
+
+    private IEnumerable<(PgsCaption Caption, OcrCaption? Ocr)> Rows()
+    {
+        foreach (var caption in _captions!)
+        {
+            var ocr = _ocr.GetValueOrDefault(caption.Index);
+            var keep = _filter switch
+            {
+                "forced" => caption.Forced,
+                "sdh" => ocr != null && SdhCleaner.HasSdh(ocr.Text),
+                "dropped" => ocr != null && ocr.Clean.Length == 0 && ocr.Text.Length > 0,
+                _ => true
+            };
+            if (keep && _find.Length > 0)
+            {
+                keep = ocr != null && ocr.Text.Contains(_find, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (keep)
+            {
+                yield return (caption, ocr);
+            }
+        }
+    }
+
+    private void ChangeFilter(ChangeEventArgs e)
+    {
+        _filter = e.Value?.ToString() ?? "all";
+        _page = 0;
+    }
+}

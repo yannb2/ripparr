@@ -47,6 +47,15 @@ public class RipparrOptions
     /// </summary>
     public string DgDemuxArguments { get; set; } = "-i {input} -o {output}";
 
+    /// <summary>
+    /// Each job keeps its subtitle streams (.sup), the OCR text and the SRT files here for the
+    /// subtitle preview: SubtitleFolder/job-12/.
+    /// </summary>
+    public string SubtitleFolder { get; set; } = "/config/subtitles";
+
+    /// <summary>The subtitle previews of this many recent jobs are kept; older ones are deleted.</summary>
+    public int KeepSubtitlePreviews { get; set; } = 30;
+
     public ToolPaths Tools { get; set; } = new();
 
     public UpdateCheckOptions Updates { get; set; } = new();
@@ -108,6 +117,7 @@ public class ToolPaths
     public string DoviTool { get; set; } = "dovi_tool";
     public string FFprobe { get; set; } = "ffprobe";
     public string SevenZip { get; set; } = "7z";
+    public string Tesseract { get; set; } = "tesseract";
 }
 
 public class UpdateCheckOptions

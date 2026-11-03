@@ -5,6 +5,7 @@
 @inject JobEvents Events
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<RipparrOptions> Options
 
 <PageTitle>Job @Id · Ripparr</PageTitle>
 
@@ -176,6 +177,41 @@
     </div>
 </div>
 
+@if (_job.Subtitles.Count > 0)
+{
+    <div class="card mb-3">
+        <div class="card-header d-flex align-items-center">
+            <span class="fw-semibold me-auto">Subtitles</span>
+            <span class="small text-body-secondary">pictures kept for the preview</span>
+        </div>
+        <table class="table table-sm mb-0 small align-middle">
+            <tbody>
+            @foreach (var subtitle in _job.Subtitles)
+            {
+                <tr>
+                    <td class="text-nowrap fw-semibold">@subtitle.Name</td>
+                    <td>@subtitle.Language@(subtitle.Forced ? " · forced" : "")</td>
+                    <td class="text-end text-nowrap">@subtitle.Captions captions</td>
+                    <td class="text-body-secondary">
+                        @if (subtitle.Ocr)
+                        {
+                            <span>SRT "@subtitle.SrtName": @subtitle.OcrSummary</span>
+                        }
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-sm btn-outline-secondary" href="job/@_job.Id/subtitles/@subtitle.Key"><i class="bi bi-eye"></i> Preview</a>
+                        @if (subtitle.Ocr)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary" href="api/jobs/@_job.Id/subtitles/@(subtitle.Key).srt" download><i class="bi bi-download"></i> SRT</a>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
 <div class="card">
     <div class="card-header d-flex align-items-center">
         <span class="fw-semibold me-auto">Log</span>
@@ -288,6 +324,19 @@
     private void Delete()
     {
         Store.Delete(_job!.Id);
+        try
+        {
+            var folder = SubtitleStep.Folder(Options.Value, _job.Id);
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The preview stays behind; the next jobs tidy old ones.
+        }
+
         Navigation.NavigateTo("queue");
     }
 
