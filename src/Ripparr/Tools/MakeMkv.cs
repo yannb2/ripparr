@@ -105,6 +105,48 @@ public static partial class MakeMkv
     }
 
     /// <summary>MakeMKV's settings file under the given home: $HOME/.MakeMKV/settings.conf.</summary>
+    /// <summary>
+    /// Whether the key works, from what makemkvcon printed when it started: no key, a key it
+    /// took (no evaluation or expiry message), or one it refused (too old, expired, invalid,
+    /// still in evaluation although a key is set).
+    /// </summary>
+    public static KeyCheck Assess(bool hasKey, bool ran, IReadOnlyList<string> messages)
+    {
+        if (!ran)
+        {
+            return new KeyCheck(KeyStatus.Unknown, "makemkvcon did not run, so the key could not be checked.");
+        }
+
+        string? Find(Regex regex) => messages.FirstOrDefault(m => regex.IsMatch(m));
+        if (Find(InvalidRegex()) is { } invalid)
+        {
+            return new KeyCheck(KeyStatus.Bad, $"MakeMKV refused the key: {invalid}");
+        }
+
+        if (Find(TooOldRegex()) is not null)
+        {
+            return new KeyCheck(KeyStatus.Bad, hasKey
+                ? "MakeMKV refused the key (\"version too old\"): the key has expired. Beta keys last about a month."
+                : "MakeMKV needs a key (\"version too old\").");
+        }
+
+        if (Find(ExpiredRegex()) is not null)
+        {
+            return new KeyCheck(KeyStatus.Bad, hasKey ? "The key has expired." : "The evaluation period is over: MakeMKV needs a key.");
+        }
+
+        if (Find(EvaluationRegex()) is { } evaluation)
+        {
+            return hasKey
+                ? new KeyCheck(KeyStatus.Bad, $"MakeMKV did not take the key and still runs as an evaluation: {evaluation}")
+                : new KeyCheck(KeyStatus.Evaluation, evaluation);
+        }
+
+        return hasKey
+            ? new KeyCheck(KeyStatus.Good, "Key accepted: MakeMKV started with no evaluation or expiry message.")
+            : new KeyCheck(KeyStatus.Missing, "No key set.");
+    }
+
     public static string SettingsPath(string home) => Path.Combine(home, ".MakeMKV", "settings.conf");
 
     public static string? ReadKey(string home)
@@ -155,6 +197,18 @@ public static partial class MakeMkv
     public static string SourceArgument(Disc.DiscSource source) =>
         source.Kind == Disc.SourceKind.Iso ? $"iso:{source.Path}" : $"file:{source.Path}";
 
+    [GeneratedRegex(@"invalid|not valid|incorrect|rejected|blacklist", RegexOptions.IgnoreCase)]
+    private static partial Regex InvalidRegex();
+
+    [GeneratedRegex(@"too old", RegexOptions.IgnoreCase)]
+    private static partial Regex TooOldRegex();
+
+    [GeneratedRegex(@"expired", RegexOptions.IgnoreCase)]
+    private static partial Regex ExpiredRegex();
+
+    [GeneratedRegex(@"evaluation", RegexOptions.IgnoreCase)]
+    private static partial Regex EvaluationRegex();
+
     [GeneratedRegex(@"MakeMKV v(\d+\.\d+(?:\.\d+)?)")]
     private static partial Regex VersionRegex();
 
@@ -170,3 +224,7 @@ public static partial class MakeMkv
     [GeneratedRegex(@"T-[A-Za-z0-9@_]{40,}")]
     private static partial Regex BetaKeyRegex();
 }
+
+public enum KeyStatus { Unknown, Missing, Evaluation, Good, Bad }
+
+public sealed record KeyCheck(KeyStatus Status, string Summary);

@@ -21,7 +21,7 @@ public sealed record ToolStatus
                                    && VersionComparer.Instance.Compare(Latest, current) > 0;
 }
 
-public sealed record MakeMkvState(string? MaskedKey, IReadOnlyList<string> Messages, string? Version);
+public sealed record MakeMkvState(string? MaskedKey, IReadOnlyList<string> Messages, string? Version, KeyCheck Check);
 
 /// <summary>
 /// Asks every tool for its version when the app starts and looks for newer versions
@@ -106,8 +106,9 @@ public sealed class ToolStatusService(IOptions<RipparrOptions> options, ILogger<
         if (tool.Id == "makemkv")
         {
             var key = Tools.MakeMkv.ReadKey(_options.MakeMkvHome);
-            MakeMkv = new MakeMkvState(key == null ? null : Tools.MakeMkv.Mask(key),
-                result.NotStarted ? [] : Tools.MakeMkv.KeyMessages(output), installed);
+            var messages = result.NotStarted ? [] : Tools.MakeMkv.KeyMessages(output);
+            MakeMkv = new MakeMkvState(key == null ? null : Tools.MakeMkv.Mask(key), messages, installed,
+                Tools.MakeMkv.Assess(key != null, !result.NotStarted && installed != null, messages));
         }
 
         string? latest = null, heldBack = null, error = null;

@@ -67,4 +67,19 @@ public class MakeMkvTests
         Assert.AreEqual(key, MakeMkv.FindBetaKey($"<code>{key}</code>"));
         Assert.AreEqual("iso:/a/b.iso", MakeMkv.SourceArgument(new Disc.DiscSource("/a/b.iso", Disc.SourceKind.Iso, "/a", 0, DateTime.UtcNow)));
     }
+
+    [TestMethod]
+    public void TellsWhetherTheKeyWorks()
+    {
+        Assert.AreEqual(KeyStatus.Good, MakeMkv.Assess(true, true, []).Status);
+        Assert.AreEqual(KeyStatus.Missing, MakeMkv.Assess(false, true, []).Status);
+        Assert.AreEqual(KeyStatus.Unknown, MakeMkv.Assess(true, false, []).Status);
+        Assert.AreEqual(KeyStatus.Evaluation, MakeMkv.Assess(false, true, ["Evaluation version, 25 day(s) out of 30 remaining"]).Status);
+        // A key is set but MakeMKV still counts evaluation days: it did not take the key.
+        Assert.AreEqual(KeyStatus.Bad, MakeMkv.Assess(true, true, ["Evaluation version, 25 day(s) out of 30 remaining"]).Status);
+        var tooOld = MakeMkv.Assess(true, true, ["This application version is too old.  Please download the latest version at http://www.makemkv.com/ or enter a registration key to continue using the current version."]);
+        Assert.AreEqual(KeyStatus.Bad, tooOld.Status);
+        StringAssert.Contains(tooOld.Summary, "expired");
+        Assert.AreEqual(KeyStatus.Bad, MakeMkv.Assess(true, true, ["Registration key is invalid"]).Status);
+    }
 }
