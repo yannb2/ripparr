@@ -66,7 +66,8 @@
             <div class="card-header fw-semibold">Audio</div>
             <div class="card-body">
                 <label class="form-label small mb-1">Languages, in order (<code>original</code> = the film's language)</label>
-                <input class="form-control form-control-sm mb-2" @bind="AudioLanguages"/>
+                <input class="form-control form-control-sm mb-1" @bind="AudioLanguages"/>
+                <div class="small text-body-secondary mb-2">@LanguageNames(_profile.AudioLanguages)</div>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="otherAudio" @bind="_profile.KeepOtherAudioLanguages"/>
                     <label class="form-check-label" for="otherAudio">Also keep other languages</label>
@@ -94,7 +95,8 @@
             <div class="card-header fw-semibold">Subtitles</div>
             <div class="card-body">
                 <label class="form-label small mb-1">Languages, in order</label>
-                <input class="form-control form-control-sm mb-2" @bind="SubtitleLanguages"/>
+                <input class="form-control form-control-sm mb-1" @bind="SubtitleLanguages"/>
+                <div class="small text-body-secondary mb-2">@LanguageNames(_profile.SubtitleLanguages)</div>
                 <div class="form-check mb-2">
                     <input class="form-check-input" type="checkbox" id="otherSubs" @bind="_profile.KeepOtherSubtitleLanguages"/>
                     <label class="form-check-label" for="otherSubs">Also keep other languages</label>
@@ -114,7 +116,8 @@
                     right after the picture track. Every job keeps its subtitle pictures for the preview.
                 </p>
                 <label class="form-label small mb-1">Languages (<code>original</code> = the film's language), empty for none</label>
-                <input class="form-control form-control-sm mb-2" @bind="SrtLanguages" placeholder="eng, fre"/>
+                <input class="form-control form-control-sm mb-1" @bind="SrtLanguages" placeholder="eng, fre"/>
+                <div class="small text-body-secondary mb-2">@LanguageNames(_profile.SrtLanguages)</div>
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="sdh" @bind="_profile.SrtRemoveSdh"/>
                     <label class="form-check-label" for="sdh">Remove the text for the hard of hearing: [door slams], (laughs), JOHN:, ♪ lyrics</label>
@@ -158,30 +161,54 @@
         <div class="card mb-3">
             <div class="card-header d-flex align-items-center">
                 <span class="fw-semibold me-auto">DGDemux</span>
-                @if (string.IsNullOrWhiteSpace(_profile.DgDemuxArguments))
+                @if (FullTemplate)
                 {
-                    <span class="badge text-bg-secondary">global default</span>
-                }
-                else
-                {
-                    <span class="badge text-bg-primary">this profile's own</span>
+                    <span class="badge text-bg-warning">own full command: the switches are not used</span>
                 }
             </div>
             <div class="card-body">
-                <label class="form-label small mb-1">
-                    Arguments: <code>{input}</code> is the playlist (.mpls), <code>{output}</code> the file name prefix in the job's demux folder.
-                    Empty = the global default, <code>@Options.Value.DgDemuxArguments</code> (<code>Ripparr__DgDemuxArguments</code>).
-                </label>
-                <div class="input-group input-group-sm mb-1">
-                    <input class="form-control font-monospace" placeholder="@Options.Value.DgDemuxArguments" @bind="_profile.DgDemuxArguments" @bind:event="oninput"/>
-                    <button class="btn btn-outline-secondary" title="Use the global default" disabled="@string.IsNullOrWhiteSpace(_profile.DgDemuxArguments)"
-                            @onclick="() => _profile.DgDemuxArguments = string.Empty">Reset</button>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="dgOnlyKept" @bind="_profile.DgDemux.DemuxOnlyKept" disabled="@FullTemplate"/>
+                            <label class="form-check-label" for="dgOnlyKept">
+                                Demux only the kept tracks (<code>-demux</code> with their PIDs), not the whole playlist: less to write on scratch
+                            </label>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <label class="small text-nowrap" for="dgAngle">Angle (<code>-ang</code>)</label>
+                            <input id="dgAngle" class="form-control form-control-sm" style="width: 5rem" type="number" min="0" max="9"
+                                   @bind="_profile.DgDemux.Angle" disabled="@FullTemplate"/>
+                            <span class="small text-body-secondary">0 = the first</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        @foreach (var option in DgDemuxCommand.Switches)
+                        {
+                            var id = "dg" + option.Flag.TrimStart('-');
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="@id" checked="@option.Get(_profile.DgDemux)" disabled="@FullTemplate"
+                                       @onchange="e => option.Set(_profile.DgDemux, e.Value is true)"/>
+                                <label class="form-check-label" for="@id"><code>@option.Flag</code> @option.Label</label>
+                            </div>
+                        }
+                    </div>
                 </div>
-                @if (MissingTokens is { Count: > 0 } missing)
+
+                <label class="form-label small mb-1 mt-3">
+                    Extra arguments, added at the end. A full command with <code>{input}</code> (the .mpls) and <code>{output}</code>
+                    (the file name prefix) replaces the default <code>@Options.Value.DgDemuxArguments</code> and the switches above.
+                </label>
+                <div class="input-group input-group-sm mb-2">
+                    <input class="form-control font-monospace" @bind="_profile.DgDemuxArguments" @bind:event="oninput"/>
+                    <button class="btn btn-outline-secondary" disabled="@string.IsNullOrWhiteSpace(_profile.DgDemuxArguments)"
+                            @onclick="() => _profile.DgDemuxArguments = string.Empty">Clear</button>
+                </div>
+                @if (FullTemplate && !_profile.DgDemuxArguments.Contains("{output}", StringComparison.Ordinal))
                 {
-                    <div class="small text-warning mb-1"><i class="bi bi-exclamation-triangle"></i> No @string.Join(" or ", missing): DGDemux would not know @(missing.Count == 2 ? "what to read or where to write" : missing[0] == "{input}" ? "what to read" : "where to write").</div>
+                    <div class="small text-warning mb-2"><i class="bi bi-exclamation-triangle"></i> No <code>{output}</code>: DGDemux would only list the streams.</div>
                 }
-                <div class="small text-body-secondary mb-2">A job runs, in its demux folder:</div>
+                <div class="small text-body-secondary mb-1">A job runs, in its demux folder (example PIDs: video 1011, DV layer 1015, two audio, one subtitle):</div>
                 <pre class="small bg-body-tertiary border rounded p-2 mb-3 text-wrap">@CommandPreview</pre>
 
                 <div class="d-flex align-items-center gap-2 mb-2">
@@ -196,7 +223,7 @@
                         }
                         Show DGDemux's own options
                     </button>
-                    <span class="small text-body-secondary">Runs <code>@Options.Value.Tools.DgDemux</code> with no arguments and shows what it prints.</span>
+                    <span class="small text-body-secondary">Runs <code>@Options.Value.Tools.DgDemux -h</code> and shows what it prints: check the switches against your version.</span>
                 </div>
                 @if (_help != null)
                 {
@@ -233,6 +260,9 @@
         set => _profile!.SrtLanguages = SplitList(value);
     }
 
+    private static string LanguageNames(IEnumerable<string> codes) =>
+        string.Join(", ", codes.Select(c => c == "original" ? "the film's language" : Languages.Name(c)));
+
     private static List<string> SplitList(string value) =>
         value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(v => v.ToLowerInvariant()).Distinct().ToList();
@@ -246,10 +276,7 @@
     private string? _help;
     private bool _helpRunning;
 
-    private string Template => JobPipeline.DgDemuxTemplate(_profile!, Options.Value);
-
-    private List<string> MissingTokens =>
-        new[] { "{input}", "{output}" }.Where(t => !Template.Contains(t, StringComparison.Ordinal)).ToList();
+    private bool FullTemplate => DgDemuxCommand.IsFullTemplate(_profile!.DgDemuxArguments);
 
     private string CommandPreview
     {
@@ -257,8 +284,9 @@
         {
             var demux = System.IO.Path.Combine(Options.Value.WorkFolder, "job-12", "demux");
             var mpls = System.IO.Path.Combine(Options.Value.WorkFolder, "job-12", "disc", "BDMV", "PLAYLIST", "00800.mpls");
+            int[] pids = [0x1011, 0x1015, 0x1100, 0x1101, 0x1200];
             return new ProcessSpec(Options.Value.Tools.DgDemux,
-                JobPipeline.ExpandArguments(Template, mpls, System.IO.Path.Combine(demux, "00800"))).CommandLine;
+                DgDemuxCommand.Arguments(_profile!, Options.Value.DgDemuxArguments, mpls, System.IO.Path.Combine(demux, "00800"), pids)).CommandLine;
         }
     }
 
@@ -267,16 +295,7 @@
         _helpRunning = true;
         try
         {
-            var result = await ProcessRunner.RunAsync(Options.Value.Tools.DgDemux, [], TimeSpan.FromSeconds(15));
-            if (!result.NotStarted && (result.Output + result.Error).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length < 4)
-            {
-                // Only a banner: ask for the help explicitly.
-                var help = await ProcessRunner.RunAsync(Options.Value.Tools.DgDemux, ["-h"], TimeSpan.FromSeconds(15));
-                if ((help.Output + help.Error).Length > (result.Output + result.Error).Length)
-                {
-                    result = help;
-                }
-            }
+            var result = await ProcessRunner.RunAsync(Options.Value.Tools.DgDemux, ["-h"], TimeSpan.FromSeconds(15));
 
             _help = result.NotStarted
                 ? $"{Options.Value.Tools.DgDemux} is not there. Put the Linux binary in /config/tools/dgdemux and restart the container."

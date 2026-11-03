@@ -24,9 +24,12 @@ public sealed class RipProfile
 
     // ---- DGDemux ----
 
+    /// <summary>The DGDemux switches (-demux with the kept streams, -sf, -sp...).</summary>
+    public DgDemuxSettings DgDemux { get; set; } = new();
+
     /// <summary>
-    /// The DGDemux arguments for this profile, with {input} (the .mpls) and {output} (the file
-    /// name prefix in the work folder). Empty = the global default, Ripparr__DgDemuxArguments.
+    /// Extra DGDemux arguments, added after the switches. A full template with {input} (the
+    /// .mpls) and {output} (the file name prefix) replaces the global template and the switches.
     /// </summary>
     public string DgDemuxArguments { get; set; } = "";
 

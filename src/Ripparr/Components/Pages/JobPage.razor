@@ -137,7 +137,7 @@
                     <td class="text-body-secondary" title="@track.File">@track.Details</td>
                     <td class="text-end text-nowrap" title="@(track.BitRateMaximum > 0 ? $"maximum {Format.BitRate(track.BitRateMaximum)}" : "")">@(track.BitRate > 0 ? Format.BitRate(track.BitRate) : "")</td>
                     <td class="text-end text-nowrap">@(track.Size > 0 ? Format.Size(track.Size) : "")</td>
-                    <td>@track.Language</td>
+                    <td title="@track.Language">@Languages.Name(track.Language)</td>
                     <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
                     <td>@track.Flags</td>
                 </tr>
@@ -160,7 +160,7 @@
                     <td class="text-nowrap">@track.Codec @(track.Layout == "Multi" ? "" : track.Layout)</td>
                     <td class="text-body-secondary">@track.Details</td>
                     <td class="text-end text-body-secondary" colspan="2">after the demux</td>
-                    <td>@track.Language</td>
+                    <td title="@track.Language">@Languages.Name(track.Language)</td>
                     <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
                     <td>@(track.Default ? "default " : "")@(track.Forced ? "forced " : "")@(track.Commentary ? "commentary" : "")</td>
                 </tr>
@@ -190,7 +190,7 @@
             {
                 <tr>
                     <td class="text-nowrap fw-semibold">@subtitle.Name</td>
-                    <td>@subtitle.Language@(subtitle.Forced ? " · forced" : "")</td>
+                    <td>@Languages.Name(subtitle.Language)@(subtitle.Forced ? " · forced" : "")</td>
                     <td class="text-end text-nowrap">@subtitle.Captions captions</td>
                     <td class="text-body-secondary">
                         @if (subtitle.Ocr)

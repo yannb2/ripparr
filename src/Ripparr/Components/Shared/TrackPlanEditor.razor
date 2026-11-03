@@ -7,7 +7,7 @@
             <th title="Keep">Keep</th>
             <th>Track</th>
             <th>From the disc</th>
-            <th style="width: 6rem">Language</th>
+            <th style="width: 9rem">Language</th>
             <th title="Default track">Default</th>
             <th title="Forced subtitles">Forced</th>
             <th title="Commentary">Comm.</th>
@@ -38,14 +38,15 @@
                     }
                     @if (!string.IsNullOrEmpty(track.DiscLanguage))
                     {
-                        <span class="text-body-secondary">· @track.DiscLanguage</span>
+                        <span class="text-body-secondary">· @Languages.Name(track.DiscLanguage)</span>
                     }
                     <span class="text-body-secondary">· PID @($"0x{track.Pid:X4}")</span>
                 </td>
                 <td>
                     @if (!track.DolbyVisionLayer)
                     {
-                        <input class="form-control form-control-sm" @bind="track.Language" title="@Languages.Name(track.Language)"/>
+                        <input class="form-control form-control-sm" @bind="track.Language" title="ISO 639-2 code, such as eng or fre"/>
+                        <div class="small text-body-secondary text-truncate">@Languages.Name(track.Language)</div>
                     }
                 </td>
                 <td>

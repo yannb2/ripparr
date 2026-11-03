@@ -56,8 +56,9 @@ public static partial class MuxBuilder
     /// <summary>
     /// Ties each demuxed file to its playlist stream. A file whose name holds a stream's
     /// PID (1100, 0x1100 or 4352) goes to that stream; the rest go by order within each kind.
+    /// With <paramref name="demuxedPids"/> (DGDemux -demux), only those streams were written.
     /// </summary>
-    public static StreamMapping Map(Mpls playlist, IReadOnlyList<DemuxedFile> files)
+    public static StreamMapping Map(Mpls playlist, IReadOnlyList<DemuxedFile> files, IReadOnlySet<int>? demuxedPids = null)
     {
         var mapping = new StreamMapping();
         var ordered = files.OrderBy(f => f.FileName, StringComparer.OrdinalIgnoreCase).ToList();
@@ -79,7 +80,7 @@ public static partial class MuxBuilder
 
         // The Dolby Vision layer: the smaller picture of two video files (1080p next to 2160p).
         var videoFiles = ordered.Where(f => f.Kind == StreamKind.Video).OrderByDescending(f => f.Facts.Width).ToList();
-        var hasLayer = playlist.Streams.Any(s => s.DolbyVisionEnhancementLayer);
+        var hasLayer = playlist.Streams.Any(s => s.DolbyVisionEnhancementLayer && (demuxedPids == null || demuxedPids.Contains(s.Pid)));
         if (videoFiles.Count >= 2 && (hasLayer || videoFiles[1].Facts.DolbyVision))
         {
             mapping.EnhancementLayer = videoFiles[1];
@@ -89,7 +90,8 @@ public static partial class MuxBuilder
         foreach (var kind in new[] { StreamKind.Video, StreamKind.Audio, StreamKind.Subtitle })
         {
             var streams = playlist.Streams.Select((s, i) => (Stream: s, Index: i))
-                .Where(x => x.Stream.Kind == kind && !x.Stream.DolbyVisionEnhancementLayer)
+                .Where(x => x.Stream.Kind == kind && !x.Stream.DolbyVisionEnhancementLayer
+                            && (demuxedPids == null || demuxedPids.Contains(x.Stream.Pid)))
                 .ToList();
             var pool = ordered.Where(f => f.Kind == kind).ToList();
 
