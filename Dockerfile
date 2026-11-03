@@ -1,7 +1,7 @@
 # Ripparr: the app plus every tool it drives, each at a pinned version.
 # The weekly "Tool updates" workflow bumps these ARG lines in a pull request; nothing updates on its own.
 ARG MAKEMKV_VERSION=1.18.4
-ARG DGDEMUX_VERSION=1.0.0.78
+ARG DGDEMUX_VERSION=1.0.0.85
 ARG MKVTOOLNIX_VERSION=103.0
 ARG MEDIAINFO_VERSION=24.12
 ARG DOVI_TOOL_VERSION=2.3.4
