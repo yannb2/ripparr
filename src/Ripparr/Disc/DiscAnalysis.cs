@@ -23,6 +23,9 @@ public sealed class PlaylistInfo
     /// <summary>Shorter than the minimum length (menus, logos, trailers).</summary>
     public bool Short { get; set; }
 
+    /// <summary>"Play all": its clips are other playlists one after the other (all the extras in a row).</summary>
+    public bool PlayAll { get; set; }
+
     public TimeSpan Duration => Mpls.Duration;
 
     public string? Resolution => Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
@@ -71,6 +74,7 @@ public sealed class DiscAnalysis
             playlist.MainFeature = false;
             playlist.PossibleCut = false;
             playlist.DuplicateOf = null;
+            playlist.PlayAll = false;
         }
 
         var ordered = Playlists.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
@@ -85,6 +89,9 @@ public sealed class DiscAnalysis
                 }
             }
         }
+
+        // Only a flag for the extras list: a film can be clips that also play on their own.
+        MarkPlayAll(ordered.Where(p => p.DuplicateOf == null).ToList());
 
         var candidates = ordered.Where(p => p.DuplicateOf == null && !p.Short).ToList();
         var main = candidates
@@ -113,6 +120,44 @@ public sealed class DiscAnalysis
         // Some discs hide the film among dozens of playlists of the same length.
         var nearMain = candidates.Count(p => Math.Abs((p.Duration - main.Duration).TotalSeconds) < 120);
         ManyPlaylists = nearMain >= 8;
+    }
+
+    /// <summary>
+    /// A playlist made of at least two other playlists, back to back, that fill most of it: the
+    /// disc's "play all" for its extras (or episodes). Ripping it would repeat them.
+    /// </summary>
+    private static void MarkPlayAll(List<PlaylistInfo> playlists)
+    {
+        foreach (var all in playlists.Where(p => p.Mpls.Clips.Count >= 2))
+        {
+            var clips = all.Mpls.Clips;
+            var parts = playlists.Where(p => p != all && p.Mpls.Clips.Count < clips.Count && Contains(clips, p.Mpls.Clips)).ToList();
+            var covered = parts.Sum(p => p.Duration.TotalSeconds);
+            if (parts.Count >= 2 && covered >= all.Duration.TotalSeconds * 0.8)
+            {
+                all.PlayAll = true;
+            }
+        }
+    }
+
+    /// <summary>Whether <paramref name="part"/> appears in <paramref name="clips"/> as a run of consecutive clips.</summary>
+    private static bool Contains(IReadOnlyList<string> clips, IReadOnlyList<string> part)
+    {
+        for (var start = 0; start + part.Count <= clips.Count; start++)
+        {
+            var match = true;
+            for (var i = 0; i < part.Count && match; i++)
+            {
+                match = string.Equals(clips[start + i], part[i], StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (match)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool SameContent(PlaylistInfo a, PlaylistInfo b)

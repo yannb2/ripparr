@@ -55,4 +55,23 @@ public class DiscAnalysisTests
 
         Assert.IsTrue(disc.ManyPlaylists);
     }
+
+    [TestMethod]
+    public void FlagsPlayAllPlaylists()
+    {
+        var disc = Disc(
+            Playlist("00800", MplsBuilder.Feature(("00055", 5400))),
+            Playlist("00010", MplsBuilder.Feature(("00002", 600))),
+            Playlist("00011", MplsBuilder.Feature(("00003", 300))),
+            Playlist("00012", MplsBuilder.Feature(("00004", 120))),
+            Playlist("00020", MplsBuilder.Feature(("00002", 600), ("00003", 300), ("00004", 120))),
+            // Two clips, but only one of them plays on its own: not a "play all".
+            Playlist("00030", MplsBuilder.Feature(("00002", 600), ("00009", 900))));
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        Assert.IsTrue(disc.Find("00020")!.PlayAll);
+        Assert.IsFalse(disc.Find("00010")!.PlayAll);
+        Assert.IsFalse(disc.Find("00030")!.PlayAll);
+        Assert.AreEqual("00800", disc.MainFeature?.Name);
+    }
 }

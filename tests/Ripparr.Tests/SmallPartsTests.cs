@@ -93,7 +93,7 @@ public class SmallPartsTests
         try
         {
             var store = new JobStore(path);
-            Assert.HasCount(2, store.Profiles());
+            Assert.HasCount(3, store.Profiles());
 
             var job = store.Add(new Job { Title = "Film", Year = 2020, Playlist = "00800", Profile = store.Profiles()[0] });
             Assert.IsGreaterThan(0, job.Id);
@@ -189,5 +189,49 @@ public class SmallPartsTests
         // A copy: changing it leaves the dry run as it was.
         real.Plan.Tracks[0].Name = "Other";
         Assert.AreEqual("Main", dry.Plan.Tracks[0].Name);
+    }
+
+    [TestMethod]
+    public void ExtrasGoNextToTheFilmInTheirTypeFolder()
+    {
+        var values = new Dictionary<string, string?> { ["title"] = "Wolf Children", ["year"] = "2012" };
+        var film = new Ripparr.Jobs.Job { Title = "Wolf Children", Year = 2012 };
+        var extra = new Ripparr.Jobs.Job { Title = "Wolf Children", Year = 2012, ExtraType = "featurettes", ExtraName = "Making Of" };
+
+        Assert.AreEqual("/done/Wolf Children (2012)", Ripparr.Jobs.JobPipeline.DoneFolder("/done", film, values));
+        Assert.AreEqual("/done/Wolf Children (2012)/featurettes", Ripparr.Jobs.JobPipeline.DoneFolder("/done", extra, values));
+        Assert.AreEqual("Wolf Children (2012) · Making Of", extra.DisplayTitle);
+        Assert.AreEqual("featurettes", extra.ForReal().ExtraType);
+        Assert.AreEqual("Deleted Scene 2", Ripparr.Jobs.ExtraTypes.DefaultName("deleted scenes", 2));
+        Assert.IsTrue(Ripparr.Jobs.ExtraTypes.All.All(t => t.Folder == t.Folder.ToLowerInvariant()), "Jellyfin's folder names are lower case");
+    }
+
+    [TestMethod]
+    public void PicturesPointsFallInTheRightClip()
+    {
+        var playlist = Ripparr.Disc.Mpls.Parse(MplsBuilder.Feature(("00002", 60), ("00003", 40)).Build());
+        Assert.AreEqual(("00002", 10.0), Ripparr.Disc.Thumbnails.Locate(playlist, 0.1));
+        Assert.AreEqual("00003", Ripparr.Disc.Thumbnails.Locate(playlist, 0.9).Clip);
+        Assert.AreEqual(30.0, Ripparr.Disc.Thumbnails.Locate(playlist, 0.9).Seconds, 0.01);
+    }
+
+    [TestMethod]
+    public void AnInstallThatHadProfilesGetsTheExtrasProfileOnce()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"ripparr-{Guid.NewGuid():N}.db");
+        try
+        {
+            var store = new Ripparr.Jobs.JobStore(Microsoft.Extensions.Options.Options.Create(new Ripparr.Options.RipparrOptions { DatabasePath = path }));
+            Assert.IsTrue(store.Profiles().Any(p => p.Id == Ripparr.Profiles.RipProfile.ExtrasId));
+            store.DeleteProfile(Ripparr.Profiles.RipProfile.ExtrasId);
+
+            var again = new Ripparr.Jobs.JobStore(Microsoft.Extensions.Options.Options.Create(new Ripparr.Options.RipparrOptions { DatabasePath = path }));
+            Assert.IsFalse(again.Profiles().Any(p => p.Id == Ripparr.Profiles.RipProfile.ExtrasId), "a deleted Extras profile stays deleted");
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            File.Delete(path);
+        }
     }
 }

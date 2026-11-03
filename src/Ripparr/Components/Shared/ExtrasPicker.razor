@@ -1,0 +1,274 @@
+@* The disc's other playlists as extras: tick them, give each a type and a name, queue a job each. *@
+@inject JobRunner Runner
+@inject NavigationManager Navigation
+
+<div class="card mb-3">
+    <button type="button" class="card-header d-flex align-items-center gap-2 border-0 w-100 text-start bg-transparent"
+            @onclick="() => _open = !_open" aria-expanded="@(_open ? "true" : "false")">
+        <i class="bi @(_open ? "bi-chevron-down" : "bi-chevron-right")"></i>
+        <span class="fw-semibold">Extras</span>
+        <span class="badge text-bg-secondary">@Candidates.Count()</span>
+        <span class="small text-body-secondary ms-1">featurettes, trailers, deleted scenes… one job each, next to the film</span>
+    </button>
+    @if (_open)
+    {
+        <div class="card-body pt-2">
+            <div class="d-flex flex-wrap align-items-center gap-3 small mb-2">
+                <span class="text-body-secondary">
+                    Tick the playlists to keep, then pick a type and type a name: Jellyfin shows the file name.
+                    The title, year and IDs come from the film's form above.
+                </span>
+                <div class="form-check form-switch mb-0 ms-auto">
+                    <input class="form-check-input" type="checkbox" id="extrasAll" @bind="_showAll"/>
+                    <label class="form-check-label" for="extrasAll">Show duplicates and "play all"</label>
+                </div>
+            </div>
+            @if (!Visible.Any())
+            {
+                <div class="small text-body-secondary">No other playlists on this disc.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm small align-middle mb-2">
+                        <thead>
+                        <tr>
+                            <th></th>
+                            <th>Playlist</th>
+                            <th>Length</th>
+                            <th class="text-end">Size</th>
+                            <th>Video</th>
+                            <th>Audio</th>
+                            <th style="min-width: 10rem">Type</th>
+                            <th style="min-width: 14rem">Name</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var playlist in Visible)
+                        {
+                            var row = Row(playlist);
+                            var streams = playlist.Mpls.Streams;
+                            <tr class="@(row.Selected ? "table-active" : "")">
+                                <td><input type="checkbox" class="form-check-input" checked="@row.Selected" @onchange="e => row.Selected = e.Value is true"/></td>
+                                <td class="fw-semibold">@playlist.Name</td>
+                                <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
+                                <td class="text-end text-nowrap">@Format.Size(playlist.Size)</td>
+                                <td class="text-nowrap">@string.Join(" ", streams.Where(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer).Take(1).Select(s => $"{StreamCoding.Resolution(s.Format)} {s.CodecName}"))</td>
+                                <td>
+                                    @string.Join(", ", streams.Where(s => s.Kind == StreamKind.Audio).Select(s => Languages.Name(s.Language)).Distinct())
+                                    @if (playlist.PlayAll)
+                                    {
+                                        <span class="badge text-bg-warning ms-1" title="Its clips are other playlists one after the other: ripping it repeats them.">Play all</span>
+                                    }
+                                    @if (playlist.DuplicateOf != null)
+                                    {
+                                        <span class="badge text-bg-secondary ms-1">Same as @playlist.DuplicateOf</span>
+                                    }
+                                    @if (playlist.PossibleCut)
+                                    {
+                                        <span class="badge text-bg-info ms-1">Other cut?</span>
+                                    }
+                                </td>
+                                <td>
+                                    <select class="form-select form-select-sm" value="@row.Type" @onchange="e => row.Type = e.Value?.ToString() ?? row.Type">
+                                        @foreach (var type in ExtraTypes.All)
+                                        {
+                                            <option value="@type.Folder">@type.Label</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <input class="form-control form-control-sm" placeholder="@DefaultName(playlist)" value="@row.Name"
+                                           @oninput="e => TypeName(row, e.Value?.ToString())"/>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-link p-0 text-nowrap" @onclick="() => row.Pictures = !row.Pictures"
+                                            title="Three pictures from the playlist, to tell the extras apart">
+                                        <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
+                                    </button>
+                                </td>
+                            </tr>
+                            @if (row.Pictures)
+                            {
+                                <tr>
+                                    <td></td>
+                                    <td colspan="8">
+                                        <div class="d-flex flex-wrap gap-2 py-1">
+                                            @for (var i = 0; i < Thumbnails.Count; i++)
+                                            {
+                                                <img src="@PictureUrl(playlist, i)" alt="Picture @(i + 1) of playlist @playlist.Name" loading="lazy"
+                                                     class="rounded border bg-body-tertiary" style="height: 120px; min-width: 160px; object-fit: contain"
+                                                     onerror="this.replaceWith(Object.assign(document.createElement('span'), {className: 'small text-body-secondary align-self-center', textContent: 'No picture (too big to stream out of the ISO, or ffmpeg could not read it)'}))"/>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-end gap-2">
+                    <div>
+                        <label class="form-label small mb-1">Profile</label>
+                        <select class="form-select form-select-sm" @bind="_profileId">
+                            @foreach (var profile in Profiles)
+                            {
+                                <option value="@profile.Id">@profile.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-sm" disabled="@(SelectedCount == 0)" @onclick="() => Queue(false)">
+                        <i class="bi bi-play-fill"></i> Queue @SelectedCount extra@(SelectedCount == 1 ? "" : "s")
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" disabled="@(SelectedCount == 0)" @onclick="() => Queue(true)">Dry run</button>
+                    @if (SelectedCount > 0)
+                    {
+                        <span class="small text-body-secondary">
+                            To @(Film?.Title is { Length: > 0 } t ? $"{t} ({Film.Year})" : "Title (Year)")/@string.Join(", ", SelectedTypes)/
+                        </span>
+                    }
+                </div>
+                @if (_error != null)
+                {
+                    <div class="alert alert-danger py-2 small mt-2 mb-0">@_error</div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
+    [Parameter, EditorRequired] public DiscAnalysis Analysis { get; set; } = null!;
+    [Parameter, EditorRequired] public List<RipProfile> Profiles { get; set; } = [];
+
+    /// <summary>The playlist the film's form is on: not offered as an extra.</summary>
+    [Parameter] public PlaylistInfo? FilmPlaylist { get; set; }
+
+    /// <summary>The film's job as the form would queue it (title, year, IDs, language, tags), or the reason it can't be.</summary>
+    [Parameter, EditorRequired] public Func<(Job? Job, string? Error)> FilmJob { get; set; } = null!;
+
+    private sealed class ExtraRow
+    {
+        public bool Selected { get; set; }
+        public string Type { get; set; } = "featurettes";
+        public string Name { get; set; } = "";
+        public bool Pictures { get; set; }
+    }
+
+    private readonly Dictionary<string, ExtraRow> _rows = new();
+    private bool _open;
+    private bool _showAll;
+    private string _profileId = "";
+    private string? _error;
+
+    private Job? Film => FilmJob().Job;
+
+    protected override void OnParametersSet()
+    {
+        if (_profileId.Length == 0 || Profiles.All(p => p.Id != _profileId))
+        {
+            _profileId = Profiles.FirstOrDefault(p => p.Id == RipProfile.ExtrasId)?.Id ?? Profiles.FirstOrDefault()?.Id ?? "";
+        }
+    }
+
+    /// <summary>Playlists that can be extras: not the film, not a menu or logo (under 10 s).</summary>
+    private IEnumerable<PlaylistInfo> Candidates => Analysis.Playlists
+        .Where(p => p != FilmPlaylist && !p.MainFeature && p.Duration >= TimeSpan.FromSeconds(10))
+        .Where(p => p.DuplicateOf == null && !p.PlayAll)
+        .OrderBy(p => p.Name, StringComparer.Ordinal);
+
+    private IEnumerable<PlaylistInfo> Visible => _showAll
+        ? Analysis.Playlists.Where(p => p != FilmPlaylist && !p.MainFeature && p.Duration >= TimeSpan.FromSeconds(10)).OrderBy(p => p.Name, StringComparer.Ordinal)
+        : Candidates;
+
+    private ExtraRow Row(PlaylistInfo playlist)
+    {
+        if (!_rows.TryGetValue(playlist.Name, out var row))
+        {
+            // Short ones are usually trailers.
+            row = new ExtraRow { Type = playlist.Duration < TimeSpan.FromMinutes(3.5) ? "trailers" : "featurettes" };
+            _rows[playlist.Name] = row;
+        }
+
+        return row;
+    }
+
+    /// <summary>Typing a name ticks the row.</summary>
+    private static void TypeName(ExtraRow row, string? name)
+    {
+        row.Name = name ?? "";
+        row.Selected |= row.Name.Length > 0;
+    }
+
+    private IEnumerable<(PlaylistInfo Playlist, ExtraRow Row)> Selected =>
+        Visible.Select(p => (p, Row(p))).Where(x => x.Item2.Selected);
+
+    private int SelectedCount => Selected.Count();
+
+    private IEnumerable<string> SelectedTypes => Selected.Select(x => x.Row.Type).Distinct();
+
+    /// <summary>"Featurette 2": numbered among the ticked extras of the same type, in playlist order.</summary>
+    private string DefaultName(PlaylistInfo playlist)
+    {
+        var row = Row(playlist);
+        var same = Visible.Where(p => Row(p).Type == row.Type && (Row(p).Selected || p == playlist)).ToList();
+        return ExtraTypes.DefaultName(row.Type, same.IndexOf(playlist) + 1);
+    }
+
+    private string PictureUrl(PlaylistInfo playlist, int index) =>
+        $"api/discs/pictures/{index}.jpg?path={Uri.EscapeDataString(Source.Path)}&playlist={Uri.EscapeDataString(playlist.Name)}";
+
+    private void Queue(bool dryRun)
+    {
+        _error = null;
+        var (film, error) = FilmJob();
+        if (film == null)
+        {
+            _error = error;
+            return;
+        }
+
+        var profile = Profiles.FirstOrDefault(p => p.Id == _profileId) ?? film.Profile;
+        var jobs = new List<Job>();
+        foreach (var (playlist, row) in Selected.ToList())
+        {
+            var plan = TrackPlanner.Build(playlist.Mpls, profile, film.OriginalLanguage);
+            if (!plan.Kept.Any(t => t.Kind == StreamKind.Video))
+            {
+                _error = $"Playlist {playlist.Name} has no video track to keep.";
+                return;
+            }
+
+            var name = row.Name.Trim().Length > 0 ? row.Name.Trim() : DefaultName(playlist);
+            jobs.Add(new Job
+            {
+                SourcePath = film.SourcePath,
+                SourceKind = film.SourceKind,
+                SourceName = film.SourceName,
+                Playlist = playlist.Name,
+                Title = film.Title,
+                Year = film.Year,
+                TmdbId = film.TmdbId,
+                ImdbId = film.ImdbId,
+                OriginalLanguage = film.OriginalLanguage,
+                Profile = profile,
+                Plan = plan,
+                Tags = film.Tags.Select(t => t.Copy()).ToList(),
+                ExtraType = row.Type,
+                ExtraName = name,
+                DryRun = dryRun
+            });
+        }
+
+        foreach (var job in jobs)
+        {
+            Runner.Enqueue(job);
+        }
+
+        Navigation.NavigateTo(jobs.Count == 1 ? $"job/{jobs[0].Id}" : "queue");
+    }
+}

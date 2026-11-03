@@ -93,7 +93,7 @@ public static partial class ToolCatalog
         },
         new()
         {
-            Id = "ffprobe", Name = "ffprobe", Purpose = "Reads the streams of a file (BtbN static build).",
+            Id = "ffprobe", Name = "FFmpeg", Purpose = "ffprobe reads the streams of a file, ffmpeg takes the playlist pictures (BtbN static build).",
             Command = t => t.FFprobe, VersionArguments = ["-version"],
             VersionPattern = FfprobeVersion(),
             // BtbN keeps one "latest" release; its asset names hold the newest release branch (n9.0).

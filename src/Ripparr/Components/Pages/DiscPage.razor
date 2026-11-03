@@ -367,6 +367,11 @@
     </div>
 }
 
+@if (_selected != null && _plan != null)
+{
+    <ExtrasPicker Source="_source" Analysis="_analysis" Profiles="_profiles" FilmPlaylist="_selected" FilmJob="FilmJob"/>
+}
+
 @code {
     [SupplyParameterFromQuery] public string? Path { get; set; }
 
@@ -717,22 +722,20 @@
 
     private string PreviewFile => Naming.SafeFileName(Naming.Apply(Profile.FileNameTemplate, PreviewValues())) + ".mkv";
 
-    private void Queue(bool dryRun)
+    /// <summary>The film's job as the form stands; the extras take its title, year, IDs and tags.</summary>
+    private (Job? Job, string? Error) FilmJob()
     {
-        _error = null;
         if (string.IsNullOrWhiteSpace(_title) || _year is null)
         {
-            _error = "A title and a year are needed for the file name.";
-            return;
+            return (null, "A title and a year are needed for the file name.");
         }
 
         if (_plan == null || !_plan.Kept.Any(t => t.Kind == StreamKind.Video))
         {
-            _error = "Keep at least the video track.";
-            return;
+            return (null, "Keep at least the video track.");
         }
 
-        var job = new Job
+        return (new Job
         {
             SourcePath = _source!.Path,
             SourceKind = _source.Kind,
@@ -746,9 +749,21 @@
             OriginalLanguage = _original,
             Profile = Profile,
             Plan = _plan,
-            Tags = _tags.Where(t => t.Name.Length > 0).Select(t => t.Copy()).ToList(),
-            DryRun = dryRun
-        };
+            Tags = _tags.Where(t => t.Name.Length > 0).Select(t => t.Copy()).ToList()
+        }, null);
+    }
+
+    private void Queue(bool dryRun)
+    {
+        _error = null;
+        var (job, error) = FilmJob();
+        if (job == null)
+        {
+            _error = error;
+            return;
+        }
+
+        job.DryRun = dryRun;
         Runner.Enqueue(job);
         Navigation.NavigateTo($"job/{job.Id}");
     }
