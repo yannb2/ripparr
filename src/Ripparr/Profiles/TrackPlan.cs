@@ -39,7 +39,7 @@ public sealed class PlannedTrack
     /// <summary>Audio description for the visually impaired (AD).</summary>
     public bool VisualImpaired { get; set; }
 
-    /// <summary>A name typed on the form; empty = from the profile's template.</summary>
+    /// <summary>Text typed on the form: the {description} of the profile's name template ("=..." is the whole name).</summary>
     public string? Name { get; set; }
 
     /// <summary>The Dolby Vision enhancement layer: never its own track, merged into the video.</summary>

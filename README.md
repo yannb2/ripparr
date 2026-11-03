@@ -137,6 +137,9 @@ chapter names, the file name and MKV title templates, the global tags, the SRT (
 DGDemux arguments (empty = the global default; the profile page shows the exact command and DGDemux's own
 options). Three come built in (UHD remux,
 Blu-ray remux and Extras), and they can be copied and changed. The plan can still be edited per job on the disc page.
+There, the **Description** box of a track fills `{description}` in the profile's name template (the commentary
+template `{language} - {codec} {channels} ({description})` gives `English - AC3 2.0 (Director and Writer)`); a
+template without `{description}` gets the text in brackets at the end, and `=Name` types the whole name.
 
 The default file name follows Radarr's Standard Movie Format in this library:
 `Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BDRemux].mkv`.

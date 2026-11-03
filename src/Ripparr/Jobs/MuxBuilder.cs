@@ -211,26 +211,23 @@ public static partial class MuxBuilder
              && !Languages.Same(track.Language, originalLanguage));
 
     /// <summary>
-    /// The track name: typed on the form, or from the profile's templates. The video's Dolby
-    /// Vision profile and layer come from dovi_tool once the layers are merged.
+    /// The track name, from the profile's templates; the text typed for the track on the form is
+    /// their {description}. The video's Dolby Vision profile and layer come from dovi_tool once the
+    /// layers are merged.
     /// </summary>
     public static string TrackName(PlannedTrack track, StreamFacts facts, RipProfile profile, string? originalLanguage = null,
         string? dvProfile = null, string? dvLayer = null)
     {
-        if (!string.IsNullOrWhiteSpace(track.Name))
-        {
-            return track.Name.Trim();
-        }
-
+        var typed = string.IsNullOrWhiteSpace(track.Name) ? null : track.Name.Trim();
         var language = Languages.Name(track.Language);
         var flags = Flags(track, originalLanguage);
         return track.Kind switch
         {
             StreamKind.Video => TrackNaming.Video(profile, language, facts.Resolution, facts.VideoCodec, facts.DynamicRange,
-                TrackNaming.DolbyVisionProfile(dvProfile ?? facts.DolbyVisionProfile, facts.DynamicRange), dvLayer),
+                TrackNaming.DolbyVisionProfile(dvProfile ?? facts.DolbyVisionProfile, facts.DynamicRange), dvLayer, typed),
             StreamKind.Audio => TrackNaming.Audio(profile, language,
-                string.IsNullOrEmpty(facts.Format) ? track.Codec : facts.AudioCodec, facts.ChannelWords, flags),
-            StreamKind.Subtitle => TrackNaming.Subtitle(profile, language, SubtitleCodec(track, facts), flags),
+                string.IsNullOrEmpty(facts.Format) ? track.Codec : facts.AudioCodec, facts.ChannelWords, flags, typed),
+            StreamKind.Subtitle => TrackNaming.Subtitle(profile, language, SubtitleCodec(track, facts), flags, typed),
             _ => ""
         };
     }

@@ -34,7 +34,8 @@ public static class SubtitleStep
     /// <summary>The SRT's name: the subtitle templates with {codec} = SRT. With the SDH text removed it is no longer SDH.</summary>
     public static string SrtName(RipProfile profile, PlannedTrack track) =>
         TrackNaming.Subtitle(profile, Languages.Name(track.Language), "SRT",
-            new TrackFlags(HearingImpaired: track.HearingImpaired && !profile.SrtRemoveSdh, Forced: track.Forced, Commentary: track.Commentary));
+            new TrackFlags(HearingImpaired: track.HearingImpaired && !profile.SrtRemoveSdh, Forced: track.Forced, Commentary: track.Commentary),
+            string.IsNullOrWhiteSpace(track.Name) ? null : track.Name.Trim());
 
     /// <summary>True when enough captions carry SDH text ([door slams], JOHN:, ♪) to call the track SDH: a tenth, and at least 5.</summary>
     public static bool LooksSdh(IReadOnlyList<OcrCaption> captions)
