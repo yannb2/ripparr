@@ -101,7 +101,7 @@ public static class TrackPlanner
             Pid = s.Pid,
             Codec = s.CodecName,
             Layout = s.Kind == StreamKind.Audio ? StreamCoding.AudioLayout(s.Format) : null,
-            Details = StreamCoding.Details(s),
+            Details = StreamCoding.Details(s, playlist.HasDolbyVisionEnhancementLayer),
             DiscLanguage = s.Language,
             Language = s.Language ?? "und",
             DolbyVisionLayer = s.DolbyVisionEnhancementLayer

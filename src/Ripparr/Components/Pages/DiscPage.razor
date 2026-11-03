@@ -1,9 +1,11 @@
 @page "/disc"
 @inject DiscAnalyzer Analyzer
+@inject StreamProbe Probe
 @inject JobStore Store
 @inject JobRunner Runner
 @inject RadarrClient Radarr
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>@(_source?.Name ?? "Disc") · Ripparr</PageTitle>
 
@@ -223,7 +225,28 @@
                 </div>
             </div>
 
-            <TrackPlanEditor Plan="_plan"/>
+            <div class="d-flex align-items-center gap-2 small mb-2">
+                @if (_probing)
+                {
+                    <span class="spinner-border spinner-border-sm text-secondary"></span>
+                    <span class="text-body-secondary">Reading the streams of playlist @_selected.Name…</span>
+                }
+                else if (_probe is { Error: { } probeError })
+                {
+                    <i class="bi bi-info-circle text-body-secondary"></i>
+                    <span class="text-body-secondary">@probeError</span>
+                    <button class="btn btn-sm btn-link p-0" @onclick="ReadStreams">Try again</button>
+                }
+                else if (_probe != null)
+                {
+                    <i class="bi bi-check2 text-success"></i>
+                    <span class="text-body-secondary">
+                        Streams read in @_probe.Took.TotalSeconds.ToString("0.#") s@(_probe.Estimated ? "; bit rates and sizes are estimated from the start of the film" : "").
+                    </span>
+                }
+            </div>
+
+            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)"/>
 
             @if (Profile.WriteTags)
             {
@@ -316,14 +339,71 @@
         }
     }
 
+    private ProbeResult? _probe;
+    private bool _probing;
+    private CancellationTokenSource? _probeCancel;
+
     private void Select(PlaylistInfo playlist)
     {
         _selected = playlist;
+        _probe = Probe.Cached(_source!, playlist);
         _profileId = playlist.Resolution == "2160p"
             ? _profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? ""
             : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
         BuildPlan();
         ResetTags();
+        if (_probe == null)
+        {
+            _ = ReadStreams();
+        }
+    }
+
+    /// <summary>
+    /// The quick read of the selected playlist: mediainfo and sampled bit rates, a few seconds on
+    /// a folder or a decrypted ISO. Picking another playlist drops a read still running.
+    /// </summary>
+    private async Task ReadStreams()
+    {
+        if (_selected == null || _analysis == null)
+        {
+            return;
+        }
+
+        _probeCancel?.Cancel();
+        var cancel = _probeCancel = new CancellationTokenSource();
+        var playlist = _selected;
+        _probing = true;
+        _probe = null;
+        await InvokeAsync(StateHasChanged);
+        ProbeResult result;
+        try
+        {
+            result = await Task.Run(() => Probe.ProbeAsync(_source!, _analysis, playlist, cancel.Token), cancel.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (cancel.IsCancellationRequested || _selected != playlist)
+        {
+            return;
+        }
+
+        _probe = result;
+        _probing = false;
+        ApplyProbe();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _probeCancel?.Cancel();
+
+    private void ApplyProbe()
+    {
+        if (_plan != null && _selected != null && _probe is { Error: null })
+        {
+            StreamProbe.Apply(_plan, _selected, _probe);
+        }
     }
 
     private List<GlobalTag> _tags = [];
@@ -340,6 +420,7 @@
         if (_selected != null)
         {
             _plan = TrackPlanner.Build(_selected.Mpls, Profile, _original);
+            ApplyProbe();
         }
     }
 

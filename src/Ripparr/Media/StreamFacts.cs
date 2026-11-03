@@ -9,6 +9,10 @@ namespace Ripparr.Media;
 public sealed record StreamFacts
 {
     public StreamKind Kind { get; init; }
+
+    /// <summary>mediainfo's ID: the transport stream PID in a .m2ts (4113), the track number in an MKV.</summary>
+    public int Id { get; init; }
+
     public string? Format { get; init; }
     public string? Commercial { get; init; }
     public string? Features { get; init; }
@@ -324,6 +328,7 @@ public static class MediaInfoReader
             list.Add(new StreamFacts
             {
                 Kind = kind,
+                Id = Int(Get(track, "ID")?.Split('-')[0]),
                 Format = Get(track, "Format"),
                 Commercial = Get(track, "Format_Commercial_IfAny") ?? Get(track, "Format_Commercial"),
                 Features = Get(track, "Format_AdditionalFeatures"),

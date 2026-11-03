@@ -89,7 +89,7 @@ public class StreamFactsTests
     [TestMethod]
     public void PlaylistDetails()
     {
-        Assert.AreEqual("2160p · 23.976 fps", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Video, Coding = 0x24, Format = 8, Rate = 1 }));
+        Assert.AreEqual("2160p · 10-bit · SDR · 23.976 fps", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Video, Coding = 0x24, Format = 8, Rate = 1 }));
         Assert.AreEqual("96 kHz", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Audio, Coding = 0x83, Format = 6, Rate = 4 }));
         Assert.AreEqual("", StreamCoding.Details(new PlaylistStream { Kind = StreamKind.Subtitle, Coding = 0x90 }));
     }
