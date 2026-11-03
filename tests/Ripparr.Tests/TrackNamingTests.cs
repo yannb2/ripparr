@@ -119,4 +119,26 @@ public sealed class TrackNamingTests
         Assert.AreEqual("ger", Media.Languages.Search("deu")[0].Code);
         Assert.IsEmpty(Media.Languages.Search(""));
     }
+
+    [TestMethod]
+    public void TypedTextIsTheDescriptionNotTheWholeName()
+    {
+        // The commentary template has {description}: the typed text goes there.
+        Assert.AreEqual("English - AC3 2.0 (Director and Writer)",
+            TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(Commentary: true), "Director and Writer"));
+        Assert.AreEqual("English (Commentary) - Director - PGS",
+            TrackNaming.Subtitle(Profile, "English", "PGS", new TrackFlags(Commentary: true), "Director"));
+
+        // A template without it keeps the text in brackets at the end.
+        Assert.AreEqual("English - TrueHD Atmos 7.1 (Home mix)",
+            TrackNaming.Audio(Profile, "English", "TrueHD Atmos", "7.1", new TrackFlags(), "Home mix"));
+        Assert.AreEqual("1080p - AVC - SDR (Open matte)", TrackNaming.Video(Profile, "English", "1080p", "AVC", "", null, null, "Open matte"));
+
+        // "=" types the whole name.
+        Assert.AreEqual("My own name", TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(), "= My own name"));
+
+        // Through the job: the plan's typed text.
+        var track = new PlannedTrack { Kind = Ripparr.Disc.StreamKind.Audio, Language = "eng", Codec = "AC3", Commentary = true, Name = "Cast" };
+        Assert.AreEqual("English - AC3 (Cast)", MuxBuilder.TrackName(track, new Ripparr.Media.StreamFacts(), Profile), "no stream facts: no channels");
+    }
 }

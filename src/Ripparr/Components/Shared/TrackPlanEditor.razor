@@ -15,7 +15,7 @@
             <th style="width: 9rem">Language</th>
             <th title="Default track">Default</th>
             <th>Flags</th>
-            <th title="Empty = from the profile's name templates">Name</th>
+            <th title="Fills {description} in the profile's track name template (added in brackets when the template has none). Start with = to type the whole name.">Description</th>
             <th></th>
         </tr>
         </thead>
@@ -107,7 +107,7 @@
                 <td>
                     @if (!track.DolbyVisionLayer)
                     {
-                        <input class="form-control form-control-sm" style="min-width: 9rem" placeholder="from the profile" @bind="track.Name"/>
+                        <input class="form-control form-control-sm" style="min-width: 9rem" placeholder="{description}" title="Fills {description} in the profile's name template; =Name types the whole name" @bind="track.Name"/>
                     }
                 </td>
                 <td class="text-nowrap">

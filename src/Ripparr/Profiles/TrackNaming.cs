@@ -93,7 +93,7 @@ public static partial class TrackNaming
         values["language"] = language;
         values["codec"] = codec;
         values["channels"] = channels;
-        return Apply(Template(profile.AudioNameTemplate, profile.AudioNameOverrides, flags), values);
+        return Described(Template(profile.AudioNameTemplate, profile.AudioNameOverrides, flags), values, trackName);
     }
 
     public static string Subtitle(RipProfile profile, string language, string codec, TrackFlags flags, string? trackName = null)
@@ -101,14 +101,16 @@ public static partial class TrackNaming
         var values = FlagValues(flags, trackName);
         values["language"] = language;
         values["codec"] = codec;
-        return Apply(Template(profile.SubtitleNameTemplate, profile.SubtitleNameOverrides, flags), values);
+        return Described(Template(profile.SubtitleNameTemplate, profile.SubtitleNameOverrides, flags), values, trackName);
     }
 
     public static string Video(RipProfile profile, string language, string resolution, string codec, string? dynamicRange,
-        string? dvProfile, string? dvLayer)
+        string? dvProfile, string? dvLayer, string? trackName = null)
     {
-        return Apply(profile.VideoNameTemplate, new Dictionary<string, string?>
+        return Described(profile.VideoNameTemplate, new Dictionary<string, string?>
         {
+            ["trackname"] = trackName ?? "",
+            ["description"] = trackName ?? "",
             ["language"] = language,
             ["resolution"] = resolution,
             ["codec"] = codec,
@@ -117,7 +119,7 @@ public static partial class TrackNaming
             ["dv"] = DolbyVision(profile.DolbyVisionTemplate, dvProfile, dvLayer),
             ["dvprofile"] = dvProfile,
             ["dvlayer"] = dvLayer
-        });
+        }, trackName);
     }
 
     /// <summary>
@@ -169,6 +171,33 @@ public static partial class TrackNaming
     }
 
     /// <summary>Naming.Apply, then the separators a missing value leaves behind ("English (Commentary) -  - PGS").</summary>
+    /// <summary>
+    /// A track template with the text typed for the track on the job (its Name box) as {description}
+    /// (and {trackname}). A template without either gets the text in brackets at the end, so it is
+    /// not lost; text starting with "=" is the whole name, as typed.
+    /// </summary>
+    public static string Described(string template, IReadOnlyDictionary<string, string?> values, string? typed)
+    {
+        var text = typed?.Trim() ?? "";
+        if (text.StartsWith('='))
+        {
+            return text[1..].Trim();
+        }
+
+        var name = Apply(template, values);
+        if (text.Length == 0 || UsesDescription(template))
+        {
+            return name;
+        }
+
+        return name.Length == 0 ? text : $"{name} ({text})";
+    }
+
+    /// <summary>Whether a template has a {description} or {trackname} token.</summary>
+    public static bool UsesDescription(string template) =>
+        System.Text.RegularExpressions.Regex.IsMatch(template, @"\{[^{}A-Za-z]*(description|trackname)[^{}A-Za-z]*\}",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
     public static string Apply(string template, IReadOnlyDictionary<string, string?> values)
     {
         var text = Naming.Apply(template, values);
