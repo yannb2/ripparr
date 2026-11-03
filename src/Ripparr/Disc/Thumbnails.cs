@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Ripparr.Jobs;
 using Ripparr.Options;
 
 namespace Ripparr.Disc;
@@ -13,7 +14,7 @@ namespace Ripparr.Disc;
 /// Three pictures of a playlist (at a tenth, half and nine tenths of it), to tell the extras on a
 /// disc apart: they have no names. Taken with ffmpeg once and kept in ThumbnailFolder.
 /// </summary>
-public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbnails> logger)
+public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store, ILogger<Thumbnails> logger)
 {
     public const int Count = 3;
     public static readonly double[] Positions = [0.1, 0.5, 0.9];
@@ -64,7 +65,7 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
         {
             return source.Kind == SourceKind.Iso
                 ? await FromIsoAsync(source, analysis, playlist, folder)
-                : await FromFolderAsync(source, playlist, folder);
+                : await FromFolderAsync(source, analysis, playlist, folder);
         }
         catch (Exception e) when (e is IOException or Win32Exception or InvalidOperationException)
         {
@@ -73,8 +74,13 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
         }
     }
 
-    /// <summary>Where a point of the playlist falls: which clip, and how far into it.</summary>
-    public static (string Clip, double Seconds) Locate(Mpls playlist, double fraction)
+    /// <summary>
+    /// Where a point of the playlist falls: which clip, and how far into the clip's file. A playlist
+    /// can play only part of a clip (TV discs cut each episode out of one big clip): the item's in
+    /// time, counted from the earliest in time any playlist uses for that clip (<paramref name="clipStarts"/>),
+    /// is added.
+    /// </summary>
+    public static (string Clip, double Seconds) Locate(Mpls playlist, double fraction, IReadOnlyDictionary<string, uint>? clipStarts = null)
     {
         var target = playlist.Duration.TotalSeconds * fraction;
         var start = 0.0;
@@ -83,7 +89,7 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
             var length = item.Duration45k / (double)Mpls.ClockRate;
             if (target < start + length || item == playlist.Items[^1])
             {
-                return (item.Clip, Math.Clamp(target - start, 0, Math.Max(0, length - 1)));
+                return (item.Clip, Offset(item, clipStarts) + Math.Clamp(target - start, 0, Math.Max(0, length - 1)));
             }
 
             start += length;
@@ -92,14 +98,26 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
         return (playlist.Items[0].Clip, 0);
     }
 
+    private static double Offset(PlayItem item, IReadOnlyDictionary<string, uint>? clipStarts) =>
+        clipStarts != null && clipStarts.TryGetValue(item.Clip, out var first) && item.InTime > first
+            ? (item.InTime - first) / (double)Mpls.ClockRate
+            : 0;
+
+    /// <summary>The earliest in time each clip is played from, over all the disc's playlists.</summary>
+    public static Dictionary<string, uint> ClipStarts(DiscAnalysis analysis) =>
+        analysis.Playlists.SelectMany(p => p.Mpls.Items)
+            .GroupBy(i => i.Clip, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Min(i => i.InTime), StringComparer.OrdinalIgnoreCase);
+
     /// <summary>A folder: ffmpeg seeks straight to each point.</summary>
-    private async Task<string?> FromFolderAsync(DiscSource source, PlaylistInfo playlist, string folder)
+    private async Task<string?> FromFolderAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, string folder)
     {
         var disc = SourceFinder.BdmvParent(source.Path) ?? source.Path;
+        var starts = ClipStarts(analysis);
         string? error = null;
         for (var i = 0; i < Count; i++)
         {
-            var (clip, seconds) = Locate(playlist.Mpls, Positions[i]);
+            var (clip, seconds) = Locate(playlist.Mpls, Positions[i], starts);
             var path = DiscAnalyzer.ClipPath(disc, clip);
             if (path == null)
             {
@@ -121,6 +139,11 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
     /// </summary>
     private async Task<string?> FromIsoAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, string folder)
     {
+        if (await FromMountedIsoAsync(source, analysis, playlist, folder) is { } mounted)
+        {
+            return mounted.Error;
+        }
+
         var item = playlist.Mpls.Items[0];
         var size = analysis.ClipSizes.GetValueOrDefault(item.Clip);
         if (size > MaxIsoClip)
@@ -129,7 +152,8 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
         }
 
         var length = item.Duration45k / (double)Mpls.ClockRate;
-        var points = Positions.Select(p => (p * length).ToString("0.###", CultureInfo.InvariantCulture)).ToArray();
+        var offset = Offset(item, ClipStarts(analysis));
+        var points = Positions.Select(p => (offset + p * length).ToString("0.###", CultureInfo.InvariantCulture)).ToArray();
         // One picture past each point: the first frame after T1, then after T2, then after T3.
         var select = $"select='isnan(prev_selected_t)*gte(t\\,{points[0]})" +
                      $"+gte(prev_selected_t\\,{points[0]})*lt(prev_selected_t\\,{points[1]})*gte(t\\,{points[1]})" +
@@ -157,6 +181,55 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, ILogger<Thumbna
             if (!sevenZip.HasExited)
             {
                 sevenZip.Kill();
+            }
+        }
+    }
+
+    /// <summary>
+    /// With the mount service, an ISO is read like a folder: ffmpeg seeks, so any clip size works.
+    /// Uses a running job's mount of the same ISO, else mounts it and unmounts it after (unless a
+    /// job started on it meanwhile). Null when the service could not mount it.
+    /// </summary>
+    private async Task<(string? Error, bool Done)?> FromMountedIsoAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, string folder)
+    {
+        var settings = options.Value.IsoMount;
+        if (!settings.Enabled)
+        {
+            return null;
+        }
+
+        bool JobUsesIt() => store.List(50, [Jobs.JobStatus.Running]).Any(j => j.SourcePath == source.Path);
+
+        var hostPath = store.List(50, [Jobs.JobStatus.Running]).FirstOrDefault(j => j.SourcePath == source.Path && j.MountedAt != null)?.MountedAt;
+        var ours = false;
+        if (hostPath == null)
+        {
+            var reply = await IsoMount.MountAsync(settings.Socket, settings.ToHost(source.Path), CancellationToken.None);
+            if (reply is not { Ok: true, Path: { } path })
+            {
+                return null;
+            }
+
+            hostPath = path;
+            ours = true;
+        }
+
+        try
+        {
+            var disc = SourceFinder.BdmvParent(settings.ToContainer(hostPath));
+            if (disc == null)
+            {
+                return null;
+            }
+
+            var mountedSource = source with { Path = disc, Kind = SourceKind.Folder };
+            return (await FromFolderAsync(mountedSource, analysis, playlist, folder), true);
+        }
+        finally
+        {
+            if (ours && !JobUsesIt())
+            {
+                await IsoMount.UnmountAsync(settings.Socket, hostPath, CancellationToken.None);
             }
         }
     }

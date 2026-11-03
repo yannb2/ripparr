@@ -259,7 +259,10 @@ public static partial class MuxBuilder
             // An SDR film gets [SDR], as the rename-only custom format does in Radarr.
             ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? "SDR" : range,
             ["audio"] = audioWords,
-            ["source"] = job.Profile.Source
+            ["source"] = job.Profile.Source,
+            ["episode"] = job.EpisodeCode,
+            ["absolute"] = job.AbsoluteEpisode is { } absolute ? EpisodeNumbers.Absolute(absolute) : null,
+            ["episodetitle"] = job.EpisodeTitle
         };
     }
 
@@ -285,8 +288,10 @@ public static partial class MuxBuilder
         var video = outputs.FirstOrDefault(o => o.Planned.Kind == StreamKind.Video)?.File.Facts;
         var tags = new List<(string Name, string? Value)>
         {
-            ("TMDB", job.TmdbId is { } tmdb ? $"movie/{tmdb}" : null),
+            ("TMDB", job.TmdbId is { } tmdb ? $"{(job.IsEpisode ? "tv" : "movie")}/{tmdb}" : null),
             ("IMDB", job.ImdbId),
+            ("TVDB2", job.TvdbId is { } tvdb ? $"series/{tvdb}" : null),
+            ("ABSOLUTE_EPISODE", job.AbsoluteEpisode?.ToString(CultureInfo.InvariantCulture)),
             ("RELEASE_NAME", job.SourceName),
             ("SOURCE", job.Profile.Source),
             ("VIDEO_CODEC", video?.VideoCodec),

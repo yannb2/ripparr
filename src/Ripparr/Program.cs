@@ -28,6 +28,7 @@ builder.Services.AddSingleton<SubtitleScanner>();
 builder.Services.AddSingleton<Thumbnails>();
 builder.Services.AddSingleton<JobPipeline>();
 builder.Services.AddSingleton<RadarrClient>();
+builder.Services.AddSingleton<SonarrClient>();
 builder.Services.AddSingleton<JobRunner>();
 builder.Services.AddHostedService(services => services.GetRequiredService<JobRunner>());
 builder.Services.AddSingleton<ToolStatusService>();

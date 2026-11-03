@@ -31,6 +31,7 @@ public sealed class JobRunner(
     public void Retry(Job job)
     {
         job.Status = JobStatus.Queued;
+        job.Dismissed = false;
         job.Error = null;
         job.Question = null;
         job.Step = null;
@@ -69,6 +70,29 @@ public sealed class JobRunner(
             store.Update(job);
             events.Write(id, "Cancelled before it started.");
         }
+    }
+
+    /// <summary>
+    /// Takes a job off the queue page: a queued or running one is cancelled (and shows in History as
+    /// cancelled), a failed, interrupted or waiting one moves to History as it is.
+    /// </summary>
+    public void Remove(long id)
+    {
+        var job = store.Get(id);
+        if (job == null)
+        {
+            return;
+        }
+
+        if (job.Status is JobStatus.Queued or JobStatus.Running)
+        {
+            Cancel(id);
+            return;
+        }
+
+        job.Dismissed = true;
+        store.Update(job);
+        events.Write(id, "Removed from the queue.");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

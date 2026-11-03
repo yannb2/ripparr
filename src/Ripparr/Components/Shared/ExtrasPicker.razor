@@ -8,7 +8,7 @@
         <i class="bi @(_open ? "bi-chevron-down" : "bi-chevron-right")"></i>
         <span class="fw-semibold">Extras</span>
         <span class="badge text-bg-secondary">@Candidates.Count()</span>
-        <span class="small text-body-secondary ms-1">featurettes, trailers, deleted scenes… one job each, next to the film</span>
+        <span class="small text-body-secondary ms-1">featurettes, trailers, deleted scenes… one job each, next to the @(Tv ? "series" : "film")</span>
     </button>
     @if (_open)
     {
@@ -16,7 +16,7 @@
             <div class="d-flex flex-wrap align-items-center gap-3 small mb-2">
                 <span class="text-body-secondary">
                     Tick the playlists to keep, then pick a type and type a name: Jellyfin shows the file name.
-                    The title, year and IDs come from the film's form above.
+                    The title, year and IDs come from the @(Tv ? "series" : "film's form") above.
                 </span>
                 <div class="form-check form-switch mb-0 ms-auto">
                     <input class="form-check-input" type="checkbox" id="extrasAll" @bind="_showAll"/>
@@ -120,6 +120,13 @@
                             }
                         </select>
                     </div>
+                    @if (Season is { } season)
+                    {
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" id="extrasSeason" @bind="_inSeason"/>
+                            <label class="form-check-label small" for="extrasSeason">In the @EpisodeNumbers.SeasonFolder(season) folder</label>
+                        </div>
+                    }
                     <button class="btn btn-primary btn-sm" disabled="@(SelectedCount == 0)" @onclick="() => Queue(false)">
                         <i class="bi bi-play-fill"></i> Queue @SelectedCount extra@(SelectedCount == 1 ? "" : "s")
                     </button>
@@ -127,7 +134,7 @@
                     @if (SelectedCount > 0)
                     {
                         <span class="small text-body-secondary">
-                            To @(Film?.Title is { Length: > 0 } t ? $"{t} ({Film.Year})" : "Title (Year)")/@string.Join(", ", SelectedTypes)/
+                            To @(Film?.Title is { Length: > 0 } t ? $"{t} ({Film.Year})" : "Title (Year)")/@(SeasonFor is { } s ? EpisodeNumbers.SeasonFolder(s) + "/" : "")@string.Join(", ", SelectedTypes)/
                         </span>
                     }
                 </div>
@@ -148,6 +155,15 @@
     /// <summary>The playlist the film's form is on: not offered as an extra.</summary>
     [Parameter] public PlaylistInfo? FilmPlaylist { get; set; }
 
+    /// <summary>Playlists the main jobs use (a TV disc's episodes): not offered. When null, the film's playlist and the main feature.</summary>
+    [Parameter] public IReadOnlyCollection<string>? Taken { get; set; }
+
+    /// <summary>A TV disc's season: offers to put the extras in its folder instead of the series folder.</summary>
+    [Parameter] public int? Season { get; set; }
+
+    /// <summary>A TV disc: the extras go with the series.</summary>
+    [Parameter] public bool Tv { get; set; }
+
     /// <summary>The film's job as the form would queue it (title, year, IDs, language, tags), or the reason it can't be.</summary>
     [Parameter, EditorRequired] public Func<(Job? Job, string? Error)> FilmJob { get; set; } = null!;
 
@@ -162,6 +178,9 @@
     private readonly Dictionary<string, ExtraRow> _rows = new();
     private bool _open;
     private bool _showAll;
+    private bool _inSeason;
+
+    private int? SeasonFor => _inSeason ? Season : null;
     private string _profileId = "";
     private string? _error;
 
@@ -175,15 +194,15 @@
         }
     }
 
-    /// <summary>Playlists that can be extras: not the film, not a menu or logo (under 10 s).</summary>
-    private IEnumerable<PlaylistInfo> Candidates => Analysis.Playlists
-        .Where(p => p != FilmPlaylist && !p.MainFeature && p.Duration >= TimeSpan.FromSeconds(10))
-        .Where(p => p.DuplicateOf == null && !p.PlayAll)
+    /// <summary>Playlists that can be extras: not the film (or the episodes), not a menu or logo (under 10 s).</summary>
+    private IEnumerable<PlaylistInfo> Candidates => Free.Where(p => p.DuplicateOf == null && !p.PlayAll);
+
+    private IEnumerable<PlaylistInfo> Free => Analysis.Playlists
+        .Where(p => Taken != null ? !Taken.Contains(p.Name) : p != FilmPlaylist && !p.MainFeature)
+        .Where(p => p.Duration >= TimeSpan.FromSeconds(10))
         .OrderBy(p => p.Name, StringComparer.Ordinal);
 
-    private IEnumerable<PlaylistInfo> Visible => _showAll
-        ? Analysis.Playlists.Where(p => p != FilmPlaylist && !p.MainFeature && p.Duration >= TimeSpan.FromSeconds(10)).OrderBy(p => p.Name, StringComparer.Ordinal)
-        : Candidates;
+    private IEnumerable<PlaylistInfo> Visible => _showAll ? Free : Candidates;
 
     private ExtraRow Row(PlaylistInfo playlist)
     {
@@ -254,6 +273,8 @@
                 Year = film.Year,
                 TmdbId = film.TmdbId,
                 ImdbId = film.ImdbId,
+                TvdbId = film.TvdbId,
+                Season = SeasonFor,
                 OriginalLanguage = film.OriginalLanguage,
                 Profile = profile,
                 Plan = plan,

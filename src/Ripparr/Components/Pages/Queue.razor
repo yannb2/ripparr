@@ -15,9 +15,11 @@
     </div>
 </div>
 
-@if (_jobs.Count == 0)
+@if (!Shown.Any())
 {
-    <div class="alert alert-secondary">No jobs yet. Pick a disc on the <a href="">Sources</a> page.</div>
+    <div class="alert alert-secondary">
+        Nothing in the queue. Pick a disc on the <a href="">Sources</a> page; finished jobs are in <a href="history">History</a>.
+    </div>
 }
 else
 {
@@ -28,7 +30,7 @@ else
                 <tr>
                     <th>#</th>
                     <th>Status</th>
-                    <th>Film</th>
+                    <th>Title</th>
                     <th>Source</th>
                     <th style="min-width: 12rem">Step</th>
                     <th>Queued</th>
@@ -37,7 +39,7 @@ else
                 </tr>
                 </thead>
                 <tbody>
-                @foreach (var job in _jobs.Where(j => _showDryRuns || !j.DryRun))
+                @foreach (var job in Shown)
                 {
                     <tr class="sv-clickable-row" @onclick="() => Navigation.NavigateTo(Href(job))">
                         <td class="text-body-secondary">@job.Id</td>
@@ -75,14 +77,14 @@ else
                         <td class="small text-nowrap" title="@Format.LocalDate(job.Created)">@Format.TimeAgo(job.Created)</td>
                         <td class="small text-nowrap">@(job.Elapsed is { } e ? Format.Duration(e) : "")</td>
                         <td class="text-nowrap" @onclick:stopPropagation="true">
-                            @if (job.Status is JobStatus.Queued or JobStatus.Running)
+                            @if (job.CanRetry)
                             {
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Runner.Cancel(job.Id)">Cancel</button>
+                                <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => Retry(job)">Retry</button>
                             }
-                            else if (job.CanRetry)
-                            {
-                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => Retry(job)">Retry</button>
-                            }
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Remove(job)"
+                                    title="@(job.Status is JobStatus.Queued or JobStatus.Running ? "Cancel it; it shows in History as cancelled" : "Move it to History")">
+                                <i class="bi bi-x-lg"></i> Remove
+                            </button>
                         </td>
                     </tr>
                 }
@@ -92,7 +94,10 @@ else
     </div>
 }
 
+<ConfirmDialog @ref="_confirm"/>
+
 @code {
+    private ConfirmDialog _confirm = null!;
     private List<Job> _jobs = [];
     private bool _showDryRuns = true;
     private DateTime _lastLoad = DateTime.MinValue;
@@ -102,6 +107,8 @@ else
         Load();
         Events.Changed += OnChanged;
     }
+
+    private IEnumerable<Job> Shown => _jobs.Where(j => j.InQueue && (_showDryRuns || !j.DryRun));
 
     private void Load()
     {
@@ -126,6 +133,18 @@ else
     private void Retry(Job job)
     {
         Runner.Retry(job);
+        Load();
+    }
+
+    private async Task Remove(Job job)
+    {
+        if (job.Status == JobStatus.Running &&
+            !await _confirm.Ask("Remove job", $"{job.DisplayTitle} is running: stop it and move it to History?", "Stop and remove", danger: true))
+        {
+            return;
+        }
+
+        Runner.Remove(job.Id);
         Load();
     }
 
