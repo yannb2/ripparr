@@ -32,8 +32,10 @@ public sealed class JobRunner(
     {
         job.Status = JobStatus.Queued;
         job.Error = null;
+        job.Question = null;
         job.Step = null;
         job.Progress = null;
+        job.StepStarted = null;
         job.Started = null;
         job.Finished = null;
         job.Checks = [];
@@ -41,6 +43,14 @@ public sealed class JobRunner(
         store.Update(job);
         events.Write(job.Id, "Queued again.");
         _wake.Release();
+    }
+
+    /// <summary>The answer to "unpack instead?": queue the job again, unpacking the ISO with 7-Zip.</summary>
+    public void UnpackInstead(Job job)
+    {
+        job.UnpackIso = true;
+        events.Write(job.Id, "Answer: unpack the ISO with 7-Zip.");
+        Retry(job);
     }
 
     public void Cancel(long id)
@@ -69,6 +79,7 @@ public sealed class JobRunner(
             job.Status = JobStatus.Interrupted;
             job.Finished = DateTime.UtcNow;
             job.Error = "The app stopped while this job was running. Retry it to start again from the beginning.";
+            await JobPipeline.UnmountAsync(new JobContext(job, options.Value, store, events, CancellationToken.None));
             store.Update(job);
         }
 
@@ -128,6 +139,13 @@ public sealed class JobRunner(
             job.Error = "Cancelled.";
             context.Log("Cancelled. The job folder is kept: " + context.WorkFolder);
         }
+        catch (JobQuestionException e)
+        {
+            job.Status = JobStatus.Waiting;
+            job.Error = e.Message;
+            job.Question = e.Question;
+            context.Log("Waiting for an answer: " + e.Question);
+        }
         catch (JobFailedException e)
         {
             job.Status = JobStatus.Failed;
@@ -143,6 +161,7 @@ public sealed class JobRunner(
         }
         finally
         {
+            await JobPipeline.UnmountAsync(context);
             job.Finished = DateTime.UtcNow;
             _running.TryRemove(job.Id, out _);
             store.Update(job);

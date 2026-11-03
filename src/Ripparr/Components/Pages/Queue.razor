@@ -47,11 +47,25 @@ else
                         <td class="small">
                             @if (job.Status == JobStatus.Running)
                             {
-                                <div>@job.Step</div>
+                                <div class="d-flex gap-2">
+                                    <span>@job.Step</span>
+                                    @if (job.Progress is { } stepDone)
+                                    {
+                                        <span class="font-monospace">@($"{Math.Floor(stepDone * 100):0}%")</span>
+                                    }
+                                    @if (job.Overall is { } overall)
+                                    {
+                                        <span class="ms-auto text-body-secondary" title="Whole job">job <span class="font-monospace">@($"{Math.Floor(overall * 100):0}%")</span></span>
+                                    }
+                                </div>
                                 <div class="progress" style="height: 6px">
                                     <div class="progress-bar @(job.Progress == null ? "progress-bar-striped progress-bar-animated w-100" : "")"
                                          style="@(job.Progress is { } p ? $"width: {p * 100:0.#}%" : "")"></div>
                                 </div>
+                            }
+                            else if (job.Status == JobStatus.Waiting)
+                            {
+                                <span class="text-warning-emphasis" title="@job.Question">@job.Step: needs an answer</span>
                             }
                             else if (job.Status is JobStatus.Failed or JobStatus.Interrupted)
                             {

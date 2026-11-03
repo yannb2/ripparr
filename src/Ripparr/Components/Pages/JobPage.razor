@@ -35,7 +35,7 @@
                 <i class="bi bi-play-fill"></i> Queue the job
             </button>
         }
-        @if (_job.CanRetry)
+        @if (_job.CanRetry && _job.Status != JobStatus.Waiting)
         {
             <button class="btn btn-sm btn-outline-secondary" @onclick="Retry">Retry</button>
         }
@@ -60,13 +60,47 @@
 
 @if (_job.Status == JobStatus.Running)
 {
-    <div class="progress mb-3" style="height: 10px">
+    <div class="progress mb-1" style="height: 10px" title="@_job.Step">
         <div class="progress-bar @(_job.Progress == null ? "progress-bar-striped progress-bar-animated w-100" : "")"
              style="@(_job.Progress is { } p ? $"width: {p * 100:0.#}%" : "")"></div>
     </div>
+    <div class="d-flex flex-wrap gap-3 small mb-3">
+        <span>
+            <span class="fw-semibold">@_job.Step</span>
+            @if (_job.Progress is { } stepDone)
+            {
+                <span class="font-monospace">@(" " + Percent(stepDone))</span>
+            }
+            @if (_job.StepTimeLeft is { } left)
+            {
+                <span class="text-body-secondary">@($" · about {Format.Duration(left)} left")</span>
+            }
+            else if (_job.StepStarted is { } since)
+            {
+                <span class="text-body-secondary">@($" · running for {Format.Duration(DateTime.UtcNow - since)}")</span>
+            }
+        </span>
+        @if (_job.Overall is { } overall)
+        {
+            <span class="text-body-secondary" title="All the steps, weighted by how long each one usually takes">
+                Whole job <span class="font-monospace text-body">@Percent(overall)</span>
+            </span>
+        }
+    </div>
 }
 
-@if (_job.Error != null)
+@if (_job.Status == JobStatus.Waiting && _job.Question != null)
+{
+    <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2">
+        <div class="flex-grow-1 d-flex gap-2" style="min-width: 16rem">
+            <i class="bi bi-question-circle-fill"></i>
+            <div>@_job.Question</div>
+        </div>
+        <button class="btn btn-sm btn-primary" @onclick="UnpackInstead"><i class="bi bi-file-earmark-zip"></i> Unpack with 7-Zip</button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="Retry" title="Start the job again and ask the mount service once more">Try mounting again</button>
+    </div>
+}
+else if (_job.Error != null)
 {
     <div class="alert alert-danger">@_job.Error</div>
 }
@@ -238,9 +272,23 @@
         Load();
     }
 
+    private Timer? _clock;
+
     protected override void OnInitialized()
     {
         Events.Changed += OnChanged;
+        // The time left and "running for" move on even when the tool prints nothing for a while.
+        _clock = new Timer(_ =>
+        {
+            if (_job?.Status == JobStatus.Running)
+            {
+                InvokeAsync(() =>
+                {
+                    _job = Store.Get(Id);
+                    StateHasChanged();
+                });
+            }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private void Load()
@@ -314,6 +362,7 @@
             {
                 JobStatus.Running => "text-bg-primary",
                 JobStatus.Failed or JobStatus.Interrupted or JobStatus.Cancelled => "text-bg-danger",
+                JobStatus.Waiting => "text-bg-warning",
                 _ => "text-bg-success"
             };
         }
@@ -326,6 +375,14 @@
     {
         var job = Runner.Enqueue(_job!.ForReal());
         Navigation.NavigateTo($"job/{job.Id}");
+    }
+
+    private static string Percent(double value) => $"{Math.Floor(value * 100):0}%";
+
+    private void UnpackInstead()
+    {
+        Runner.UnpackInstead(_job!);
+        Load();
     }
 
     private void Retry()
@@ -353,5 +410,9 @@
         Navigation.NavigateTo("queue");
     }
 
-    public void Dispose() => Events.Changed -= OnChanged;
+    public void Dispose()
+    {
+        Events.Changed -= OnChanged;
+        _clock?.Dispose();
+    }
 }

@@ -10,6 +10,7 @@
         JobStatus.Done when Job.Warnings.Count > 0 || Job.Checks.Any(c => c.Warning) => "text-bg-warning",
         JobStatus.Done => "text-bg-success",
         JobStatus.Failed => "text-bg-danger",
+        JobStatus.Waiting => "text-bg-warning",
         _ => "text-bg-dark"
     };
 
@@ -17,6 +18,7 @@
     {
         JobStatus.Done when Job.DryRun => "Dry run done",
         JobStatus.Done when Job.Warnings.Count > 0 => "Done, warnings",
+        JobStatus.Waiting => "Waiting for you",
         var s => s.ToString()
     };
 }

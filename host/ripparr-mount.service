@@ -1,0 +1,20 @@
+# Mounts Blu-ray ISO files read-only for Ripparr (see README, "Mount ISOs instead of unpacking").
+# Install on the host that runs the Ripparr container:
+#   sudo install -m 755 ripparr_mount.py /usr/local/sbin/ripparr_mount.py
+#   sudo install -m 644 ripparr-mount.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now ripparr-mount
+[Unit]
+Description=Ripparr ISO mount service
+# Before Docker, so the socket folder exists when the container bind-mounts it.
+Before=docker.service
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I /usr/local/sbin/ripparr_mount.py --root /mnt/pc/iso-mounts --allow /downloads --allow /mnt/pc serve --socket /run/ripparr-mount/mount.sock --group 1000
+Restart=on-failure
+# No PrivateMounts/ProtectSystem: the mounts must be made in the host's own mount namespace,
+# or the container would never see them.
+
+[Install]
+WantedBy=multi-user.target

@@ -30,6 +30,7 @@ public sealed class JobContext(Job job, RipparrOptions options, JobStore store, 
     {
         Job.Step = step;
         Job.Progress = null;
+        Job.StepStarted = DateTime.UtcNow;
         _lastProgress = null;
         Log($"== {step}");
         Save();
@@ -90,3 +91,9 @@ public sealed class JobContext(Job job, RipparrOptions options, JobStore store, 
 
 /// <summary>A step failed for a reason worth showing as it is.</summary>
 public sealed class JobFailedException(string message) : Exception(message);
+
+/// <summary>The job stops to ask something (Job.Question); answering it queues the job again.</summary>
+public sealed class JobQuestionException(string question, string reason) : Exception(reason)
+{
+    public string Question { get; } = question;
+}

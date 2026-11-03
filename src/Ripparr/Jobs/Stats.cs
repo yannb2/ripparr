@@ -14,7 +14,8 @@ public sealed record Stats(int Queued, int Running, string? Current, double? Pro
             jobs.Count(j => j.Status == JobStatus.Queued),
             jobs.Count(j => j.Status == JobStatus.Running),
             running == null ? null : $"{running.DisplayTitle}: {running.Step}",
-            running?.Progress is { } p ? Math.Round(p * 100, 1) : null,
+            // The whole job when it is known (a Homepage tile wants one number), else the current step.
+            (running?.Overall ?? running?.Progress) is { } p ? Math.Round(p * 100, 1) : null,
             jobs.Count(j => j.Status == JobStatus.Done && j.Finished >= today && !j.DryRun),
             jobs.Count(j => j.Status is JobStatus.Failed or JobStatus.Interrupted && j.Finished >= today.AddDays(-7)),
             tools.Statuses.Count(s => s.UpdateAvailable));
