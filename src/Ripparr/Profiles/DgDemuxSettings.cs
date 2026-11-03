@@ -3,9 +3,10 @@ using System.Globalization;
 namespace Ripparr.Profiles;
 
 /// <summary>
-/// The DGDemux switches a profile turns on, from the DGDemux manual (DGDemux.txt) and the
-/// options DGDemuxGUI offers. Run <c>dgdemux -h</c> (the button on the profile page) to see
-/// what the installed version takes.
+/// The DGDemux switches a profile turns on, from DGDemux.txt (1.0.0.85) and DGDemuxGUI's
+/// checkboxes. Ripparr merges the Dolby Vision layer itself with dovi_tool, reads the chapters
+/// from the playlist and runs one playlist per job, so -mergedv, -sslc, -ep, -collapse, -z and
+/// -extras are not offered.
 /// </summary>
 public sealed class DgDemuxSettings
 {
@@ -15,26 +16,26 @@ public sealed class DgDemuxSettings
     /// <summary>-ang n: the angle to demux, from 1. 0 = DGDemux's default (the first).</summary>
     public int Angle { get; set; }
 
-    /// <summary>-sf: skip the first clip (a short logo clip can upset the audio detection).</summary>
+    /// <summary>
+    /// -thd n: 0 = THD, the embedded AC3 and a THD+AC3 file; 1 = THD and the embedded AC3;
+    /// 2 = THD only. Null = from the profile: 1 when the AC-3 core is kept, otherwise 2.
+    /// </summary>
+    public int? ThdMode { get; set; }
+
+    /// <summary>-sf: skip the first clip (a short logo clip without audio can hide the audio).</summary>
     public bool SkipFirstClip { get; set; }
 
     /// <summary>-sl: skip the last clip.</summary>
     public bool SkipLastClip { get; set; }
 
-    /// <summary>-sp: strict playlist mode, nothing before the first clip's IN time or after the last clip's OUT time.</summary>
+    /// <summary>-strictpl: honour each clip's IN and OUT times (drops extra content around them, e.g. KINO LORBER discs).</summary>
     public bool StrictPlaylist { get; set; }
 
-    /// <summary>-ch: cut the audio that runs past each clip's OUT time.</summary>
-    public bool ClipAudio { get; set; }
-
-    /// <summary>-nopre: do not reserve the disk space first (helps when space is short).</summary>
+    /// <summary>-nopre: no disk space preallocation (DGDemux: not implemented for linux yet).</summary>
     public bool NoPreallocation { get; set; }
 
-    /// <summary>-nogaps: no audio gap processing (DGDemux says: for research and debugging).</summary>
+    /// <summary>-nogaps: no audio gap processing (DGDemux: research and debugging).</summary>
     public bool NoGaps { get; set; }
-
-    /// <summary>-fo: forced subtitles only.</summary>
-    public bool ForcedSubtitlesOnly { get; set; }
 }
 
 /// <summary>Builds DGDemux's arguments from the global template, the profile's switches and its extra arguments.</summary>
@@ -43,21 +44,23 @@ public static class DgDemuxCommand
     /// <summary>The switches, for the profile page: flag, label, getter and setter.</summary>
     public static readonly IReadOnlyList<(string Flag, string Label, Func<DgDemuxSettings, bool> Get, Action<DgDemuxSettings, bool> Set)> Switches =
     [
-        ("-sf", "Skip the first clip (a short logo clip can upset the audio detection)", s => s.SkipFirstClip, (s, v) => s.SkipFirstClip = v),
+        ("-sf", "Skip the first clip (a short logo clip without audio can stop the audio being found)", s => s.SkipFirstClip, (s, v) => s.SkipFirstClip = v),
         ("-sl", "Skip the last clip", s => s.SkipLastClip, (s, v) => s.SkipLastClip = v),
-        ("-sp", "Strict playlist: drop what is outside the first clip's IN time and the last clip's OUT time", s => s.StrictPlaylist, (s, v) => s.StrictPlaylist = v),
-        ("-ch", "Cut audio that runs past each clip's OUT time", s => s.ClipAudio, (s, v) => s.ClipAudio = v),
-        ("-nopre", "Do not reserve the disk space first", s => s.NoPreallocation, (s, v) => s.NoPreallocation = v),
-        ("-nogaps", "No audio gap processing (DGDemux: research and debugging only)", s => s.NoGaps, (s, v) => s.NoGaps = v),
-        ("-fo", "Forced subtitles only (other subtitle tracks are not written)", s => s.ForcedSubtitlesOnly, (s, v) => s.ForcedSubtitlesOnly = v)
+        ("-strictpl", "Strict playlist: honour each clip's IN and OUT times and drop the content outside them", s => s.StrictPlaylist, (s, v) => s.StrictPlaylist = v),
+        ("-nopre", "No disk space preallocation (DGDemux: not implemented for linux yet)", s => s.NoPreallocation, (s, v) => s.NoPreallocation = v),
+        ("-nogaps", "No audio gap processing (DGDemux: research and debugging only)", s => s.NoGaps, (s, v) => s.NoGaps = v)
     ];
+
+    /// <summary>The -thd mode a job uses: the profile's, or 1 with the AC-3 core kept and 2 without.</summary>
+    public static int ThdMode(RipProfile profile) => profile.DgDemux.ThdMode ?? (profile.KeepTrueHdCore ? 1 : 2);
+
 
     /// <summary>A profile's own full template (with {input}) replaces everything else, as before 0.2.1.</summary>
     public static bool IsFullTemplate(string? arguments) =>
         arguments != null && arguments.Contains("{input}", StringComparison.Ordinal);
 
-    /// <summary>DGDemux's PID words: 1011, 1100, 1A00.</summary>
-    public static string Pid(int pid) => pid.ToString("X", CultureInfo.InvariantCulture);
+    /// <summary>DGDemux's -demux takes decimal PIDs: 0x1011 is 4113, 0x1100 is 4352.</summary>
+    public static string Pid(int pid) => pid.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>The PIDs a job asks for: the kept tracks and, when merged, the Dolby Vision layer.</summary>
     public static List<int> Pids(TrackPlan plan) =>
@@ -77,6 +80,7 @@ public static class DgDemuxCommand
             arguments.AddRange(["-ang", settings.Angle.ToString(CultureInfo.InvariantCulture)]);
         }
 
+        arguments.AddRange(["-thd", ThdMode(profile).ToString(CultureInfo.InvariantCulture)]);
         arguments.AddRange(Switches.Where(s => s.Get(settings)).Select(s => s.Flag));
         if (settings.DemuxOnlyKept && pids is { Count: > 0 })
         {

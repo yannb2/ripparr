@@ -182,13 +182,14 @@ public class MuxBuilderTests
             ]
         };
         var pids = DgDemuxCommand.DemuxedPids(profile, plan);
-        CollectionAssert.AreEqual(new[] { "-i", "/d/00800.mpls", "-o", "/w/00800", "-demux", "1011,1015,1100,12A0" },
+        CollectionAssert.AreEqual(new[] { "-i", "/d/00800.mpls", "-o", "/w/00800", "-thd", "2", "-demux", "4113,4117,4352,4768" },
             DgDemuxCommand.Arguments(profile, global, "/d/00800.mpls", "/w/00800", pids!.ToList()));
 
+        profile.KeepTrueHdCore = true;
         profile.DgDemux = new DgDemuxSettings { DemuxOnlyKept = false, Angle = 2, SkipFirstClip = true, StrictPlaylist = true };
         profile.DgDemuxArguments = "-nogaps";
         Assert.IsNull(DgDemuxCommand.DemuxedPids(profile, plan));
-        CollectionAssert.AreEqual(new[] { "-i", "/d/x.mpls", "-o", "/w/x", "-ang", "2", "-sf", "-sp", "-nogaps" },
+        CollectionAssert.AreEqual(new[] { "-i", "/d/x.mpls", "-o", "/w/x", "-ang", "2", "-thd", "1", "-sf", "-strictpl", "-nogaps" },
             DgDemuxCommand.Arguments(profile, global, "/d/x.mpls", "/w/x", null));
 
         // A full template of its own (0.2.0 profiles) replaces everything.

@@ -181,6 +181,21 @@
                                    @bind="_profile.DgDemux.Angle" disabled="@FullTemplate"/>
                             <span class="small text-body-secondary">0 = the first</span>
                         </div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <label class="small text-nowrap" for="dgThd">TrueHD (<code>-thd</code>)</label>
+                            <select id="dgThd" class="form-select form-select-sm" style="width: auto" disabled="@FullTemplate"
+                                    value="@(_profile.DgDemux.ThdMode?.ToString() ?? "")"
+                                    @onchange="e => _profile.DgDemux.ThdMode = int.TryParse(e.Value?.ToString(), out var m) ? m : null">
+                                <option value="">From the profile (now @DgDemuxCommand.ThdMode(_profile))</option>
+                                <option value="0">0: THD, embedded AC3 and THD+AC3</option>
+                                <option value="1">1: THD and embedded AC3</option>
+                                <option value="2">2: THD only</option>
+                            </select>
+                        </div>
+                        <p class="small text-body-secondary mb-0">
+                            Ripparr merges the Dolby Vision layer itself with dovi_tool and takes the chapters from the playlist,
+                            so DGDemux's <code>-mergedv</code> and <code>-sslc</code> are not used.
+                        </p>
                     </div>
                     <div class="col-md-6">
                         @foreach (var option in DgDemuxCommand.Switches)
@@ -208,7 +223,7 @@
                 {
                     <div class="small text-warning mb-2"><i class="bi bi-exclamation-triangle"></i> No <code>{output}</code>: DGDemux would only list the streams.</div>
                 }
-                <div class="small text-body-secondary mb-1">A job runs, in its demux folder (example PIDs: video 1011, DV layer 1015, two audio, one subtitle):</div>
+                <div class="small text-body-secondary mb-1">A job runs, in its demux folder (PIDs in decimal, as DGDemux wants them: video 4113, DV layer 4117, two audio, one subtitle):</div>
                 <pre class="small bg-body-tertiary border rounded p-2 mb-3 text-wrap">@CommandPreview</pre>
 
                 <div class="d-flex align-items-center gap-2 mb-2">

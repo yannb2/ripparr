@@ -40,7 +40,7 @@
                     {
                         <span class="text-body-secondary">· @Languages.Name(track.DiscLanguage)</span>
                     }
-                    <span class="text-body-secondary">· PID @($"0x{track.Pid:X4}")</span>
+                    <span class="text-body-secondary" title="@($"0x{track.Pid:X4}")">· PID @track.Pid</span>
                 </td>
                 <td>
                     @if (!track.DolbyVisionLayer)
