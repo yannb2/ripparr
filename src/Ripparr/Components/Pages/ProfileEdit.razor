@@ -290,12 +290,52 @@
         }
     }
 
+    /// <summary>DGDemux.txt next to the dgdemux binary, or in /config/tools.</summary>
+    private static string? DgDemuxManual(string binary)
+    {
+        var folders = new List<string>();
+        if (System.IO.Path.IsPathRooted(binary) && System.IO.Path.GetDirectoryName(binary) is { } folder)
+        {
+            folders.Add(folder);
+        }
+
+        folders.AddRange(["/config/tools", "/usr/local/bin"]);
+        foreach (var candidate in folders.Distinct())
+        {
+            try
+            {
+                var file = Directory.EnumerateFiles(candidate)
+                    .FirstOrDefault(f => System.IO.Path.GetFileName(f).Equals("DGDemux.txt", StringComparison.OrdinalIgnoreCase));
+                if (file != null)
+                {
+                    return file;
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return null;
+    }
+
     private async Task ShowHelp()
     {
         _helpRunning = true;
         try
         {
             var result = await ProcessRunner.RunAsync(Options.Value.Tools.DgDemux, ["-h"], TimeSpan.FromSeconds(15));
+            if ((result.Output + result.Error).Contains("DGDemux.txt", StringComparison.OrdinalIgnoreCase))
+            {
+                // dgdemux -h prints its manual, DGDemux.txt, from the zip; read it ourselves when it is next to the binary.
+                var manual = DgDemuxManual(Options.Value.Tools.DgDemux);
+                _help = manual != null
+                    ? File.ReadAllText(manual)
+                    : "dgdemux -h prints its manual, DGDemux.txt, which comes in the same zip as the binary. " +
+                      "Put it next to dgdemux (/config/tools/DGDemux.txt, on the host /config/ripparr/tools/).";
+                return;
+            }
+
 
             _help = result.NotStarted
                 ? $"{Options.Value.Tools.DgDemux} is not there. Put the Linux binary in /config/tools/dgdemux and restart the container."

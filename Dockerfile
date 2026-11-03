@@ -50,8 +50,10 @@ RUN set -eux; \
         bin="$(find /tmp/dgdemux -type f -iname dgdemux | head -n1)"; \
         test -n "$bin"; \
         install -m 0755 "$bin" /out/dgdemux; \
+        txt="$(find /tmp/dgdemux -type f -iname dgdemux.txt | head -n1)"; \
+        if [ -n "$txt" ]; then install -m 0644 "$txt" /out/DGDemux.txt; fi; \
     else \
-        echo "WARNING: DGDemux ${DGDEMUX_VERSION} could not be downloaded; put it in /config/tools/dgdemux" >&2; \
+        echo "WARNING: DGDemux ${DGDEMUX_VERSION} could not be downloaded; put it (and DGDemux.txt) in /config/tools/" >&2; \
     fi
 
 # MediaInfo CLI, the static build MediaArea makes for AWS Lambda (no library packages needed).
