@@ -46,7 +46,7 @@ are rejected, so neither the workflow nor the Dockerfile moves to 2.x unless ask
 (`allow_makemkv_major` on the workflow, `Ripparr__Updates__AllowMakeMkvMajor=true` for the Tools page).
 
 **DGDemux**: rationalqm.us refuses downloads from build servers, so the image may come without it (the build
-log and the Tools page say so). Download `dgdemux_linux_<version>.zip` yourself and put the `dgdemux` binary in
+log and the Tools page say so). Download `dgdemux_linux_<version>.zip (1.0.0.85 is the pinned one)` yourself and put the `dgdemux` binary in
 `/config/tools/dgdemux` (executable); Ripparr uses a binary there instead of the image's.
 
 The MakeMKV key is entered on the Tools page and saved in `/config/makemkv/.MakeMKV/settings.conf`. It never
