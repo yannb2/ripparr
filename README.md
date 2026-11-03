@@ -17,11 +17,21 @@ size (a constant bit rate, as AC-3 or a DTS core, is taken as it is). For an ISO
 before MakeMKV has decrypted it: the form then shows what the playlist says (resolution, bit depth, HDR10,
 HDR10+ or Dolby Vision, frame rate, sample rate) and the full details come with the job.
 
-For foreign-language films, **Read subtitles** on the same form reads the whole film once (minutes for a UHD
-disc) and pulls out every picture subtitle track: each track gets its exact caption count and forced captions,
-and a preview page with every caption's picture, to find the forced or "foreign parts only" track before the
-job. The read goes on if the page is left, is kept in the subtitle folder (`disc-*`, pruned with the job
-previews) and works on folders and decrypted ISOs.
+For foreign-language films there are two more steps on the same form:
+
+- **Preview subtitles** reads the whole film once (minutes for a UHD disc) and pulls out every picture subtitle
+  track. Each track gets its exact caption count, its forced captions and a preview page with every caption's
+  picture. Tesseract also reads a sample of 120 captions per track: a track with SDH text (`[door slams]`,
+  `JOHN:`, ♪) in a tenth of them is ticked SDH (when the profile detects SDH), and one where many captions talk
+  about making the film ("this scene", "we shot", "on set", "the director", in English, French, German,
+  Spanish or Italian) is ticked Commentary. A later track in the same language with a third more captions than
+  the first backs that guess up. Hover the badge for what was found.
+- **Read subtitles** then has Tesseract read every caption of every track: SDH and commentary are checked again
+  on all of them (and set both ways), and the text shows in the preview and in **Side by side**, which lines up
+  the captions of the tracks you tick by time (filter: rows where a track has nothing, to find the forced one).
+
+Both run in the background, go on if the page is left, are kept in the subtitle folder (`disc-*`, pruned with
+the job previews) and work on folders and decrypted ISOs.
 
 ## What a job does
 

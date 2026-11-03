@@ -11,7 +11,7 @@
 }
 
 <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-    <h2 class="mb-0 me-auto">PID @Pid <span class="text-body-secondary fs-5">@_scan.SourceName · playlist @_scan.Playlist</span></h2>
+    <h2 class="mb-0 me-auto">@(_scan.Languages.GetValueOrDefault(Pid) is { } language ? Languages.Name(language) + " · " : "")PID @Pid <span class="text-body-secondary fs-5">@_scan.SourceName · playlist @_scan.Playlist</span></h2>
 </div>
 <div class="small text-body-secondary mb-3">
     Read from the disc before the job. Forced captions are the ones the disc marks forced; a track with only a few
@@ -20,16 +20,29 @@
 
 <div class="d-flex flex-wrap align-items-center gap-3 mb-3 small">
     <span>@_captions.Count captions, @_captions.Count(c => c.Forced) forced</span>
+    @if (_scan.Tracks.GetValueOrDefault(Pid)?.Reason is { } reason)
+    {
+        <span class="text-body-secondary">@reason</span>
+    }
     <span class="ms-auto">
         <select class="form-select form-select-sm" style="width: auto" value="@_filter" @onchange="ChangeFilter">
             <option value="all">All captions</option>
             <option value="forced">Forced only</option>
+            @if (_text.Count > 0)
+            {
+                <option value="sdh">With SDH text</option>
+            }
         </select>
     </span>
 </div>
 
 @{
-    var rows = _captions.Where(c => _filter != "forced" || c.Forced).ToList();
+    var rows = _captions.Where(c => _filter switch
+    {
+        "forced" => c.Forced,
+        "sdh" => SdhCleaner.HasSdh(_text.GetValueOrDefault(c.Index)?.Text ?? ""),
+        _ => true
+    }).ToList();
     var pages = Math.Max(1, (rows.Count + PageSize - 1) / PageSize);
     var page = Math.Min(_page, pages - 1);
 }
@@ -42,6 +55,10 @@
                 <th class="text-end">#</th>
                 <th>Time</th>
                 <th>Picture</th>
+                @if (_text.Count > 0)
+                {
+                    <th>OCR</th>
+                }
             </tr>
             </thead>
             <tbody>
@@ -61,6 +78,11 @@
                             <img src="api/discs/@Key/subtitles/@Pid/@(caption.Index).png" loading="lazy" alt="caption @caption.Index"/>
                         </div>
                     </td>
+                    @if (_text.Count > 0)
+                    {
+                        var text = _text.GetValueOrDefault(caption.Index)?.Text ?? "";
+                        <td style="white-space: pre-line" class="@(SdhCleaner.HasSdh(text) ? "text-info-emphasis" : "")">@text</td>
+                    }
                 </tr>
             }
             </tbody>
@@ -85,6 +107,7 @@
 
     private SubtitleScan? _scan;
     private List<PgsCaption>? _captions;
+    private Dictionary<int, OcrCaption> _text = [];
     private string _filter = "all";
     private int _page;
 
@@ -93,6 +116,7 @@
         _scan = Scanner.Find(Key);
         var sup = Scanner.SupFile(Key, Pid);
         _captions = sup == null ? null : CaptionCache.Get(sup);
+        _text = Scanner.Text(Key, Pid);
     }
 
     private void ChangeFilter(ChangeEventArgs e)

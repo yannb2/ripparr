@@ -253,7 +253,7 @@
                     @if (_subtitles is { Running: true } running)
                     {
                         <span class="spinner-border spinner-border-sm text-secondary"></span>
-                        <span class="text-body-secondary">Reading the subtitles: the whole film is read once, @((running.Progress * 100).ToString("0"))%…</span>
+                        <span class="text-body-secondary">@running.Stage, @((running.Progress * 100).ToString("0"))%…</span>
                         <div class="progress flex-grow-1" style="height: 6px; max-width: 20rem">
                             <div class="progress-bar" style="width: @((running.Progress * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
                         </div>
@@ -266,16 +266,53 @@
                     }
                     else if (_subtitles != null)
                     {
+                        <span class="w-100 order-last d-flex flex-wrap align-items-center gap-2 mt-1">
+                            <span class="text-body-secondary">Compare:</span>
+                            @foreach (var read in _subtitles.Tracks.Values)
+                            {
+                                var language = _subtitles.Languages.GetValueOrDefault(read.Pid);
+                                <label class="form-check form-check-inline mb-0 me-1">
+                                    <input type="checkbox" class="form-check-input" checked="@_compare.Contains(read.Pid)"
+                                           @onchange="e => ToggleCompare(read.Pid, e)"/>
+                                    @(language == null ? "" : Languages.Name(language) + " ")<span class="text-body-secondary">@read.Pid · @read.Captions</span>
+                                </label>
+                            }
+                            @if (_compare.Count >= 2)
+                            {
+                                <a class="btn btn-sm btn-outline-secondary" target="_blank"
+                                   href="@($"discs/{_subtitles.Key}/compare?pids={string.Join(',', _subtitles.Tracks.Keys.Where(_compare.Contains))}")">
+                                    <i class="bi bi-layout-three-columns"></i> Side by side
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-body-secondary">tick two or more tracks</span>
+                            }
+                        </span>
                         <i class="bi bi-check2 text-success"></i>
-                        <span class="text-body-secondary">Subtitles read in @(_subtitles.Took.TotalSeconds < 60 ? $"{_subtitles.Took.TotalSeconds:0.#} s" : Format.Duration(_subtitles.Took)): caption counts and <i class="bi bi-eye"></i> previews below.</span>
+                        <span class="text-body-secondary">
+                            @(_subtitles.FullText ? "Subtitles read" : "Subtitles previewed") in @(_subtitles.Took.TotalSeconds < 60 ? $"{_subtitles.Took.TotalSeconds:0.#} s" : Format.Duration(_subtitles.Took)):
+                            caption counts and <i class="bi bi-eye"></i> previews below@(SubtitleFlagsNote).
+                        </span>
+                        @if (_subtitles.Stage.StartsWith("The OCR failed", StringComparison.Ordinal))
+                        {
+                            <span class="text-danger">@_subtitles.Stage</span>
+                        }
+                        @if (!_subtitles.FullText)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ReadAllText"
+                                    title="Tesseract reads every caption of every track: SDH and commentary checked on all of them, and the text shows in the preview and compare pages. A few minutes per track.">
+                                <i class="bi bi-fonts"></i> Read subtitles
+                            </button>
+                        }
                     }
                     else
                     {
                         <button class="btn btn-sm btn-outline-secondary" @onclick="ReadSubtitles"
-                                title="Reads the whole film once (minutes for a UHD disc) for each subtitle track's exact caption count, forced captions and a preview">
-                            <i class="bi bi-badge-cc"></i> Read subtitles
+                                title="Reads the whole film once (minutes for a UHD disc) for each subtitle track's exact caption count, forced captions, a preview and a quick SDH / commentary check on a sample">
+                            <i class="bi bi-badge-cc"></i> Preview subtitles
                         </button>
-                        <span class="text-body-secondary">Caption counts and previews, to pick the forced or default track. Reads the whole film once.</span>
+                        <span class="text-body-secondary">Caption counts, previews and a quick SDH / commentary check, to pick the forced or default track. Reads the whole film once.</span>
                     }
                 </div>
             }
@@ -440,6 +477,19 @@
     }
 
     private SubtitleScan? _subtitles;
+    private readonly HashSet<int> _compare = [];
+
+    private void ToggleCompare(int pid, ChangeEventArgs e)
+    {
+        if (e.Value is true)
+        {
+            _compare.Add(pid);
+        }
+        else
+        {
+            _compare.Remove(pid);
+        }
+    }
     private Timer? _subtitleTimer;
 
     /// <summary>Starts the full subtitle read (it goes on if the page is left) and follows it.</summary>
@@ -452,6 +502,16 @@
 
         _subtitles = Scanner.Start(_source!, _analysis, _selected);
         WatchSubtitles();
+    }
+
+    /// <summary>"Read subtitles": the OCR of every caption, after the preview.</summary>
+    private void ReadAllText()
+    {
+        if (_subtitles != null && Scanner.StartFullText(_subtitles.Key) is { } scan)
+        {
+            _subtitles = scan;
+            WatchSubtitles();
+        }
     }
 
     /// <summary>Refreshes the page every second while the read runs.</summary>
@@ -478,7 +538,16 @@
         }), null, 1000, 1000);
     }
 
-    /// <summary>The caption counts on the job's subtitle tracks, so the job keeps them too.</summary>
+    /// <summary>
+    /// The plan and guess version the read's SDH and commentary flags went on: once per plan and
+    /// version, so an unticked flag stays unticked until "Read subtitles" brings new guesses.
+    /// </summary>
+    private (TrackPlan? Plan, int Version) _flagged;
+
+    /// <summary>
+    /// The caption counts on the job's subtitle tracks, so the job keeps them too, and the SDH
+    /// (when the profile detects SDH) and commentary flags the OCR of a sample found.
+    /// </summary>
     private void ApplySubtitles()
     {
         if (_plan == null || _subtitles is not { Running: false, Error: null })
@@ -486,12 +555,46 @@
             return;
         }
 
+        var flag = _flagged != (_plan, _subtitles.GuessVersion);
+        // After every caption was read, the guesses are firm: they set the flags both ways.
+        var both = flag && _flagged.Plan == _plan && _subtitles.FullText;
+        _flagged = (_plan, _subtitles.GuessVersion);
         foreach (var track in _plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle))
         {
             if (_subtitles.Tracks.TryGetValue(track.Pid, out var read))
             {
                 track.Details = $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
+                if (flag && Profile.DetectSdh && (read.Sdh || both))
+                {
+                    track.HearingImpaired = read.Sdh;
+                }
+
+                if (flag && (read.Commentary || both))
+                {
+                    track.Commentary = read.Commentary;
+                }
             }
+        }
+    }
+
+    private string SubtitleFlagsNote
+    {
+        get
+        {
+            var sdh = _subtitles?.Tracks.Values.Count(t => t.Sdh) ?? 0;
+            var commentary = _subtitles?.Tracks.Values.Count(t => t.Commentary) ?? 0;
+            var parts = new List<string>();
+            if (sdh > 0)
+            {
+                parts.Add(Profile.DetectSdh ? $"{sdh} SDH track{(sdh > 1 ? "s" : "")} found and ticked" : $"{sdh} SDH track{(sdh > 1 ? "s" : "")} found (the profile does not tick SDH by itself)");
+            }
+
+            if (commentary > 0)
+            {
+                parts.Add($"{commentary} commentary track{(commentary > 1 ? "s" : "")} guessed and ticked");
+            }
+
+            return parts.Count == 0 ? "" : "; " + string.Join(", ", parts);
         }
     }
 

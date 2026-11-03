@@ -48,6 +48,18 @@
                     @if (track.Kind == StreamKind.Subtitle && Subtitles is { Running: false, Error: null } scan && scan.Tracks.TryGetValue(track.Pid, out var read))
                     {
                         <a class="ms-1" href="discs/@scan.Key/subtitles/@track.Pid" target="_blank" title="Preview the captions (new tab)"><i class="bi bi-eye"></i></a>
+                        @if (read.Sdh)
+                        {
+                            <span class="badge text-bg-info ms-1" title="@read.Reason">SDH found</span>
+                        }
+                        @if (read.Commentary)
+                        {
+                            <span class="badge text-bg-warning ms-1" title="@read.Reason">commentary?</span>
+                        }
+                        @if (!read.Sdh && !read.Commentary && read.Reason != null)
+                        {
+                            <i class="bi bi-info-circle text-body-secondary ms-1" title="@read.Reason"></i>
+                        }
                     }
                 </td>
                 @if (Probe != null)
