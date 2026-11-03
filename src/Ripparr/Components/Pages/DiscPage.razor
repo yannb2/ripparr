@@ -335,6 +335,8 @@
 
             <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles"/>
 
+            <ChapterList Playlist="_selected.Mpls" Naming="Profile.Chapters"/>
+
             @if (Profile.WriteTags)
             {
                 <div class="mt-3">
