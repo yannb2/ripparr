@@ -1,0 +1,27 @@
+# Ripparr on the media VM. Make the config folder first, owned by the user below:
+#   sudo mkdir -p /config/ripparr && sudo chown 1000:1000 /config/ripparr
+# The MakeMKV key goes in on the Tools page (it is saved in /config/ripparr/makemkv/.MakeMKV/settings.conf),
+# never in this file or in .env.
+services:
+  ripparr:
+    image: ghcr.io/yannb2/ripparr:dev
+    container_name: ripparr
+    restart: unless-stopped
+    user: 1000:1000
+    ports:
+      - 8186:8186
+    environment:
+      TZ: America/Toronto
+      Ripparr__Radarr__Url: http://radarr:7878
+      Ripparr__Radarr__ApiKey: ${RADARR_API_KEY}
+      # Defaults, shown here to make them easy to change:
+      # Ripparr__WorkFolder: /downloads/ripparr/work
+      # Ripparr__DoneFolder: /downloads/ripparr/done
+      # Ripparr__Updates__AllowMakeMkvMajor: "false"
+    volumes:
+      - /config/ripparr:/config
+      # Scratch: ISO files and BDMV folders anywhere under it, work and done folders too.
+      - /downloads:/downloads
+      # USB drives mounted on the VM under /mnt/usb show up as a second source.
+      # rslave: a drive plugged in after the container started still appears.
+      - /mnt/usb:/usb:ro,rslave

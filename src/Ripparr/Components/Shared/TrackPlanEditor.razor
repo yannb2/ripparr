@@ -1,0 +1,98 @@
+@* The tracks of a job: keep, language, flags, name and order. Changes go straight into the plan. *@
+
+<div class="table-responsive">
+    <table class="table table-sm align-middle mb-0 small">
+        <thead>
+        <tr>
+            <th title="Keep">Keep</th>
+            <th>Track</th>
+            <th>From the disc</th>
+            <th style="width: 6rem">Language</th>
+            <th title="Default track">Default</th>
+            <th title="Forced subtitles">Forced</th>
+            <th title="Commentary">Comm.</th>
+            <th>Name (empty = from the profile)</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var track in Plan.Tracks)
+        {
+            <tr class="@(track.Keep ? "" : "text-body-secondary")">
+                <td><input type="checkbox" class="form-check-input" @bind="track.Keep"/></td>
+                <td class="text-nowrap">
+                    @if (track.DolbyVisionLayer)
+                    {
+                        <span class="badge sv-dv">DV layer</span>
+                    }
+                    else
+                    {
+                        @track.Kind
+                    }
+                </td>
+                <td class="text-nowrap">
+                    @track.Codec @track.Layout
+                    @if (!string.IsNullOrEmpty(track.DiscLanguage))
+                    {
+                        <span class="text-body-secondary">· @track.DiscLanguage</span>
+                    }
+                    <span class="text-body-secondary">· PID @($"0x{track.Pid:X4}")</span>
+                </td>
+                <td>
+                    @if (!track.DolbyVisionLayer)
+                    {
+                        <input class="form-control form-control-sm" @bind="track.Language" title="@Languages.Name(track.Language)"/>
+                    }
+                </td>
+                <td>
+                    @if (!track.DolbyVisionLayer)
+                    {
+                        <input type="checkbox" class="form-check-input" checked="@track.Default" @onchange="e => SetDefault(track, e)"/>
+                    }
+                </td>
+                <td>
+                    @if (track.Kind == StreamKind.Subtitle)
+                    {
+                        <input type="checkbox" class="form-check-input" @bind="track.Forced"/>
+                    }
+                </td>
+                <td>
+                    @if (track.Kind == StreamKind.Audio)
+                    {
+                        <input type="checkbox" class="form-check-input" @bind="track.Commentary"/>
+                    }
+                </td>
+                <td>
+                    @if (!track.DolbyVisionLayer)
+                    {
+                        <input class="form-control form-control-sm" @bind="track.Name"/>
+                    }
+                </td>
+                <td class="text-nowrap">
+                    @if (!track.DolbyVisionLayer)
+                    {
+                        <button class="btn btn-sm btn-link p-0 me-1" title="Up" @onclick="() => Plan.Move(track, -1)"><i class="bi bi-arrow-up"></i></button>
+                        <button class="btn btn-sm btn-link p-0" title="Down" @onclick="() => Plan.Move(track, 1)"><i class="bi bi-arrow-down"></i></button>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TrackPlan Plan { get; set; } = new();
+
+    private void SetDefault(PlannedTrack track, ChangeEventArgs e)
+    {
+        if (e.Value is true)
+        {
+            Plan.SetDefault(track);
+        }
+        else
+        {
+            track.Default = false;
+        }
+    }
+}

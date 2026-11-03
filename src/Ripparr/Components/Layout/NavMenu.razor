@@ -1,0 +1,121 @@
+@implements IDisposable
+@inject JobEvents Events
+@inject JobStore Store
+
+<nav class="sv-sidebar @(_collapsed ? "collapsed" : "") @(MobileOpen ? "sv-mobile-open" : "")">
+    <div class="sv-sidebar-header d-none d-md-flex">
+        <a href="" class="d-flex align-items-center gap-2 text-decoration-none">
+            <img src="favicon.svg" alt="" class="sv-logo"/>
+            <span class="text-light fw-semibold sv-logo-text">Ripparr</span>
+        </a>
+    </div>
+
+    <div class="sv-nav-content">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="Close">
+                    <i class="bi bi-disc"></i>
+                    <span>Sources</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="queue" @onclick="Close">
+                    <i class="bi bi-list-task"></i>
+                    <span>Queue@(_active > 0 ? $" ({_active})" : "")</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="profiles" @onclick="Close">
+                    <i class="bi bi-sliders"></i>
+                    <span>Profiles</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="tools" @onclick="Close">
+                    <i class="bi bi-tools"></i>
+                    <span>Tools</span>
+                </NavLink>
+            </li>
+            <li class="nav-item">
+                <NavLink class="nav-link" href="status" @onclick="Close">
+                    <i class="bi bi-info-circle"></i>
+                    <span>Status</span>
+                </NavLink>
+            </li>
+        </ul>
+    </div>
+
+    <div class="sv-sidebar-footer">
+        <ul class="nav flex-column w-100">
+            <li class="nav-item">
+                <button class="nav-link w-100" onclick="ripparrTheme.toggle()">
+                    <i class="bi bi-circle-half"></i>
+                    <span>Light / dark</span>
+                </button>
+            </li>
+        </ul>
+        <div class="d-flex align-items-center justify-content-between sv-footer-meta">
+            <span class="d-flex align-items-center gap-2">
+                <ConnectionLight/>
+                <a href="https://github.com/yannb2/ripparr" target="_blank" rel="noopener"
+                   class="sv-version text-decoration-none">v@(AppInfo.Version)</a>
+            </span>
+            <button class="btn btn-link text-light p-0 sv-footer-btn d-none d-md-inline-flex"
+                    @onclick="() => _collapsed = !_collapsed"
+                    title="@(_collapsed ? "Expand" : "Collapse")">
+                <i class="bi @(_collapsed ? "bi-chevron-right" : "bi-chevron-left")"></i>
+            </button>
+        </div>
+    </div>
+</nav>
+
+@if (MobileOpen)
+{
+    <div class="sv-sidebar-backdrop d-md-none" @onclick="Close"></div>
+}
+
+@code {
+    [Parameter] public bool MobileOpen { get; set; }
+    [Parameter] public EventCallback<bool> MobileOpenChanged { get; set; }
+
+    private bool _collapsed;
+    private int _active;
+    private DateTime _lastCount = DateTime.MinValue;
+
+    protected override void OnInitialized()
+    {
+        Count();
+        Events.Changed += OnJobChanged;
+    }
+
+    private void Count()
+    {
+        _active = Store.List(200, [JobStatus.Queued, JobStatus.Running]).Count;
+        _lastCount = DateTime.UtcNow;
+    }
+
+    private void OnJobChanged(long id)
+    {
+        // Progress ticks often: count at most every two seconds.
+        if (DateTime.UtcNow - _lastCount < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            Count();
+            StateHasChanged();
+        });
+    }
+
+    private async Task Close()
+    {
+        if (MobileOpen)
+        {
+            await MobileOpenChanged.InvokeAsync(false);
+        }
+    }
+
+    public void Dispose() => Events.Changed -= OnJobChanged;
+}

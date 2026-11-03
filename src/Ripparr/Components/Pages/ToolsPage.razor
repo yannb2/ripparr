@@ -1,0 +1,192 @@
+@page "/tools"
+@implements IDisposable
+@inject ToolStatusService Tools
+@inject IOptions<RipparrOptions> Options
+@using Microsoft.Extensions.Options
+
+<PageTitle>Tools · Ripparr</PageTitle>
+
+<div class="d-flex align-items-center mb-3 gap-2">
+    <h2 class="mb-0 me-auto">Tools</h2>
+    <button class="btn btn-sm btn-outline-secondary" @onclick="Check" disabled="@Tools.Checking">
+        @if (Tools.Checking)
+        {
+            <span class="spinner-border spinner-border-sm me-1"></span>
+        }
+        else
+        {
+            <i class="bi bi-arrow-clockwise"></i>
+        }
+        Check for updates
+    </button>
+</div>
+
+<p class="text-body-secondary small">
+    Every tool is built into the image at a pinned version. Ripparr only looks for newer versions
+    @(Tools.UpstreamCheckedAt is { } at ? $"(last look {Format.TimeAgo(at)})" : "")
+    and never installs anything: an update is a new image, proposed each week as a pull request on GitHub.
+    @if (!Options.Value.Updates.AllowMakeMkvMajor)
+    {
+        <span>MakeMKV 2.x is held back until <code>Ripparr__Updates__AllowMakeMkvMajor=true</code>.</span>
+    }
+</p>
+
+<div class="card mb-3">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0">
+            <thead>
+            <tr>
+                <th>Tool</th>
+                <th>In the image</th>
+                <th>Pinned</th>
+                <th>Newest</th>
+                <th>Used for</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var status in Tools.Statuses)
+            {
+                <tr>
+                    <td class="fw-semibold text-nowrap">
+                        @status.Tool.Name
+                        @if (status.Tool.ReleaseNotes != null)
+                        {
+                            <a href="@status.Tool.ReleaseNotes" target="_blank" rel="noopener" class="ms-1" title="Release notes"><i class="bi bi-box-arrow-up-right small"></i></a>
+                        }
+                    </td>
+                    <td class="text-nowrap">
+                        @if (status.Missing)
+                        {
+                            <span class="badge text-bg-danger">not installed</span>
+                            @if (status.Tool.Id is "dgdemux" or "makemkv")
+                            {
+                                <div class="small text-body-secondary">put it in <code>/config/tools</code></div>
+                            }
+                        }
+                        else
+                        {
+                            @(status.Installed ?? "?")
+                        }
+                    </td>
+                    <td class="text-nowrap text-body-secondary">@(status.Pinned ?? "")</td>
+                    <td class="text-nowrap">
+                        @if (status.UpdateAvailable)
+                        {
+                            <span class="badge text-bg-info">@status.Latest available</span>
+                        }
+                        else if (status.Latest != null)
+                        {
+                            <span class="text-success">@status.Latest <i class="bi bi-check"></i></span>
+                        }
+                        else if (status.UpstreamError != null)
+                        {
+                            <span class="text-body-secondary small" title="@status.UpstreamError">could not check</span>
+                        }
+                        @if (status.HeldBack != null)
+                        {
+                            <span class="badge text-bg-warning ms-1" title="A new major version, held back on purpose.">@status.HeldBack held back</span>
+                        }
+                    </td>
+                    <td class="small text-body-secondary">@status.Tool.Purpose</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header fw-semibold">MakeMKV key</div>
+    <div class="card-body">
+        <p class="small text-body-secondary">
+            Kept in <code>@MakeMkv.SettingsPath(Options.Value.MakeMkvHome)</code> (<code>app_Key</code>), never in compose or git.
+            MakeMKV only runs for encrypted sources.
+        </p>
+        <div class="mb-2">
+            <span class="text-body-secondary small">Key now:</span>&nbsp;
+            @if (Tools.MakeMkv?.MaskedKey is { } masked)
+            {
+                <code>@masked</code>
+            }
+            else
+            {
+                <span class="badge text-bg-warning">none</span>
+            }
+        </div>
+        @if (Tools.MakeMkv?.Messages is { Count: > 0 } messages)
+        {
+            <ul class="small mb-2">
+                @foreach (var message in messages)
+                {
+                    <li>@message</li>
+                }
+            </ul>
+        }
+        <div class="input-group input-group-sm mb-2" style="max-width: 40rem">
+            <input class="form-control font-monospace" type="password" placeholder="T-… or M-…" @bind="_key"/>
+            <button class="btn btn-outline-primary" @onclick="SaveKey">Save key</button>
+            <button class="btn btn-outline-danger" @onclick="RemoveKey" disabled="@(Tools.MakeMkv?.MaskedKey == null)">Remove</button>
+        </div>
+        <button class="btn btn-sm btn-link px-0" @onclick="FetchBetaKey" disabled="@_fetching">
+            Use the current beta key from the MakeMKV forum
+        </button>
+        <span class="small text-body-secondary">(only if you have no purchased key; it changes every month or two)</span>
+        @if (_keyMessage != null)
+        {
+            <div class="small mt-2 @(_keyError ? "text-danger" : "text-success")">@_keyMessage</div>
+        }
+    </div>
+</div>
+
+@code {
+    private string? _key;
+    private string? _keyMessage;
+    private bool _keyError;
+    private bool _fetching;
+
+    protected override void OnInitialized() => Tools.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private void Check() => Tools.CheckNow();
+
+    private async Task SaveKey()
+    {
+        if (!MakeMkv.LooksLikeKey(_key))
+        {
+            (_keyMessage, _keyError) = ("That does not look like a MakeMKV key (T-… or M-…).", true);
+            return;
+        }
+
+        MakeMkv.WriteKey(Options.Value.MakeMkvHome, _key);
+        _key = null;
+        (_keyMessage, _keyError) = ("Saved. Checking what MakeMKV says about it…", false);
+        await Tools.RefreshAsync(false, CancellationToken.None);
+        _keyMessage = "Saved.";
+    }
+
+    private async Task RemoveKey()
+    {
+        MakeMkv.WriteKey(Options.Value.MakeMkvHome, null);
+        (_keyMessage, _keyError) = ("Removed.", false);
+        await Tools.RefreshAsync(false, CancellationToken.None);
+    }
+
+    private async Task FetchBetaKey()
+    {
+        _fetching = true;
+        var (key, error) = await ToolStatusService.FetchBetaKeyAsync(CancellationToken.None);
+        _fetching = false;
+        if (key == null)
+        {
+            (_keyMessage, _keyError) = (error, true);
+            return;
+        }
+
+        MakeMkv.WriteKey(Options.Value.MakeMkvHome, key);
+        (_keyMessage, _keyError) = ($"Beta key {MakeMkv.Mask(key)} saved.", false);
+        await Tools.RefreshAsync(false, CancellationToken.None);
+    }
+
+    public void Dispose() => Tools.Changed -= OnChanged;
+}

@@ -1,0 +1,121 @@
+@page "/queue"
+@implements IDisposable
+@inject JobStore Store
+@inject JobRunner Runner
+@inject JobEvents Events
+@inject NavigationManager Navigation
+
+<PageTitle>Queue · Ripparr</PageTitle>
+
+<div class="d-flex align-items-center mb-3">
+    <h2 class="mb-0 me-auto">Queue</h2>
+    <div class="form-check form-switch mb-0 small">
+        <input class="form-check-input" type="checkbox" id="showDry" @bind="_showDryRuns"/>
+        <label class="form-check-label" for="showDry">Show dry runs</label>
+    </div>
+</div>
+
+@if (_jobs.Count == 0)
+{
+    <div class="alert alert-secondary">No jobs yet. Pick a disc on the <a href="">Sources</a> page.</div>
+}
+else
+{
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Status</th>
+                    <th>Film</th>
+                    <th>Source</th>
+                    <th style="min-width: 12rem">Step</th>
+                    <th>Queued</th>
+                    <th>Time</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var job in _jobs.Where(j => _showDryRuns || !j.DryRun))
+                {
+                    <tr class="sv-clickable-row" @onclick="() => Navigation.NavigateTo(Href(job))">
+                        <td class="text-body-secondary">@job.Id</td>
+                        <td><JobStatusBadge Job="job"/></td>
+                        <td class="fw-semibold sv-file-name">@job.DisplayTitle</td>
+                        <td class="small sv-file-name">@job.SourceName <span class="text-body-secondary">· @job.Playlist</span></td>
+                        <td class="small">
+                            @if (job.Status == JobStatus.Running)
+                            {
+                                <div>@job.Step</div>
+                                <div class="progress" style="height: 6px">
+                                    <div class="progress-bar @(job.Progress == null ? "progress-bar-striped progress-bar-animated w-100" : "")"
+                                         style="@(job.Progress is { } p ? $"width: {p * 100:0.#}%" : "")"></div>
+                                </div>
+                            }
+                            else if (job.Status is JobStatus.Failed or JobStatus.Interrupted)
+                            {
+                                <span class="text-danger" title="@job.Error">@job.Step</span>
+                            }
+                        </td>
+                        <td class="small text-nowrap" title="@Format.LocalDate(job.Created)">@Format.TimeAgo(job.Created)</td>
+                        <td class="small text-nowrap">@(job.Elapsed is { } e ? Format.Duration(e) : "")</td>
+                        <td class="text-nowrap" @onclick:stopPropagation="true">
+                            @if (job.Status is JobStatus.Queued or JobStatus.Running)
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => Runner.Cancel(job.Id)">Cancel</button>
+                            }
+                            else if (job.CanRetry)
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => Retry(job)">Retry</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Job> _jobs = [];
+    private bool _showDryRuns = true;
+    private DateTime _lastLoad = DateTime.MinValue;
+
+    protected override void OnInitialized()
+    {
+        Load();
+        Events.Changed += OnChanged;
+    }
+
+    private void Load()
+    {
+        _jobs = Store.List(300);
+        _lastLoad = DateTime.UtcNow;
+    }
+
+    private void OnChanged(long id)
+    {
+        if (DateTime.UtcNow - _lastLoad < TimeSpan.FromSeconds(1))
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            Load();
+            StateHasChanged();
+        });
+    }
+
+    private void Retry(Job job)
+    {
+        Runner.Retry(job);
+        Load();
+    }
+
+    private static string Href(Job job) => $"job/{job.Id}";
+
+    public void Dispose() => Events.Changed -= OnChanged;
+}

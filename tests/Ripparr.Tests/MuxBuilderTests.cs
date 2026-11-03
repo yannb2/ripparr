@@ -1,0 +1,154 @@
+using Ripparr.Disc;
+using Ripparr.Jobs;
+using Ripparr.Media;
+using Ripparr.Profiles;
+
+namespace Ripparr.Tests;
+
+[TestClass]
+public class MuxBuilderTests
+{
+    private static readonly Mpls Film = Mpls.Parse(MplsBuilder.UhdFilm().Build());
+
+    private static DemuxedFile Video(string name, int width, bool dv = false) =>
+        new($"/w/{name}", new StreamFacts
+        {
+            Kind = StreamKind.Video, Format = "HEVC", Width = width, Height = width * 9 / 16,
+            HdrFormat = dv ? "Dolby Vision / SMPTE ST 2086" : "SMPTE ST 2086", HdrCompatibility = "HDR10",
+            HdrProfile = dv ? "dvhe.07.06" : null
+        });
+
+    private static DemuxedFile Audio(string name, string format, int channels, string? commercial = null) =>
+        new($"/w/{name}", new StreamFacts
+        {
+            Kind = StreamKind.Audio, Format = format, Channels = channels, Commercial = commercial,
+            ChannelLayout = channels > 2 ? "L R C LFE Ls Rs Lb Rb" : "L R"
+        });
+
+    private static DemuxedFile Subtitle(string name) => new($"/w/{name}", new StreamFacts { Kind = StreamKind.Subtitle, Format = "PGS" });
+
+    private static List<DemuxedFile> Files() =>
+    [
+        Video("00800.hevc", 3840),
+        Video("00800.el.hevc", 1920, dv: true),
+        Audio("00800_1100.thd", "MLP FBA", 8, "Dolby TrueHD with Dolby Atmos"),
+        Audio("00800_1100.ac3", "AC-3", 6),
+        Audio("00800_1101.ac3", "AC-3", 6),
+        Audio("00800_1102.dtshd", "DTS", 6, "DTS-HD Master Audio"),
+        Audio("00800_1103.ac3", "AC-3", 2),
+        Subtitle("00800_1200.sup"),
+        Subtitle("00800_1201.sup"),
+        Subtitle("00800_1202.sup")
+    ];
+
+    [TestMethod]
+    public void MapsFilesByPidAndFindsTheLayerAndCores()
+    {
+        var mapping = MuxBuilder.Map(Film, Files());
+
+        Assert.AreEqual("00800.el.hevc", mapping.EnhancementLayer?.FileName);
+        Assert.AreEqual("00800.hevc", mapping.Files[0].FileName);
+        Assert.AreEqual("00800_1100.thd", mapping.Files[1].FileName);
+        Assert.AreEqual("00800_1101.ac3", mapping.Files[2].FileName);
+        Assert.AreEqual("00800_1102.dtshd", mapping.Files[3].FileName);
+        Assert.AreEqual("00800_1103.ac3", mapping.Files[4].FileName);
+        Assert.AreEqual("00800_1201.sup", mapping.Files[6].FileName);
+        Assert.AreEqual("00800_1100.ac3", mapping.Cores.Single().Value.FileName);
+        Assert.IsEmpty(mapping.Warnings);
+    }
+
+    [TestMethod]
+    public void MapsByOrderWithoutPidsAndWarnsOnMissingFiles()
+    {
+        List<DemuxedFile> files = [Video("a.hevc", 3840), Audio("b1.thd", "MLP FBA", 8), Audio("b2.ac3", "AC-3", 6), Subtitle("c1.sup")];
+        var mapping = MuxBuilder.Map(Film, files);
+
+        Assert.AreEqual("b1.thd", mapping.Files[1].FileName);
+        Assert.AreEqual("b2.ac3", mapping.Files[2].FileName);
+        Assert.HasCount(2, mapping.Warnings);
+    }
+
+    [TestMethod]
+    public void BuildsNamedOutputsInPlanOrder()
+    {
+        var profile = new RipProfile();
+        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+
+        CollectionAssert.AreEqual(new[]
+        {
+            "", "English - TrueHD Atmos 7.1", "French - DTS-HD MA 5.1", "English - Commentary - AC3 2.0", "English", "French"
+        }, outputs.Select(o => o.Name).ToArray());
+    }
+
+    [TestMethod]
+    public void KeepsTheTrueHdCoreWhenAsked()
+    {
+        var profile = new RipProfile { KeepTrueHdCore = true };
+        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+
+        Assert.AreEqual("English - AC3 5.1", outputs[2].Name);
+    }
+
+    [TestMethod]
+    public void MkvmergeArgumentsCarryFlagsAndOrder()
+    {
+        var profile = new RipProfile();
+        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+        var arguments = MuxBuilder.MkvmergeArguments("/o/x.mkv", "Film (2020)", outputs, "/w/ch.txt", "/w/tags.xml", (24000, 1001), "/w/bl-el.hevc");
+        var text = string.Join(' ', arguments);
+
+        StringAssert.StartsWith(text, "--gui-mode -o /o/x.mkv --title Film (2020) --global-tags /w/tags.xml --chapters /w/ch.txt");
+        StringAssert.Contains(text, "--default-duration 0:24000/1001p /w/bl-el.hevc");
+        StringAssert.Contains(text, "--track-name 0:English - TrueHD Atmos 7.1 --default-track-flag 0:yes /w/00800_1100.thd");
+        StringAssert.Contains(text, "--commentary-flag 0:yes /w/00800_1103.ac3");
+        StringAssert.Contains(text, "--forced-display-flag 0:no /w/00800_1200.sup");
+        StringAssert.EndsWith(text, "--track-order 0:0,1:0,2:0,3:0,4:0,5:0");
+    }
+
+    [TestMethod]
+    public void NameValuesUseTheStreams()
+    {
+        var profile = new RipProfile();
+        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+        var job = new Job { Title = "Film", Year = 2020, Profile = profile };
+
+        Assert.AreEqual("Film (2020) [2160p][HEVC][HDR10][TrueHD Atmos-7.1][BDRemux]",
+            Naming.Apply(profile.FileNameTemplate, MuxBuilder.NameValues(job, outputs)));
+    }
+
+    [TestMethod]
+    public void ChapterFileIsOgm()
+    {
+        Assert.AreEqual("CHAPTER01=00:00:00.000\nCHAPTER01NAME=Chapter 01\nCHAPTER02=00:10:00.000\nCHAPTER02NAME=Chapter 02\n" +
+                        "CHAPTER03=01:00:00.000\nCHAPTER03NAME=Chapter 03\nCHAPTER04=01:15:00.000\nCHAPTER04NAME=Chapter 04\n",
+            MuxBuilder.ChapterFile(Film, ChapterNaming.Numbered));
+    }
+
+    [TestMethod]
+    public void TagsXmlHasTheIdsAndEscapes()
+    {
+        var job = new Job { Title = "A & B", Year = 2020, TmdbId = 603, ImdbId = "tt0133093", SourceName = "A.&.B.2020", Playlist = "00800", Edition = "Director's Cut" };
+        var xml = MuxBuilder.TagsXml(job, []);
+
+        StringAssert.Contains(xml, "<Name>TMDB</Name><String>movie/603</String>");
+        StringAssert.Contains(xml, "<Name>RELEASE_NAME</Name><String>A.&amp;.B.2020</String>");
+        StringAssert.Contains(xml, "<Name>EDITION</Name><String>Director&apos;s Cut</String>");
+        StringAssert.Contains(xml, "<TargetTypeValue>50</TargetTypeValue>");
+    }
+
+    [TestMethod]
+    public void SmallHelpers()
+    {
+        Assert.AreEqual(-24, MuxBuilder.Delay("track1 DELAY -24ms.ac3"));
+        Assert.IsNull(MuxBuilder.Delay("track1.ac3"));
+        Assert.AreEqual(0.45, MuxBuilder.PercentProgress("#GUI#progress 45%")!.Value, 0.0001);
+        Assert.IsTrue(MuxBuilder.IsStreamFile("/a/b.sup"));
+        Assert.IsFalse(MuxBuilder.IsStreamFile("/a/b.txt"));
+        CollectionAssert.AreEqual(new[] { "-i", "/d/BDMV/PLAYLIST/00800.mpls", "-o", "/w/00800" },
+            JobPipeline.ExpandArguments("-i {input} -o {output}", "/d/BDMV/PLAYLIST/00800.mpls", "/w/00800"));
+    }
+}

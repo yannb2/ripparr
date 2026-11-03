@@ -1,0 +1,65 @@
+@page "/profiles"
+@inject JobStore Store
+@inject NavigationManager Navigation
+
+<PageTitle>Profiles · Ripparr</PageTitle>
+
+<div class="d-flex align-items-center mb-3">
+    <h2 class="mb-0 me-auto">Profiles</h2>
+    <button class="btn btn-sm btn-primary" @onclick="New"><i class="bi bi-plus-lg"></i> New profile</button>
+</div>
+
+<p class="text-body-secondary small">
+    A profile decides which tracks a job keeps and how it names them. A job keeps a copy of its profile, so
+    editing one here never changes a job already queued.
+</p>
+
+<div class="row g-3">
+    @foreach (var profile in _profiles)
+    {
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title mb-1">@profile.Name</h5>
+                    <p class="small text-body-secondary">@profile.Description</p>
+                    <div class="small">
+                        <div><span class="text-body-secondary">Audio:</span> @string.Join(", ", profile.AudioLanguages)@(profile.KeepOtherAudioLanguages ? " + others" : "")</div>
+                        <div><span class="text-body-secondary">Subtitles:</span> @string.Join(", ", profile.SubtitleLanguages)@(profile.KeepOtherSubtitleLanguages ? " + others" : "")</div>
+                        <div><span class="text-body-secondary">Dolby Vision layer:</span> @(profile.KeepDolbyVisionLayer ? "kept" : "dropped")</div>
+                        <div class="sv-path mt-1">@profile.FileNameTemplate</div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex gap-2">
+                    <a class="btn btn-sm btn-outline-primary" href="profiles/@profile.Id">Edit</a>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => Copy(profile)">Copy</button>
+                    <button class="btn btn-sm btn-outline-danger ms-auto" @onclick="() => Delete(profile)" disabled="@(_profiles.Count <= 1)">Delete</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<RipProfile> _profiles = [];
+
+    protected override void OnInitialized() => _profiles = Store.Profiles();
+
+    private void New()
+    {
+        var profile = new RipProfile();
+        Store.SaveProfile(profile);
+        Navigation.NavigateTo($"profiles/{profile.Id}");
+    }
+
+    private void Copy(RipProfile profile)
+    {
+        Store.SaveProfile(profile.Copy());
+        _profiles = Store.Profiles();
+    }
+
+    private void Delete(RipProfile profile)
+    {
+        Store.DeleteProfile(profile.Id);
+        _profiles = Store.Profiles();
+    }
+}
