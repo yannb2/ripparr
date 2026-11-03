@@ -47,6 +47,18 @@ public sealed class JobStore
             {
                 SaveProfile(connection, profile, position++);
             }
+
+            Execute(connection, $"INSERT OR REPLACE INTO settings (key, value) VALUES ('{ExtrasAddedKey}', '1')");
+        }
+        else if (Scalar<long>(connection, $"SELECT COUNT(*) FROM settings WHERE key = '{ExtrasAddedKey}'") == 0)
+        {
+            // 0.3.5 brings an Extras profile: added once to an existing install (deleting it later sticks).
+            if (Scalar<long>(connection, $"SELECT COUNT(*) FROM profiles WHERE id = '{RipProfile.ExtrasId}'") == 0)
+            {
+                SaveProfile(connection, RipProfile.Extras(), Scalar<long>(connection, "SELECT COALESCE(MAX(position), -1) + 1 FROM profiles"));
+            }
+
+            Execute(connection, $"INSERT OR REPLACE INTO settings (key, value) VALUES ('{ExtrasAddedKey}', '1')");
         }
     }
 
@@ -189,6 +201,9 @@ public sealed class JobStore
     }
 
     // ---- Settings ----
+
+    /// <summary>Set once the Extras profile was added to an install that already had profiles.</summary>
+    private const string ExtrasAddedKey = "profiles.extras-added";
 
     public string? Setting(string key)
     {

@@ -85,14 +85,31 @@ folder (already the case under `/mnt/pc` with `rslave`); set `Ripparr__IsoMount_
 The disc page says whether the service answers. By hand: `sudo ripparr_mount.py mount /downloads/film.iso`,
 `list`, `unmount <path>`.
 
+## Extras
+
+Under the film's form, the disc page has an **Extras** card listing the disc's other playlists (not the film's,
+nothing under 10 seconds, no duplicates). Tick the ones to keep, give each a type and a name, and queue them:
+one job each, with the title, year, IDs and tags of the film's form. **Pictures** shows three frames of a
+playlist (at a tenth, half and nine tenths) to tell them apart; they are cached in `/config/thumbnails`. For an
+ISO they are streamed out with 7-Zip, so only from clips up to 8 GB.
+
+A playlist that is just other playlists one after the other is flagged **Play all** and hidden with the
+duplicates (the switch shows them): ripping it would repeat the others.
+
+The extras use the **Extras** profile (original language and English audio, English and French subtitles, no
+OCR) unless another is picked. An extra is named after what was typed (`Making Of.mkv`, MKV title
+`Making Of`; empty gives `Featurette 2`) and goes to `done/Title (Year)/<type>/`. The types are the folder
+names that both Jellyfin and Radarr leave alone: `featurettes`, `behind the scenes`, `deleted scenes`,
+`interviews`, `scenes`, `shorts`, `trailers` and `extras`. Move the type folder next to the film in the library.
+
 ## Profiles
 
 A profile decides the track plan: audio and subtitle languages in order (`original` is the film's own language
 from Radarr), commentaries, lossy tracks next to lossless ones, the TrueHD AC-3 core, track name templates,
 chapter names, the file name and MKV title templates, the global tags, the SRT (OCR) languages and the
 DGDemux arguments (empty = the global default; the profile page shows the exact command and DGDemux's own
-options). Two come built in (UHD remux and
-Blu-ray remux), and they can be copied and changed. The plan can still be edited per job on the disc page.
+options). Three come built in (UHD remux,
+Blu-ray remux and Extras), and they can be copied and changed. The plan can still be edited per job on the disc page.
 
 The default file name follows Radarr's Standard Movie Format in this library:
 `Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BDRemux].mkv`.

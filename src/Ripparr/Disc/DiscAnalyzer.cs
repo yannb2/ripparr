@@ -213,6 +213,9 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
         return name.Length == 0 || name.Equals("Blu-ray", StringComparison.OrdinalIgnoreCase) ? null : name;
     }
 
+    /// <summary>Whether a path is inside one of the configured source folders.</summary>
+    public bool InSources(string path) => _options.Sources.Any(r => IsUnder(Path.GetFullPath(path), r.Path));
+
     private static bool IsUnder(string path, string root)
     {
         var full = Path.GetFullPath(root).TrimEnd('/') + "/";

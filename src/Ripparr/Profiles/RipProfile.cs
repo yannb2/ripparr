@@ -218,6 +218,25 @@ public sealed class RipProfile : IJsonOnDeserialized
             Id = "bd-remux",
             Name = "Blu-ray remux",
             Description = "A 1080p Blu-ray, lossless audio and commentaries, lossy duplicates dropped."
-        }
+        },
+        Extras()
     ];
+
+    public const string ExtrasId = "extras";
+
+    /// <summary>
+    /// For featurettes, trailers and other extras: the film's language and English, no
+    /// commentaries, no OCR. The file is named after the extra, not the film.
+    /// </summary>
+    public static RipProfile Extras() => new()
+    {
+        Id = ExtrasId,
+        Name = "Extras",
+        Description = "Featurettes, trailers, deleted scenes: the film's language and English, subtitles in English and French, no OCR.",
+        AudioLanguages = ["original", "eng"],
+        KeepCommentary = false,
+        SubtitleLanguages = ["eng", "fre"],
+        SrtLanguages = [],
+        DetectSdh = false
+    };
 }

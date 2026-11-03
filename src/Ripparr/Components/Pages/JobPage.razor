@@ -24,6 +24,10 @@
     {
         <span class="badge text-bg-light">Dry run</span>
     }
+    @if (_job.IsExtra)
+    {
+        <span class="badge text-bg-info" title="Goes to Title (Year)/@_job.ExtraType/ next to the film">Extra: @ExtraTypes.Label(_job.ExtraType)</span>
+    }
     <span class="ms-auto d-flex gap-2">
         @if (_job.Status is JobStatus.Queued or JobStatus.Running)
         {

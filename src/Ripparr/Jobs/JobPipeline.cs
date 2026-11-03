@@ -207,8 +207,9 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         context.Step(JobSteps.Mux);
         Directory.CreateDirectory(context.OutFolder);
         var values = MuxBuilder.NameValues(job, outputs);
-        var fileName = Naming.SafeFileName(Naming.Apply(job.Profile.FileNameTemplate, values)) + ".mkv";
-        var title = Naming.Apply(job.Profile.TitleTemplate, values);
+        // An extra is named by hand ("Making Of"): Jellyfin shows the file name.
+        var fileName = Naming.SafeFileName(job.IsExtra ? job.ExtraName! : Naming.Apply(job.Profile.FileNameTemplate, values)) + ".mkv";
+        var title = job.IsExtra ? job.ExtraName!.Trim() : Naming.Apply(job.Profile.TitleTemplate, values);
         var outPath = Path.Combine(context.OutFolder, fileName);
 
         string? chaptersPath = null;
@@ -272,8 +273,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         // ---- Finish ----
         context.Step(JobSteps.Finish);
-        var folder = Path.Combine(context.Options.DoneFolder,
-            Naming.SafeFileName(Naming.Apply("{title} ({year})", values)));
+        var folder = DoneFolder(context.Options.DoneFolder, job, values);
         Directory.CreateDirectory(folder);
         var target = FreeName(Path.Combine(folder, fileName));
         File.Move(outPath, target);
@@ -283,6 +283,13 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         {
             TryDeleteFolder(context, context.WorkFolder);
         }
+    }
+
+    /// <summary>done/Title (Year)/, and for an extra done/Title (Year)/featurettes/ (its type's folder).</summary>
+    public static string DoneFolder(string doneRoot, Job job, IReadOnlyDictionary<string, string?> values)
+    {
+        var film = Path.Combine(doneRoot, Naming.SafeFileName(Naming.Apply("{title} ({year})", values)));
+        return job.IsExtra ? Path.Combine(film, job.ExtraType!) : film;
     }
 
     public enum Prepare
@@ -584,6 +591,12 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         if (context.Job.Profile.WriteTags && context.Job.Tags.Any(t => t.Value.Length > 0))
         {
             context.Log("  + your global tags: " + string.Join(", ", context.Job.Tags.Where(t => t.Value.Length > 0).Select(t => $"{t.Name}={t.Value}")));
+        }
+
+        if (context.Job.IsExtra)
+        {
+            context.Log($"Then: the extra goes to {Path.Combine(DoneFolder(context.Options.DoneFolder, context.Job,
+                MuxBuilder.NameValues(context.Job, [])), Naming.SafeFileName(context.Job.ExtraName!) + ".mkv")}");
         }
 
         context.Log("Dry run: nothing was run.");

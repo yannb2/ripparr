@@ -68,7 +68,8 @@ RUN set -eux; \
     install -m 0755 "$(find /tmp/mediainfo -type f -name mediainfo | head -n1)" /out/mediainfo; \
     /out/mediainfo --version
 
-# Static ffprobe from BtbN, the same build Muxarr, Salvarr and Specarr use.
+# Static ffprobe and ffmpeg from BtbN, the same build Muxarr, Salvarr and Specarr use (ffmpeg takes the
+# pictures of the playlists on the disc page).
 FROM debian:13-slim AS ffprobe
 ARG FFMPEG_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates xz-utils \
@@ -76,8 +77,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 RUN set -eux; \
     curl -fsSL "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n${FFMPEG_VERSION}-latest-linux64-gpl-${FFMPEG_VERSION}.tar.xz" -o /tmp/ffmpeg.tar.xz; \
     mkdir -p /out; \
-    tar -xJf /tmp/ffmpeg.tar.xz -C /out --strip-components=2 --wildcards '*/bin/ffprobe'; \
-    /out/ffprobe -version
+    tar -xJf /tmp/ffmpeg.tar.xz -C /out --strip-components=2 --wildcards '*/bin/ffprobe' '*/bin/ffmpeg'; \
+    /out/ffprobe -version; /out/ffmpeg -version
 
 # dovi_tool static (musl) build from quietvoid.
 FROM debian:13-slim AS dovi
@@ -139,7 +140,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=makemkv /out/usr/ /usr/
 COPY --from=dgdemux /out/ /usr/local/bin/
 COPY --from=mediainfo /out/mediainfo /usr/local/bin/mediainfo
-COPY --from=ffprobe /out/ffprobe /usr/local/bin/ffprobe
+COPY --from=ffprobe /out/ffprobe /out/ffmpeg /usr/local/bin/
 COPY --from=dovi /out/dovi_tool /usr/local/bin/dovi_tool
 COPY --from=sevenzip /out/7zz /usr/local/bin/7zz
 RUN ln -s /usr/local/bin/7zz /usr/local/bin/7z && ldconfig

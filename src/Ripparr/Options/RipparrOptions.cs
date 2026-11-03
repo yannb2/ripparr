@@ -53,6 +53,9 @@ public class RipparrOptions
     /// </summary>
     public string SubtitleFolder { get; set; } = "/config/subtitles";
 
+    /// <summary>Pictures of the playlists (to tell the extras apart), a folder per disc and playlist.</summary>
+    public string ThumbnailFolder { get; set; } = "/config/thumbnails";
+
     /// <summary>The subtitle previews of this many recent jobs are kept; older ones are deleted.</summary>
     public int KeepSubtitlePreviews { get; set; } = 30;
 
@@ -173,6 +176,7 @@ public class ToolPaths
     public string MediaInfo { get; set; } = "mediainfo";
     public string DoviTool { get; set; } = "dovi_tool";
     public string FFprobe { get; set; } = "ffprobe";
+    public string FFmpeg { get; set; } = "ffmpeg";
     public string SevenZip { get; set; } = "7z";
     public string Tesseract { get; set; } = "tesseract";
 }

@@ -25,6 +25,7 @@ builder.Services.AddSingleton<JobEvents>();
 builder.Services.AddSingleton<DiscAnalyzer>();
 builder.Services.AddSingleton<StreamProbe>();
 builder.Services.AddSingleton<SubtitleScanner>();
+builder.Services.AddSingleton<Thumbnails>();
 builder.Services.AddSingleton<JobPipeline>();
 builder.Services.AddSingleton<RadarrClient>();
 builder.Services.AddSingleton<JobRunner>();
@@ -77,6 +78,26 @@ app.MapGet("/api/discs/{key}/subtitles/{pid:int}/{index:int}.png",
         return caption == null
             ? Results.NotFound()
             : Results.File(Png.Rgba(caption.Render()), "image/png");
+    });
+// Pictures of a playlist for the extras list: only discs inside the configured sources.
+app.MapGet("/api/discs/pictures/{index:int}.jpg",
+    async (int index, string path, string playlist, DiscAnalyzer analyzer, Thumbnails thumbnails) =>
+    {
+        var source = index is >= 0 and < Thumbnails.Count && analyzer.InSources(path) ? analyzer.Describe(path) : null;
+        if (source == null)
+        {
+            return Results.NotFound();
+        }
+
+        var analysis = await analyzer.AnalyseAsync(source, CancellationToken.None);
+        var found = analysis.Find(playlist);
+        if (found == null)
+        {
+            return Results.NotFound();
+        }
+
+        var (file, error) = await thumbnails.GetAsync(source, analysis, found, index);
+        return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "image/jpeg");
     });
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
