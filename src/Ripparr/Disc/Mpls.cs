@@ -23,6 +23,15 @@ public sealed record PlaylistStream
     /// <summary>Video frame rate or audio sampling frequency, raw.</summary>
     public byte Rate { get; init; }
 
+    /// <summary>UHD (HEVC) only: 0 SDR, 1 HDR10, 2 Dolby Vision, as libbluray reads the STN table.</summary>
+    public byte DynamicRange { get; init; }
+
+    /// <summary>UHD (HEVC) only: 1 BT.709, 2 BT.2020.</summary>
+    public byte ColorSpace { get; init; }
+
+    /// <summary>UHD (HEVC) only: the disc says the stream carries HDR10+ metadata.</summary>
+    public bool Hdr10Plus { get; init; }
+
     /// <summary>True for the Dolby Vision enhancement layer of a UHD disc.</summary>
     public bool DolbyVisionEnhancementLayer { get; init; }
 
@@ -222,7 +231,11 @@ public sealed class Mpls
             {
                 Kind = StreamKind.Video, Coding = a[0], Pid = pid,
                 Format = a.Length > 1 ? (byte)(a[1] >> 4) : (byte)0,
-                Rate = a.Length > 1 ? (byte)(a[1] & 0x0F) : (byte)0
+                Rate = a.Length > 1 ? (byte)(a[1] & 0x0F) : (byte)0,
+                // HEVC: dynamic range type (4 bits), colour space (4 bits), CR flag, HDR10+ flag.
+                DynamicRange = a[0] == 0x24 && a.Length > 2 ? (byte)(a[2] >> 4) : (byte)0,
+                ColorSpace = a[0] == 0x24 && a.Length > 2 ? (byte)(a[2] & 0x0F) : (byte)0,
+                Hdr10Plus = a[0] == 0x24 && a.Length > 3 && (a[3] & 0x40) != 0
             });
         }
 

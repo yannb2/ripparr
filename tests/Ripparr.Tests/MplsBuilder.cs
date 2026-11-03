@@ -6,7 +6,9 @@ namespace Ripparr.Tests;
 /// <summary>Writes small but valid MPLS files for the tests, following the layout libbluray reads.</summary>
 internal sealed class MplsBuilder
 {
-    public sealed record Stream(byte Coding, int Pid, string? Language = null, byte Format = 0, byte Rate = 0);
+    /// <param name="Hdr">UHD video: dynamic range type and colour space, as the third attribute byte (0x22 = DV, BT.2020).</param>
+    /// <param name="HdrFlags">UHD video: the fourth attribute byte (0x40 = HDR10+).</param>
+    public sealed record Stream(byte Coding, int Pid, string? Language = null, byte Format = 0, byte Rate = 0, byte Hdr = 0, byte HdrFlags = 0);
 
     public sealed record Item(string Clip, uint In, uint Out);
 
@@ -105,7 +107,7 @@ internal sealed class MplsBuilder
         foreach (var s in Video)
         {
             Entry(stn, s.Pid);
-            stn.AddRange(new byte[] { 5, s.Coding, (byte)((s.Format << 4) | s.Rate), 0, 0, 0 });
+            stn.AddRange(new byte[] { 5, s.Coding, (byte)((s.Format << 4) | s.Rate), s.Hdr, s.HdrFlags, 0 });
         }
 
         foreach (var s in Audio)

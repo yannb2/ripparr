@@ -89,13 +89,39 @@ public static class StreamCoding
         _ => null
     };
 
+    /// <summary>
+    /// The HDR words for a video stream from the playlist: "DV 7 HDR10" when it has a Dolby
+    /// Vision enhancement layer (UHD discs only use profile 7), HDR10, HDR10+, or SDR.
+    /// </summary>
+    public static string? Range(PlaylistStream stream, bool dolbyVisionLayer)
+    {
+        if (stream.Coding != 0x24)
+        {
+            return stream.Kind == StreamKind.Video ? "SDR" : null;
+        }
+
+        var hdr = stream.Hdr10Plus ? "HDR10+" : stream.DynamicRange switch
+        {
+            0 => "SDR",
+            _ => "HDR10"
+        };
+        return dolbyVisionLayer || stream.DynamicRange == 2 ? $"DV 7 {hdr}" : hdr;
+    }
+
     /// <summary>What the playlist says about a stream beyond its codec: 2160p · 23.976 fps, or 48 kHz.</summary>
-    public static string Details(PlaylistStream stream)
+    public static string Details(PlaylistStream stream, bool dolbyVisionLayer = false)
     {
         var parts = new List<string?>();
-        if (stream.Kind == StreamKind.Video)
+        if (stream.Kind == StreamKind.Video && stream.DolbyVisionEnhancementLayer)
+        {
+            parts.Add("Dolby Vision enhancement layer");
+        }
+        else if (stream.Kind == StreamKind.Video)
         {
             parts.Add(Resolution(stream.Format));
+            // The Blu-ray specs: HEVC (UHD) is always 10-bit, AVC, VC-1 and MPEG-2 8-bit.
+            parts.Add(stream.Coding == 0x24 ? "10-bit" : stream.Coding is 0x1B or 0xEA or 0x02 ? "8-bit" : null);
+            parts.Add(Range(stream, dolbyVisionLayer));
             if (FrameRate(stream.Rate) is { } fps)
             {
                 parts.Add((fps.Numerator / (double)fps.Denominator).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " fps");

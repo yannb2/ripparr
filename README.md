@@ -7,6 +7,16 @@ MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix bu
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
 [Specarr](https://github.com/yannb2/Specarr), with the same look as the [Muxarr fork](https://github.com/yannb2/muxarr).
 
+## Before the job: the quick read
+
+Picking a playlist on the disc page reads its streams in a few seconds, before anything is queued: MediaInfo
+on the main clip for codec, channels, sample rate, bit depth, picture size, HDR and Dolby Vision, and the
+transport stream packets counted per track in samples spread over the clips for each track's bit rate and
+size (a constant bit rate, as AC-3 or a DTS core, is taken as it is). For an ISO, 7-Zip reads the first
+384 MB of the main clip, so the bit rates and sizes are estimates (≈). An encrypted disc cannot be read
+before MakeMKV has decrypted it: the form then shows what the playlist says (resolution, bit depth, HDR10,
+HDR10+ or Dolby Vision, frame rate, sample rate) and the full details come with the job.
+
 ## What a job does
 
 1. **Check**: finds the playlist, the size it needs and whether the disc is encrypted (AACS folder, or the

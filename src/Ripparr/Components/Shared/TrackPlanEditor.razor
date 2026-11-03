@@ -7,6 +7,11 @@
             <th title="Keep">Keep</th>
             <th>Track</th>
             <th>From the disc</th>
+            @if (Probe != null)
+            {
+                <th class="text-end text-nowrap" title="@(Probe.Estimated ? "Estimated from the start of the film" : "Counted in samples spread over the whole film")">Bit rate</th>
+                <th class="text-end">Size</th>
+            }
             <th style="width: 9rem">Language</th>
             <th title="Default track">Default</th>
             <th>Flags</th>
@@ -30,17 +35,23 @@
                     }
                 </td>
                 <td class="text-nowrap">
-                    @track.Codec @track.Layout
+                    @Codec(track)
                     @if (!string.IsNullOrEmpty(track.Details))
                     {
-                        <span class="text-body-secondary">· @track.Details</span>
+                        <span class="text-body-secondary">@(" · " + track.Details)</span>
                     }
                     @if (!string.IsNullOrEmpty(track.DiscLanguage))
                     {
-                        <span class="text-body-secondary">· @Languages.Name(track.DiscLanguage)</span>
+                        <span class="text-body-secondary">@(" · " + Languages.Name(track.DiscLanguage))</span>
                     }
-                    <span class="text-body-secondary" title="@($"0x{track.Pid:X4}")">· PID @track.Pid</span>
+                    <span class="text-body-secondary" title="@($"0x{track.Pid:X4}")">@($" · PID {track.Pid}")</span>
                 </td>
+                @if (Probe != null)
+                {
+                    var probed = Probe.Streams.GetValueOrDefault(track.Pid);
+                    <td class="text-end text-nowrap text-body-secondary">@(probed is { BitRate: > 0 } ? Approx + Format.BitRate(probed.BitRate) : "")</td>
+                    <td class="text-end text-nowrap text-body-secondary">@(probed is { Size: > 0 } ? Approx + Format.Size(probed.Size) : "")</td>
+                }
                 <td>
                     @if (!track.DolbyVisionLayer)
                     {
@@ -98,6 +109,25 @@
 
 @code {
     [Parameter, EditorRequired] public TrackPlan Plan { get; set; } = new();
+
+    /// <summary>The quick read of the playlist's streams, when there is one.</summary>
+    [Parameter] public ProbeResult? Probe { get; set; }
+
+    private string Approx => Probe?.Estimated == true ? "≈ " : "";
+
+    /// <summary>The codec as the stream says it once read (TrueHD Atmos 7.1), else as the playlist says it.</summary>
+    private string Codec(PlannedTrack track)
+    {
+        var facts = Probe?.Streams.GetValueOrDefault(track.Pid)?.Facts;
+        return facts == null || string.IsNullOrEmpty(facts.Format)
+            ? $"{track.Codec} {track.Layout}".Trim()
+            : track.Kind switch
+            {
+                StreamKind.Audio => $"{facts.AudioCodec} {facts.ChannelWords}".Trim(),
+                StreamKind.Video => facts.VideoCodec,
+                _ => track.Codec
+            };
+    }
 
     private void SetDefault(PlannedTrack track, ChangeEventArgs e)
     {
