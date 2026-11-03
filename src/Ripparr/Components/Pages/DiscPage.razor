@@ -1,6 +1,7 @@
 @page "/disc"
 @inject DiscAnalyzer Analyzer
 @inject StreamProbe Probe
+@inject SubtitleScanner Scanner
 @inject JobStore Store
 @inject JobRunner Runner
 @inject RadarrClient Radarr
@@ -246,7 +247,40 @@
                 }
             </div>
 
-            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)"/>
+            @if (_selected.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle))
+            {
+                <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
+                    @if (_subtitles is { Running: true } running)
+                    {
+                        <span class="spinner-border spinner-border-sm text-secondary"></span>
+                        <span class="text-body-secondary">Reading the subtitles: the whole film is read once, @((running.Progress * 100).ToString("0"))%…</span>
+                        <div class="progress flex-grow-1" style="height: 6px; max-width: 20rem">
+                            <div class="progress-bar" style="width: @((running.Progress * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                        </div>
+                    }
+                    else if (_subtitles is { Error: { } subtitleError })
+                    {
+                        <i class="bi bi-info-circle text-body-secondary"></i>
+                        <span class="text-body-secondary">@subtitleError</span>
+                        <button class="btn btn-sm btn-link p-0" @onclick="ReadSubtitles">Try again</button>
+                    }
+                    else if (_subtitles != null)
+                    {
+                        <i class="bi bi-check2 text-success"></i>
+                        <span class="text-body-secondary">Subtitles read in @(_subtitles.Took.TotalSeconds < 60 ? $"{_subtitles.Took.TotalSeconds:0.#} s" : Format.Duration(_subtitles.Took)): caption counts and <i class="bi bi-eye"></i> previews below.</span>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="ReadSubtitles"
+                                title="Reads the whole film once (minutes for a UHD disc) for each subtitle track's exact caption count, forced captions and a preview">
+                            <i class="bi bi-badge-cc"></i> Read subtitles
+                        </button>
+                        <span class="text-body-secondary">Caption counts and previews, to pick the forced or default track. Reads the whole film once.</span>
+                    }
+                </div>
+            }
+
+            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles"/>
 
             @if (Profile.WriteTags)
             {
@@ -347,6 +381,8 @@
     {
         _selected = playlist;
         _probe = Probe.Cached(_source!, playlist);
+        _subtitles = Scanner.Find(_source!, playlist);
+        WatchSubtitles();
         _profileId = playlist.Resolution == "2160p"
             ? _profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? ""
             : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
@@ -393,10 +429,71 @@
         _probe = result;
         _probing = false;
         ApplyProbe();
+        ApplySubtitles();
         await InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => _probeCancel?.Cancel();
+    public void Dispose()
+    {
+        _probeCancel?.Cancel();
+        _subtitleTimer?.Dispose();
+    }
+
+    private SubtitleScan? _subtitles;
+    private Timer? _subtitleTimer;
+
+    /// <summary>Starts the full subtitle read (it goes on if the page is left) and follows it.</summary>
+    private void ReadSubtitles()
+    {
+        if (_selected == null || _analysis == null)
+        {
+            return;
+        }
+
+        _subtitles = Scanner.Start(_source!, _analysis, _selected);
+        WatchSubtitles();
+    }
+
+    /// <summary>Refreshes the page every second while the read runs.</summary>
+    private void WatchSubtitles()
+    {
+        _subtitleTimer?.Dispose();
+        _subtitleTimer = null;
+        if (_subtitles is not { Running: true })
+        {
+            return;
+        }
+
+        var scan = _subtitles;
+        _subtitleTimer = new Timer(_ => InvokeAsync(() =>
+        {
+            if (!scan.Running)
+            {
+                _subtitleTimer?.Dispose();
+                _subtitleTimer = null;
+                ApplySubtitles();
+            }
+
+            StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    /// <summary>The caption counts on the job's subtitle tracks, so the job keeps them too.</summary>
+    private void ApplySubtitles()
+    {
+        if (_plan == null || _subtitles is not { Running: false, Error: null })
+        {
+            return;
+        }
+
+        foreach (var track in _plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle))
+        {
+            if (_subtitles.Tracks.TryGetValue(track.Pid, out var read))
+            {
+                track.Details = $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
+            }
+        }
+    }
 
     private void ApplyProbe()
     {
@@ -421,6 +518,7 @@
         {
             _plan = TrackPlanner.Build(_selected.Mpls, Profile, _original);
             ApplyProbe();
+            ApplySubtitles();
         }
     }
 

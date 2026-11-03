@@ -320,9 +320,10 @@ public sealed class StreamProbe(IOptions<RipparrOptions> options, ILogger<Stream
         foreach (var track in plan.Tracks)
         {
             var stream = playlist.Mpls.Streams.ElementAtOrDefault(track.StreamIndex);
-            if (stream != null && result.Streams.TryGetValue(stream.Pid, out var probed))
+            if (stream != null && result.Streams.TryGetValue(stream.Pid, out var probed)
+                && Describe(stream, probed.Facts, dolbyVision) is { Length: > 0 } details)
             {
-                track.Details = Describe(stream, probed.Facts, dolbyVision);
+                track.Details = details;
             }
         }
     }

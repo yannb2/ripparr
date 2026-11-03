@@ -92,6 +92,31 @@ public sealed class Job
         ? SourceName
         : Year is { } y ? $"{Title} ({y}){(string.IsNullOrWhiteSpace(Edition) ? "" : " - " + Edition)}" : Title;
 
+    /// <summary>
+    /// A new job with this one's source, playlist, title, profile, track plan and tags, not a dry
+    /// run, and nothing of this run: for "Queue the job" after a dry run.
+    /// </summary>
+    public Job ForReal()
+    {
+        var copy = System.Text.Json.JsonSerializer.Deserialize<Job>(System.Text.Json.JsonSerializer.Serialize(this, JobStore.Json), JobStore.Json)!;
+        return new Job
+        {
+            SourcePath = copy.SourcePath,
+            SourceKind = copy.SourceKind,
+            SourceName = copy.SourceName,
+            Playlist = copy.Playlist,
+            Title = copy.Title,
+            Year = copy.Year,
+            Edition = copy.Edition,
+            TmdbId = copy.TmdbId,
+            ImdbId = copy.ImdbId,
+            OriginalLanguage = copy.OriginalLanguage,
+            Profile = copy.Profile,
+            Plan = copy.Plan,
+            Tags = copy.Tags
+        };
+    }
+
     [JsonIgnore]
     public TimeSpan? Elapsed => Started is { } s ? (Finished ?? DateTime.UtcNow) - s : null;
 }

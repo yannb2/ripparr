@@ -15,7 +15,7 @@
             <th style="width: 9rem">Language</th>
             <th title="Default track">Default</th>
             <th>Flags</th>
-            <th>Name (empty = from the profile)</th>
+            <th title="Empty = from the profile's name templates">Name</th>
             <th></th>
         </tr>
         </thead>
@@ -45,6 +45,10 @@
                         <span class="text-body-secondary">@(" · " + Languages.Name(track.DiscLanguage))</span>
                     }
                     <span class="text-body-secondary" title="@($"0x{track.Pid:X4}")">@($" · PID {track.Pid}")</span>
+                    @if (track.Kind == StreamKind.Subtitle && Subtitles is { Running: false, Error: null } scan && scan.Tracks.TryGetValue(track.Pid, out var read))
+                    {
+                        <a class="ms-1" href="discs/@scan.Key/subtitles/@track.Pid" target="_blank" title="Preview the captions (new tab)"><i class="bi bi-eye"></i></a>
+                    }
                 </td>
                 @if (Probe != null)
                 {
@@ -91,7 +95,7 @@
                 <td>
                     @if (!track.DolbyVisionLayer)
                     {
-                        <input class="form-control form-control-sm" @bind="track.Name"/>
+                        <input class="form-control form-control-sm" style="min-width: 9rem" placeholder="from the profile" @bind="track.Name"/>
                     }
                 </td>
                 <td class="text-nowrap">
@@ -112,6 +116,9 @@
 
     /// <summary>The quick read of the playlist's streams, when there is one.</summary>
     [Parameter] public ProbeResult? Probe { get; set; }
+
+    /// <summary>The full read of the subtitle tracks, when there is one: caption counts and a preview.</summary>
+    [Parameter] public SubtitleScan? Subtitles { get; set; }
 
     private string Approx => Probe?.Estimated == true ? "≈ " : "";
 
