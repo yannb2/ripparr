@@ -1,0 +1,185 @@
+@* A language list in priority order, as the Muxarr fork's: drag to reorder, x to remove, type to add. *@
+
+<div class="lpe-container">
+    @for (var i = 0; i < Codes.Count; i++)
+    {
+        var index = i;
+        var code = Codes[index];
+        var isOriginal = code == Original;
+        <div class="lpe-item @(_dragOver == index ? "lpe-item-dragover" : "") @(_dragSource == index ? "lpe-item-dragging" : "") @(isOriginal ? "lpe-item-original" : "")"
+             draggable="true"
+             @ondragstart="() => DragStart(index)"
+             @ondragenter="() => DragEnter(index)"
+             @ondragover:preventDefault
+             @ondrop="() => Drop(index)"
+             @ondragend="DragEnd">
+            <i class="bi bi-grip-vertical lpe-drag-handle"></i>
+            @if (Numbered)
+            {
+                <span class="lpe-priority-number">@(index + 1)</span>
+            }
+            @if (isOriginal)
+            {
+                <i class="bi bi-film lpe-original-icon" title="The film's own language, from Radarr or TMDB"></i>
+                <span class="lpe-lang-name">Original language</span>
+            }
+            else
+            {
+                <span class="lpe-lang-name">@Languages.Name(code)</span>
+                <span class="lpe-lang-code">@(code)</span>
+            }
+            <button type="button" class="lpe-icon-btn lpe-move-btn" title="Up" disabled="@(index == 0)" @onclick="() => Move(index, index - 1)">
+                <i class="bi bi-chevron-up"></i>
+            </button>
+            <button type="button" class="lpe-icon-btn lpe-move-btn" title="Down" disabled="@(index == Codes.Count - 1)" @onclick="() => Move(index, index + 1)">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+            <button type="button" class="lpe-icon-btn lpe-remove-btn" title="Remove" @onclick="() => Remove(index)">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    }
+
+    @if (Codes.Count == 0 && EmptyText != null)
+    {
+        <div class="small text-body-secondary fst-italic">@EmptyText</div>
+    }
+
+    <div class="lpe-add-row">
+        <div class="lpe-add-wrapper position-relative">
+            <input class="form-control form-control-sm" placeholder="Add a language: type its name or code"
+                   value="@_search" @oninput="Search" @onkeydown="Key" @onfocusout="Close"/>
+            @if (_results.Count > 0)
+            {
+                <div class="dropdown-menu show w-100">
+                    @for (var r = 0; r < _results.Count; r++)
+                    {
+                        var result = _results[r];
+                        <button type="button" class="dropdown-item @(r == _selected ? "active" : "")"
+                                @onmousedown="() => Add(result.Code)" @onmousedown:preventDefault>
+                            @result.Name <span class="@(r == _selected ? "" : "text-body-secondary")">(@result.Code)</span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+        @if (AllowOriginal && !Codes.Contains(Original))
+        {
+            <button type="button" class="btn btn-link btn-sm text-body-secondary p-0" @onclick="() => Add(Original)"
+                    title="The film's own language, from Radarr or TMDB: English for an American film, French for a French one">
+                <i class="bi bi-film me-1"></i>Add original language
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    private const string Original = "original";
+
+    /// <summary>The codes, edited in place: "original", "eng", "fre".</summary>
+    [Parameter, EditorRequired] public List<string> Codes { get; set; } = [];
+
+    [Parameter] public EventCallback Changed { get; set; }
+    [Parameter] public bool AllowOriginal { get; set; } = true;
+    [Parameter] public bool Numbered { get; set; } = true;
+    [Parameter] public string? EmptyText { get; set; }
+
+    private string _search = "";
+    private List<Languages.Entry> _results = [];
+    private int _selected = -1;
+    private int _dragSource = -1;
+    private int _dragOver = -1;
+
+    private void Search(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        _results = Languages.Search(_search).Where(r => !Codes.Contains(r.Code)).ToList();
+        _selected = _results.Count > 0 ? 0 : -1;
+    }
+
+    private async Task Key(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown" when _results.Count > 0:
+                _selected = Math.Min(_selected + 1, _results.Count - 1);
+                break;
+            case "ArrowUp" when _results.Count > 0:
+                _selected = Math.Max(_selected - 1, 0);
+                break;
+            case "Enter" when _selected >= 0 && _selected < _results.Count:
+                await Add(_results[_selected].Code);
+                break;
+            case "Escape":
+                Close();
+                break;
+        }
+    }
+
+    private void Close()
+    {
+        _results = [];
+        _selected = -1;
+    }
+
+    private async Task Add(string code)
+    {
+        if (!Codes.Contains(code))
+        {
+            Codes.Add(code);
+        }
+
+        _search = "";
+        Close();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task Remove(int index)
+    {
+        Codes.RemoveAt(index);
+        await Changed.InvokeAsync();
+    }
+
+    private async Task Move(int from, int to)
+    {
+        if (from == to || from < 0 || to < 0 || from >= Codes.Count || to >= Codes.Count)
+        {
+            return;
+        }
+
+        var code = Codes[from];
+        Codes.RemoveAt(from);
+        Codes.Insert(to, code);
+        await Changed.InvokeAsync();
+    }
+
+    private void DragStart(int index)
+    {
+        _dragSource = index;
+        _dragOver = -1;
+    }
+
+    private void DragEnter(int index)
+    {
+        if (_dragSource >= 0)
+        {
+            _dragOver = index;
+        }
+    }
+
+    private async Task Drop(int index)
+    {
+        var from = _dragSource;
+        DragEnd();
+        if (from >= 0)
+        {
+            await Move(from, index);
+        }
+    }
+
+    private void DragEnd()
+    {
+        _dragSource = -1;
+        _dragOver = -1;
+    }
+}

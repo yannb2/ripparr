@@ -1,0 +1,108 @@
+@* A profile's rules as badges, as the Muxarr fork's profile list shows them. *@
+
+<div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+    <i class="bi bi-volume-up text-body-secondary" style="width: 18px" title="Audio rules"></i>
+    @LanguageBadges(Profile.AudioLanguages, Profile.KeepOtherAudioLanguages)
+    @if (Profile.KeepCommentary)
+    {
+        <span class="badge text-bg-success" title="Commentary tracks are kept (in a kept language)"><i class="bi bi-check-lg me-1"></i><i class="bi bi-chat-quote"></i></span>
+    }
+    else
+    {
+        <span class="badge text-bg-warning" title="Commentary tracks are dropped"><i class="bi bi-x-lg me-1"></i><i class="bi bi-chat-quote"></i></span>
+    }
+    @if (Profile.DropLossyWhenLossless)
+    {
+        <span class="badge text-bg-info" title="A lossy track is dropped when a lossless one exists in the same language"><i class="bi bi-gem me-1"></i>Lossless only</span>
+    }
+    @if (Profile.KeepTrueHdCore)
+    {
+        <span class="badge text-bg-info" title="The AC-3 core of TrueHD tracks is kept as its own track"><i class="bi bi-plus-lg me-1"></i>AC-3 core</span>
+    }
+    <span class="badge text-bg-info" title="@($"Track names: {Profile.AudioNameTemplate}")"><i class="bi bi-magic me-1"></i>Rename</span>
+</div>
+
+<div class="d-flex align-items-center gap-2 flex-wrap">
+    <i class="bi bi-badge-cc text-body-secondary" style="width: 18px" title="Subtitle rules"></i>
+    @LanguageBadges(Profile.SubtitleLanguages, Profile.KeepOtherSubtitleLanguages)
+    @if (Profile.SrtLanguages.Count > 0)
+    {
+        <span class="badge text-bg-primary" title="@($"Text (SRT) tracks read by OCR for {Names(Profile.SrtLanguages)}{(Profile.SrtRemoveSdh ? ", SDH text removed" : "")}")">
+            <i class="bi bi-fonts me-1"></i>SRT: @Names(Profile.SrtLanguages)
+        </span>
+    }
+    <span class="badge text-bg-info" title="@($"Track names: {Profile.SubtitleNameTemplate}")"><i class="bi bi-magic me-1"></i>Rename</span>
+</div>
+
+<div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top flex-wrap">
+    <span class="badge text-bg-light border" title="DGDemux writes the enhancement layer apart; dovi_tool merges it back into the video">
+        <i class="bi bi-layers me-1"></i>Dolby Vision layer merged
+    </span>
+    @if (DgDemuxCommand.IsFullTemplate(Profile.DgDemuxArguments))
+    {
+        <span class="badge text-bg-warning" title="@Profile.DgDemuxArguments"><i class="bi bi-terminal me-1"></i>Own DGDemux command</span>
+    }
+    else
+    {
+        @if (Profile.DgDemux.DemuxOnlyKept)
+        {
+            <span class="badge text-bg-light border" title="DGDemux -demux: only the kept tracks are written"><i class="bi bi-funnel me-1"></i>Demux kept tracks only</span>
+        }
+        @foreach (var option in DgDemuxCommand.Switches.Where(s => s.Get(Profile.DgDemux)))
+        {
+            <span class="badge text-bg-light border" title="@option.Label"><i class="bi bi-terminal me-1"></i>@option.Flag</span>
+        }
+        @if (Profile.DgDemux.Angle > 1)
+        {
+            <span class="badge text-bg-light border"><i class="bi bi-camera-reels me-1"></i>Angle @Profile.DgDemux.Angle</span>
+        }
+    }
+    @if (Profile.WriteTags)
+    {
+        <span class="badge text-bg-light border" title="TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION… as MKV global tags"><i class="bi bi-tags me-1"></i>Write tags</span>
+        @foreach (var tag in Profile.CustomTags.Where(t => t.Name.Length > 0))
+        {
+            <span class="badge text-bg-light border" title="@(tag.Value.Length > 0 ? $"Your tag, set to {tag.Value}" : "Your tag, filled in on each job")">
+                <i class="bi bi-tag me-1"></i>@tag.Name@(tag.Value.Length > 0 ? $" = {tag.Value}" : "")
+            </span>
+        }
+    }
+    @if (Profile.Chapters == ChapterNaming.None)
+    {
+        <span class="badge text-bg-light border" title="Chapters keep their times but no names"><i class="bi bi-bookmark me-1"></i>Unnamed chapters</span>
+    }
+    <span class="badge text-bg-light border" title="SOURCE tag and the last bracket of the file name"><i class="bi bi-disc me-1"></i>@Profile.Source</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RipProfile Profile { get; set; } = null!;
+
+    private static string Names(IEnumerable<string> codes) =>
+        string.Join(", ", codes.Select(c => c == "original" ? "Original" : Languages.Name(c)));
+
+    private static RenderFragment LanguageBadges(List<string> codes, bool others) => __builder =>
+    {
+        if (codes.Count == 0 && !others)
+        {
+            <span class="badge text-bg-danger" title="No language is kept: every track of this type is dropped">None</span>
+            return;
+        }
+
+        foreach (var code in codes)
+        {
+            if (code == "original")
+            {
+                <span class="badge text-bg-success" title="The film's own language is kept"><i class="bi bi-film me-1"></i>Original</span>
+            }
+            else
+            {
+                <span class="badge text-bg-success" title="@(code)">@Languages.Name(code)</span>
+            }
+        }
+
+        if (others)
+        {
+            <span class="badge text-bg-secondary" title="Tracks in other languages are kept too"><i class="bi bi-plus-lg me-1"></i>Other languages</span>
+        }
+    };
+}

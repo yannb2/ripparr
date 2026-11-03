@@ -33,6 +33,12 @@ public sealed class PlannedTrack
     public bool Forced { get; set; }
     public bool Commentary { get; set; }
 
+    /// <summary>Subtitles for the deaf and hard of hearing (SDH): ticked on the job, or found by the OCR.</summary>
+    public bool HearingImpaired { get; set; }
+
+    /// <summary>Audio description for the visually impaired (AD).</summary>
+    public bool VisualImpaired { get; set; }
+
     /// <summary>A name typed on the form; empty = from the profile's template.</summary>
     public string? Name { get; set; }
 
@@ -106,7 +112,7 @@ public static class TrackPlanner
         var mainVideo = videos.FirstOrDefault(t => !t.DolbyVisionLayer);
         foreach (var video in videos)
         {
-            video.Keep = video == mainVideo || (video.DolbyVisionLayer && profile.KeepDolbyVisionLayer);
+            video.Keep = video == mainVideo || video.DolbyVisionLayer; // the layer is always merged
             video.Language = profile.VideoLanguage switch
             {
                 "original" => original ?? "und",

@@ -20,7 +20,7 @@ and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yan
    text for the hard of hearing is removed ([door slams], (laughs), `JOHN:`, ♪ lyrics) and an SRT track goes in
    right after the picture track. An OCR problem is a warning, not a failure.
 6. **Dolby Vision**: a separate enhancement layer is merged back into the video with `dovi_tool mux`
-   (profile 7 FEL stays FEL), when the profile keeps it.
+   (profile 7 FEL stays FEL), always. Only the job form can leave it out, for a disc whose layer will not demux.
 7. **Build the MKV**: mkvmerge with the track plan (languages, names, default/forced/commentary flags, order),
    chapters from the playlist, the frame rate from the playlist and the global tags.
 8. **Verify**: tracks, languages, duration and chapters against the plan; HDR format; for Dolby Vision, the RPU

@@ -117,7 +117,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             context.Warn(warning);
         }
 
-        var outputs = MuxBuilder.Outputs(job.Plan, mapping, job.Profile);
+        var outputs = MuxBuilder.Outputs(job.Plan, mapping, job.Profile, job.OriginalLanguage);
         var missing = job.Plan.Kept.Where(t => !mapping.Files.ContainsKey(t.StreamIndex)).ToList();
         if (missing.Count > 0)
         {
@@ -129,28 +129,6 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         context.Step(JobSteps.Subtitles);
         outputs = await SubtitleStep.RunAsync(context, outputs);
         context.Save();
-
-        job.Written = outputs.Select(o => new WrittenTrack(
-            o.Planned.Kind.ToString(),
-            o.Planned.Kind switch
-            {
-                StreamKind.Audio => $"{o.File.Facts.AudioCodec} {o.File.Facts.ChannelWords}".Trim(),
-                StreamKind.Video => $"{o.File.Facts.VideoCodec} {o.File.Facts.Resolution} {o.File.Facts.DynamicRange}".Trim(),
-                _ => o.Planned.Codec
-            },
-            o.Planned.Language,
-            o.Name,
-            string.Join(' ', new[] { o.Planned.Default ? "default" : "", o.Planned.Forced ? "forced" : "",
-                                     o.Planned.Commentary ? "commentary" : "" }.Where(w => w != "")),
-            o.File.Facts.Details,
-            FileSize(o.File.Path, o.File.Facts),
-            o.File.Facts.BitRateFor(FileSize(o.File.Path, o.File.Facts)),
-            o.File.Facts.BitRateMaximum,
-            o.File.FileName)).ToList();
-        foreach (var output in outputs)
-        {
-            context.Log($"  track: {output.Planned.Kind} {output.Planned.Language} \"{output.Name}\" <- {output.File.FileName}");
-        }
 
         // ---- Dolby Vision ----
         string? videoPath = null;
@@ -177,6 +155,46 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             }
         }
 
+        // The video's name, now that the Dolby Vision profile and layer can be read from the merged stream.
+        if (video != null && string.IsNullOrWhiteSpace(video.Planned.Name) && (videoPath != null || video.File.Facts.DolbyVision))
+        {
+            DoviTool.Executable = tools.DoviTool;
+            var read = await DoviTool.ReadAsync(videoPath ?? video.File.Path, DoviTool.SampleFrames, TimeSpan.FromMinutes(2), context.CancellationToken);
+            if (read.Details is { } dv)
+            {
+                var name = MuxBuilder.TrackName(video.Planned, video.File.Facts, job.Profile, job.OriginalLanguage, dv.Profile ?? "7", dv.Layer);
+                outputs[outputs.IndexOf(video)] = video with { Name = name };
+                context.Log($"Dolby Vision profile {dv.Profile} {dv.Layer}: the video track is \"{name}\".");
+            }
+            else
+            {
+                context.Warn($"Could not read the Dolby Vision profile for the video's name: {read.Error}");
+            }
+        }
+
+        job.Written = outputs.Select(o => new WrittenTrack(
+            o.Planned.Kind.ToString(),
+            o.Planned.Kind switch
+            {
+                StreamKind.Audio => $"{o.File.Facts.AudioCodec} {o.File.Facts.ChannelWords}".Trim(),
+                StreamKind.Video => $"{o.File.Facts.VideoCodec} {o.File.Facts.Resolution} {o.File.Facts.DynamicRange}".Trim(),
+                _ => o.Planned.Codec
+            },
+            o.Planned.Language,
+            o.Name,
+            string.Join(' ', new[] { o.Planned.Default ? "default" : "", o.Planned.Forced ? "forced" : "",
+                                     o.Planned.Commentary ? "commentary" : "",
+                                     o.Planned.HearingImpaired ? "SDH" : "", o.Planned.VisualImpaired ? "AD" : "" }.Where(w => w != "")),
+            o.File.Facts.Details,
+            FileSize(o.File.Path, o.File.Facts),
+            o.File.Facts.BitRateFor(FileSize(o.File.Path, o.File.Facts)),
+            o.File.Facts.BitRateMaximum,
+            o.File.FileName)).ToList();
+        foreach (var output in outputs)
+        {
+            context.Log($"  track: {output.Planned.Kind} {output.Planned.Language} \"{output.Name}\" <- {output.File.FileName}");
+        }
+
         // ---- Build the MKV ----
         context.Step(JobSteps.Mux);
         Directory.CreateDirectory(context.OutFolder);
@@ -197,6 +215,10 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         {
             tagsPath = Path.Combine(context.WorkFolder, "tags.xml");
             await File.WriteAllTextAsync(tagsPath, MuxBuilder.TagsXml(job, outputs), context.CancellationToken);
+            if (job.Tags.Any(t => t.Value.Length > 0))
+            {
+                context.Log("Your global tags: " + string.Join(", ", job.Tags.Where(t => t.Value.Length > 0).Select(t => $"{t.Name}={t.Value}")));
+            }
         }
 
         var frameRate = playlist.Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
@@ -436,12 +458,17 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         foreach (var track in context.Job.Plan.Kept)
         {
             context.Log($"  {track.Kind} {track.Language} {track.Codec}{(track.Default ? " default" : "")}{(track.Forced ? " forced" : "")}" +
-                        $"{(track.Commentary ? " commentary" : "")}{(string.IsNullOrWhiteSpace(track.Name) ? "" : $" \"{track.Name}\"")}");
+                        $"{(track.Commentary ? " commentary" : "")}{(track.HearingImpaired ? " SDH" : "")}{(track.VisualImpaired ? " AD" : "")}{(string.IsNullOrWhiteSpace(track.Name) ? "" : $" \"{track.Name}\"")}");
         }
 
         if (context.Job.Plan.MergeDolbyVisionLayer)
         {
             context.Log("  + the Dolby Vision enhancement layer, merged into the video");
+        }
+
+        if (context.Job.Profile.WriteTags && context.Job.Tags.Any(t => t.Value.Length > 0))
+        {
+            context.Log("  + your global tags: " + string.Join(", ", context.Job.Tags.Where(t => t.Value.Length > 0).Select(t => $"{t.Name}={t.Value}")));
         }
 
         context.Log("Dry run: nothing was run.");

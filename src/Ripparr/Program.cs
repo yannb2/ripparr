@@ -20,6 +20,7 @@ builder.Services.AddOptions<RipparrOptions>()
     .PostConfigure(o => o.WithDefaults());
 
 builder.Services.AddSingleton<JobStore>();
+builder.Services.AddScoped<Toasts>();
 builder.Services.AddSingleton<JobEvents>();
 builder.Services.AddSingleton<DiscAnalyzer>();
 builder.Services.AddSingleton<JobPipeline>();

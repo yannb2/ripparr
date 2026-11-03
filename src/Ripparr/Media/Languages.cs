@@ -103,6 +103,36 @@ public static class Languages
         return (bibliographic ?? code).ToLowerInvariant();
     }
 
+    /// <summary>A language to pick: the code MKV uses (fre, ger) and its English name.</summary>
+    public sealed record Entry(string Code, string Name);
+
+    private static readonly Lazy<List<Entry>> Entries = new(() => Names.Value
+        .Select(n => new Entry(Bibliographic(n.Key), n.Value))
+        .Where(e => !e.Name.Contains('(') && e.Code != "ivl")
+        .GroupBy(e => e.Code).Select(g => g.First())
+        .OrderBy(e => e.Name, StringComparer.OrdinalIgnoreCase).ToList());
+
+    /// <summary>Languages whose name or code starts with the text, best matches first (an exact code, then names).</summary>
+    public static List<Entry> Search(string? text, int count = 10)
+    {
+        var query = (text ?? "").Trim();
+        if (query.Length == 0)
+        {
+            return [];
+        }
+
+        bool Code(Entry e) => e.Code.Equals(query, StringComparison.OrdinalIgnoreCase)
+                              || Same(e.Code, query);
+        return Entries.Value
+            .Where(e => Code(e)
+                        || e.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase)
+                        || (query.Length > 2 && e.Name.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(e => Code(e) ? 0 : e.Name.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 1 : 2)
+            .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(count)
+            .ToList();
+    }
+
     private static Dictionary<string, string> Build()
     {
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

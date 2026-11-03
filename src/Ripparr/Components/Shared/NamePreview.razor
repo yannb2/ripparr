@@ -1,0 +1,14 @@
+<div class="mt-2 text-muted small">
+    <i class="bi bi-eye me-1"></i>Preview:
+    <div class="mt-1 d-grid gap-1" style="grid-template-columns: max-content 1fr; column-gap: .75rem">
+        @foreach (var (what, name) in Rows)
+        {
+            <span>@what</span>
+            <code>@(string.IsNullOrEmpty(name) ? "(no name)" : name)</code>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IEnumerable<(string What, string Name)> Rows { get; set; } = [];
+}

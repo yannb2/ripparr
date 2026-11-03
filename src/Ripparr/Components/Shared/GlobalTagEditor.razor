@@ -1,0 +1,44 @@
+@* Rows of MKV global tags (name and value), edited in place. *@
+<div class="d-flex flex-column gap-2">
+    @foreach (var tag in Tags)
+    {
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <input class="form-control form-control-sm font-monospace" style="max-width: 14rem" placeholder="TAG_NAME" disabled="@(Disabled || FixedNames)"
+                   value="@tag.Name" @onchange="e => tag.Name = GlobalTag.Normalise(e.Value?.ToString())"/>
+            <input class="form-control form-control-sm" style="max-width: 28rem; flex: 1 1 12rem" placeholder="@(Placeholder ?? ValueLabel)" disabled="@Disabled"
+                   @bind="tag.Value" @bind:event="oninput"/>
+            @if (!FixedNames)
+            {
+                <button type="button" class="btn btn-sm btn-link text-body-secondary p-0" title="Remove" disabled="@Disabled" @onclick="() => Tags.Remove(tag)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            }
+        </div>
+    }
+    @if (!FixedNames)
+    {
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@Disabled" @onclick="() => Add(string.Empty)">
+                <i class="bi bi-plus-lg me-1"></i>Add tag
+            </button>
+            @foreach (var suggestion in Suggestions.Where(s => Tags.All(t => t.Name != s)))
+            {
+                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" disabled="@Disabled" @onclick="() => Add(suggestion)">+ @suggestion</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly string[] Suggestions = ["RELEASE_GROUP", "ENCODED_BY", "COMMENT", "COLLECTION"];
+
+    [Parameter, EditorRequired] public List<GlobalTag> Tags { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string ValueLabel { get; set; } = "Value";
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>On the job form the names come from the profile; only extra rows can be named.</summary>
+    [Parameter] public bool FixedNames { get; set; }
+
+    private void Add(string name) => Tags.Add(new GlobalTag { Name = name });
+}

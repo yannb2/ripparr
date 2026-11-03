@@ -225,6 +225,18 @@
 
             <TrackPlanEditor Plan="_plan"/>
 
+            @if (Profile.WriteTags)
+            {
+                <div class="mt-3">
+                    <div class="small fw-semibold mb-1"><i class="bi bi-tags me-1"></i>Global tags</div>
+                    <GlobalTagEditor Tags="_tags" Placeholder="empty = not written"/>
+                    <div class="form-text">
+                        From the profile, for this disc. TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION, HDR_FORMAT and the other automatic tags
+                        are written too; a tag here with the same name replaces the automatic one.
+                    </div>
+                </div>
+            }
+
             <div class="mt-3 small">
                 <div><span class="text-body-secondary">MKV title:</span> <span class="fw-semibold">@PreviewTitle</span></div>
                 <div><span class="text-body-secondary">File name (expected; codec and HDR words come from the streams):</span> <span class="sv-path">@PreviewFile</span></div>
@@ -311,6 +323,16 @@
             ? _profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? ""
             : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
         BuildPlan();
+        ResetTags();
+    }
+
+    private List<GlobalTag> _tags = [];
+
+    /// <summary>The profile's own tags, keeping a value already typed for a tag of the same name.</summary>
+    private void ResetTags()
+    {
+        var typed = _tags.Where(t => t.Value.Length > 0 && t.Name.Length > 0).GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First().Value);
+        _tags = Profile.CustomTags.Select(t => new GlobalTag { Name = t.Name, Value = typed.GetValueOrDefault(t.Name, t.Value) }).ToList();
     }
 
     private void BuildPlan()
@@ -325,6 +347,7 @@
     {
         _profileId = e.Value?.ToString() ?? "";
         BuildPlan();
+        ResetTags();
     }
 
     private void ChangeOriginal(ChangeEventArgs e)
@@ -417,6 +440,7 @@
             OriginalLanguage = _original,
             Profile = Profile,
             Plan = _plan,
+            Tags = _tags.Where(t => t.Name.Length > 0).Select(t => t.Copy()).ToList(),
             DryRun = dryRun
         };
         Runner.Enqueue(job);

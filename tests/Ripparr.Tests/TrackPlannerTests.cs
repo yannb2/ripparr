@@ -22,10 +22,14 @@ public class TrackPlannerTests
     }
 
     [TestMethod]
-    public void DropsTheLayerWhenTheProfileSaysSo()
+    public void AlwaysMergesTheLayer()
     {
-        var plan = TrackPlanner.Build(Film, new RipProfile { KeepDolbyVisionLayer = false }, "eng");
-        Assert.IsFalse(plan.MergeDolbyVisionLayer);
+        var plan = TrackPlanner.Build(Film, new RipProfile(), "eng");
+        Assert.IsTrue(plan.MergeDolbyVisionLayer);
+
+        // A profile saved before 0.2.2 with the old switch off still merges.
+        var old = System.Text.Json.JsonSerializer.Deserialize<RipProfile>("{\"KeepDolbyVisionLayer\":false}")!;
+        Assert.IsTrue(TrackPlanner.Build(Film, old, "eng").MergeDolbyVisionLayer);
     }
 
     [TestMethod]

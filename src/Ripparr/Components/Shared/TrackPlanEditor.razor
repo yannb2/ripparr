@@ -9,8 +9,7 @@
             <th>From the disc</th>
             <th style="width: 9rem">Language</th>
             <th title="Default track">Default</th>
-            <th title="Forced subtitles">Forced</th>
-            <th title="Commentary">Comm.</th>
+            <th>Flags</th>
             <th>Name (empty = from the profile)</th>
             <th></th>
         </tr>
@@ -55,16 +54,27 @@
                         <input type="checkbox" class="form-check-input" checked="@track.Default" @onchange="e => SetDefault(track, e)"/>
                     }
                 </td>
-                <td>
+                <td class="text-nowrap">
                     @if (track.Kind == StreamKind.Subtitle)
                     {
-                        <input type="checkbox" class="form-check-input" @bind="track.Forced"/>
+                        <label class="form-check form-check-inline small me-2 mb-0" title="Forced subtitles: only the foreign lines">
+                            <input type="checkbox" class="form-check-input" @bind="track.Forced"/> Forced
+                        </label>
+                        <label class="form-check form-check-inline small me-2 mb-0" title="For the deaf and hard of hearing (the OCR also marks it when it finds SDH text)">
+                            <input type="checkbox" class="form-check-input" @bind="track.HearingImpaired"/> SDH
+                        </label>
                     }
-                </td>
-                <td>
+                    @if (track.Kind is StreamKind.Audio or StreamKind.Subtitle && !track.DolbyVisionLayer)
+                    {
+                        <label class="form-check form-check-inline small me-2 mb-0" title="Commentary">
+                            <input type="checkbox" class="form-check-input" @bind="track.Commentary"/> Comm.
+                        </label>
+                    }
                     @if (track.Kind == StreamKind.Audio)
                     {
-                        <input type="checkbox" class="form-check-input" @bind="track.Commentary"/>
+                        <label class="form-check form-check-inline small me-0 mb-0" title="Audio description for the visually impaired">
+                            <input type="checkbox" class="form-check-input" @bind="track.VisualImpaired"/> AD
+                        </label>
                     }
                 </td>
                 <td>

@@ -86,11 +86,12 @@ public class MuxBuilderTests
     {
         var profile = new RipProfile();
         var plan = TrackPlanner.Build(Film, profile, "eng");
-        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile, "eng");
 
         CollectionAssert.AreEqual(new[]
         {
-            "", "English - TrueHD Atmos 7.1", "French - DTS-HD MA 5.1", "English - Commentary - AC3 2.0", "English", "French"
+            "2160p - HEVC - HDR10", "English - TrueHD Atmos 7.1", "French - DTS-HD MA 5.1 Dub", "English - AC3 2.0 (Commentary)",
+            "English - PGS", "French - PGS"
         }, outputs.Select(o => o.Name).ToArray());
     }
 
@@ -151,6 +152,29 @@ public class MuxBuilderTests
         StringAssert.Contains(xml, "<Name>RELEASE_NAME</Name><String>A.&amp;.B.2020</String>");
         StringAssert.Contains(xml, "<Name>EDITION</Name><String>Director&apos;s Cut</String>");
         StringAssert.Contains(xml, "<TargetTypeValue>50</TargetTypeValue>");
+    }
+
+    [TestMethod]
+    public void TagsXmlWritesYourOwnTags()
+    {
+        var job = new Job
+        {
+            Title = "Heat", Year = 1995, SourceName = "HEAT", Playlist = "00800",
+            Tags =
+            [
+                new GlobalTag { Name = "release group", Value = "YANN" },
+                new GlobalTag { Name = "COMMENT", Value = "{title} ({year}) from my disc" },
+                new GlobalTag { Name = "SOURCE", Value = "UHD-BD" },
+                new GlobalTag { Name = "ENCODED_BY", Value = "" }
+            ]
+        };
+        var xml = MuxBuilder.TagsXml(job, []);
+
+        StringAssert.Contains(xml, "<Name>RELEASE_GROUP</Name><String>YANN</String>");
+        StringAssert.Contains(xml, "<Name>COMMENT</Name><String>Heat (1995) from my disc</String>");
+        StringAssert.Contains(xml, "<Name>SOURCE</Name><String>UHD-BD</String>");
+        Assert.HasCount(1, System.Text.RegularExpressions.Regex.Matches(xml, "<Name>SOURCE</Name>"));
+        Assert.DoesNotContain("ENCODED_BY", xml);
     }
 
     [TestMethod]

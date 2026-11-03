@@ -1,65 +1,95 @@
 @page "/profiles"
 @inject JobStore Store
-@inject NavigationManager Navigation
+@inject Toasts Toasts
 
 <PageTitle>Profiles · Ripparr</PageTitle>
 
-<div class="d-flex align-items-center mb-3">
-    <h2 class="mb-0 me-auto">Profiles</h2>
-    <button class="btn btn-sm btn-primary" @onclick="New"><i class="bi bi-plus-lg"></i> New profile</button>
-</div>
+<h2 class="border-bottom pb-3 mb-3"><i class="bi bi-sliders me-2"></i>Profiles</h2>
 
-<p class="text-body-secondary small">
+<p class="text-body-secondary">
     A profile decides which tracks a job keeps and how it names them. A job keeps a copy of its profile, so
     editing one here never changes a job already queued.
 </p>
 
-<div class="row g-3">
-    @foreach (var profile in _profiles)
-    {
-        <div class="col-md-6 col-xl-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title mb-1">@profile.Name</h5>
-                    <p class="small text-body-secondary">@profile.Description</p>
-                    <div class="small">
-                        <div><span class="text-body-secondary">Audio:</span> @string.Join(", ", profile.AudioLanguages)@(profile.KeepOtherAudioLanguages ? " + others" : "")</div>
-                        <div><span class="text-body-secondary">Subtitles:</span> @string.Join(", ", profile.SubtitleLanguages)@(profile.KeepOtherSubtitleLanguages ? " + others" : "")</div>
-                        <div><span class="text-body-secondary">Dolby Vision layer:</span> @(profile.KeepDolbyVisionLayer ? "kept" : "dropped")</div>
-                        <div class="sv-path mt-1">@profile.FileNameTemplate</div>
+@if (_profiles.Count == 0)
+{
+    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No profiles. Click "Add Profile" to make one.</div>
+}
+else
+{
+    <div class="d-flex flex-column gap-3">
+        @foreach (var profile in _profiles)
+        {
+            <div class="border rounded p-3">
+                <div class="d-flex align-items-start gap-3 mb-2 flex-wrap">
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-sliders text-primary"></i>
+                            <h5 class="mb-0">@profile.Name</h5>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(profile.Description))
+                        {
+                            <div class="small text-body-secondary">@profile.Description</div>
+                        }
+                        <div class="small sv-path mt-1" title="File name template">@profile.FileNameTemplate</div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <a class="btn btn-sm btn-outline-primary" href="profiles/@profile.Id" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <button class="btn btn-sm btn-outline-secondary" title="Clone" @onclick="() => Clone(profile)">
+                            <i class="bi bi-copy"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" title="@(_profiles.Count <= 1 ? "The last profile cannot be deleted" : "Delete")"
+                                disabled="@(_profiles.Count <= 1)" @onclick="() => Delete(profile)">
+                            <i class="bi bi-trash"></i>
+                        </button>
                     </div>
                 </div>
-                <div class="card-footer d-flex gap-2">
-                    <a class="btn btn-sm btn-outline-primary" href="profiles/@profile.Id">Edit</a>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => Copy(profile)">Copy</button>
-                    <button class="btn btn-sm btn-outline-danger ms-auto" @onclick="() => Delete(profile)" disabled="@(_profiles.Count <= 1)">Delete</button>
-                </div>
+
+                <ProfileBadges Profile="profile"/>
             </div>
-        </div>
-    }
-</div>
+        }
+    </div>
+}
+
+<StickyBar>
+    <a class="btn btn-primary" href="profiles/new">
+        <i class="bi bi-plus-lg me-2"></i>Add Profile
+    </a>
+</StickyBar>
+
+<ConfirmDialog @ref="_confirm"/>
 
 @code {
     private List<RipProfile> _profiles = [];
+    private ConfirmDialog _confirm = null!;
 
     protected override void OnInitialized() => _profiles = Store.Profiles();
 
-    private void New()
+    private async Task Clone(RipProfile profile)
     {
-        var profile = new RipProfile();
-        Store.SaveProfile(profile);
-        Navigation.NavigateTo($"profiles/{profile.Id}");
-    }
+        if (!await _confirm.Ask("Clone profile", $"Clone profile '{profile.Name}'?", "Clone"))
+        {
+            return;
+        }
 
-    private void Copy(RipProfile profile)
-    {
-        Store.SaveProfile(profile.Copy());
+        var clone = profile.Copy();
+        Store.SaveProfile(clone);
         _profiles = Store.Profiles();
+        Toasts.Success($"Profile '{clone.Name}' created.");
     }
 
-    private void Delete(RipProfile profile)
+    private async Task Delete(RipProfile profile)
     {
+        if (!await _confirm.Ask("Delete profile",
+                $"Delete profile '{profile.Name}'? Jobs already queued or done keep their own copy of it.", "Delete", danger: true))
+        {
+            return;
+        }
+
         Store.DeleteProfile(profile.Id);
         _profiles = Store.Profiles();
+        Toasts.Warning($"Profile '{profile.Name}' deleted.");
     }
 }

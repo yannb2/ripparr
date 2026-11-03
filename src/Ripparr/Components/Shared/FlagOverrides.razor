@@ -1,0 +1,46 @@
+@* Templates for flagged tracks (SDH, Forced, Commentary, AD, Dub): the first matching flag wins. *@
+<div class="mt-2">
+    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" @onclick="() => _open = !_open">
+        <i class="bi bi-sliders2 me-1"></i>Flag-specific overrides
+        @if (Overrides.Count(o => !string.IsNullOrWhiteSpace(o.Value)) is var count and > 0)
+        {
+            <span class="badge text-bg-secondary ms-1">@count</span>
+        }
+        <i class="bi @(_open ? "bi-chevron-up" : "bi-chevron-down") ms-1"></i>
+    </button>
+    @if (_open)
+    {
+        <div class="d-flex flex-column gap-2 ms-2 mt-2 border-start ps-3">
+            @foreach (var (key, label, icon, help) in TrackNaming.Flags)
+            {
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge text-bg-secondary text-start" style="width: 8rem" title="@help"><i class="bi @icon me-1"></i>@label</span>
+                    <input type="text" class="form-control form-control-sm font-monospace" style="max-width: 28rem" placeholder="(uses default)"
+                           value="@Overrides.GetValueOrDefault(key)" @oninput="e => Set(key, e.Value?.ToString())"/>
+                </div>
+            }
+        </div>
+        <small class="form-text text-muted d-block mt-1">Leave blank to use the default template. First matching flag wins, in this order.</small>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Dictionary<string, string> Overrides { get; set; } = [];
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _open = true;
+
+    private async Task Set(string key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            Overrides.Remove(key);
+        }
+        else
+        {
+            Overrides[key] = value;
+        }
+
+        await Changed.InvokeAsync();
+    }
+}
