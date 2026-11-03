@@ -3,10 +3,10 @@
 ARG MAKEMKV_VERSION=1.18.4
 ARG DGDEMUX_VERSION=1.0.0.85
 ARG MKVTOOLNIX_VERSION=103.0
-ARG MEDIAINFO_VERSION=24.12
+ARG MEDIAINFO_VERSION=26.10
 ARG DOVI_TOOL_VERSION=2.3.4
 ARG FFMPEG_VERSION=8.1
-ARG SEVENZIP_VERSION=25.01
+ARG SEVENZIP_VERSION=26.05
 
 # MakeMKV built from its own source (versions older than the newest move to /download/old/) on the same Ubuntu as the final image, command line only (no Qt).
 # makemkv-bin holds the closed part (makemkvcon); building it means accepting its EULA,
