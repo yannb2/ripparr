@@ -103,6 +103,12 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             var info = await context.RunAsync(new ProcessSpec(tools.MediaInfo, ["--Output=JSON", path]), TimeSpan.FromMinutes(10),
                 _ => true);
             var facts = MediaInfoReader.Parse(info.Output).FirstOrDefault();
+            if (facts?.Kind != StreamKind.Subtitle && MuxBuilder.IsSubtitleFile(path))
+            {
+                // MediaInfo sees nothing in a bare .sup (only the General part): read the captions ourselves.
+                facts = MuxBuilder.SupFacts(path) ?? facts;
+            }
+
             if (facts == null)
             {
                 context.Warn($"mediainfo could not read {Path.GetFileName(path)}; left out.");
