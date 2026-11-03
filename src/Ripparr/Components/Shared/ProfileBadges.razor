@@ -60,6 +60,12 @@
     @if (Profile.WriteTags)
     {
         <span class="badge text-bg-light border" title="TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION… as MKV global tags"><i class="bi bi-tags me-1"></i>Write tags</span>
+        @foreach (var tag in Profile.CustomTags.Where(t => t.Name.Length > 0))
+        {
+            <span class="badge text-bg-light border" title="@(tag.Value.Length > 0 ? $"Your tag, set to {tag.Value}" : "Your tag, filled in on each job")">
+                <i class="bi bi-tag me-1"></i>@tag.Name@(tag.Value.Length > 0 ? $" = {tag.Value}" : "")
+            </span>
+        }
     }
     @if (Profile.Chapters == ChapterNaming.None)
     {

@@ -257,6 +257,21 @@ public static partial class MuxBuilder
             ("RIPPED_WITH", $"Ripparr {AppInfo.Version}, playlist {job.Playlist}")
         };
 
+        // The job's own tags: placeholders filled like the file name; one with an automatic tag's name replaces it.
+        var values = NameValues(job, outputs);
+        foreach (var tag in job.Tags)
+        {
+            var name = GlobalTag.Normalise(tag.Name);
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            var value = tag.Value.Contains('{') ? Naming.Apply(tag.Value, values) : tag.Value.Trim();
+            tags.RemoveAll(t => t.Name == name);
+            tags.Add((name, value));
+        }
+
         var xml = new StringBuilder();
         xml.Append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE Tags SYSTEM \"matroskatags.dtd\">\n<Tags>\n  <Tag>\n");
         xml.Append("    <Targets><TargetTypeValue>50</TargetTypeValue></Targets>\n");

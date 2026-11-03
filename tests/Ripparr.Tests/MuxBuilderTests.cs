@@ -155,6 +155,29 @@ public class MuxBuilderTests
     }
 
     [TestMethod]
+    public void TagsXmlWritesYourOwnTags()
+    {
+        var job = new Job
+        {
+            Title = "Heat", Year = 1995, SourceName = "HEAT", Playlist = "00800",
+            Tags =
+            [
+                new GlobalTag { Name = "release group", Value = "YANN" },
+                new GlobalTag { Name = "COMMENT", Value = "{title} ({year}) from my disc" },
+                new GlobalTag { Name = "SOURCE", Value = "UHD-BD" },
+                new GlobalTag { Name = "ENCODED_BY", Value = "" }
+            ]
+        };
+        var xml = MuxBuilder.TagsXml(job, []);
+
+        StringAssert.Contains(xml, "<Name>RELEASE_GROUP</Name><String>YANN</String>");
+        StringAssert.Contains(xml, "<Name>COMMENT</Name><String>Heat (1995) from my disc</String>");
+        StringAssert.Contains(xml, "<Name>SOURCE</Name><String>UHD-BD</String>");
+        Assert.HasCount(1, System.Text.RegularExpressions.Regex.Matches(xml, "<Name>SOURCE</Name>"));
+        Assert.DoesNotContain("ENCODED_BY", xml);
+    }
+
+    [TestMethod]
     public void SmallHelpers()
     {
         Assert.AreEqual(-24, MuxBuilder.Delay("track1 DELAY -24ms.ac3"));

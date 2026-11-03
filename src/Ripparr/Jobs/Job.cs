@@ -56,6 +56,9 @@ public sealed class Job
     /// <summary>The profile as it was when the job was made: editing the profile later does not change the job.</summary>
     public RipProfile Profile { get; set; } = new();
 
+    /// <summary>The job's own global tags (RELEASE_GROUP...): the profile's, filled in on the job form.</summary>
+    public List<GlobalTag> Tags { get; set; } = [];
+
     public TrackPlan Plan { get; set; } = new();
 
     /// <summary>Print the commands without running the long steps.</summary>

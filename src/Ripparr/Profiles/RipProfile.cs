@@ -15,6 +15,19 @@ public enum ChapterNaming
 /// Which playlists and tracks a job keeps and how it names everything. Stored as JSON,
 /// so a new setting needs no database change; a missing value takes its default.
 /// </summary>
+/// <summary>An MKV global tag: name (upper case, as Matroska writes them) and value, which may hold name placeholders.</summary>
+public sealed class GlobalTag
+{
+    public string Name { get; set; } = "";
+    public string Value { get; set; } = "";
+
+    /// <summary>Matroska tag names are upper case with underscores: "release group" becomes RELEASE_GROUP.</summary>
+    public static string Normalise(string? name) =>
+        string.Join('_', (name ?? "").Trim().ToUpperInvariant().Split([' ', '-'], StringSplitOptions.RemoveEmptyEntries));
+
+    public GlobalTag Copy() => new() { Name = Name, Value = Value };
+}
+
 public sealed class RipProfile : IJsonOnDeserialized
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
@@ -119,6 +132,13 @@ public sealed class RipProfile : IJsonOnDeserialized
 
     /// <summary>Write TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION... as MKV global tags, as tag_release does.</summary>
     public bool WriteTags { get; set; } = true;
+
+    /// <summary>
+    /// Global tags of your own (RELEASE_GROUP, ENCODED_BY...), with the value a new job starts with.
+    /// Each job can fill in or change the values; an empty value writes nothing. A tag with the
+    /// name of an automatic one (SOURCE...) replaces it.
+    /// </summary>
+    public List<GlobalTag> CustomTags { get; set; } = [new() { Name = "RELEASE_GROUP" }];
 
     // ---- Names from before 0.3.0, read once and moved to the settings above ----
 

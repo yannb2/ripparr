@@ -215,6 +215,10 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         {
             tagsPath = Path.Combine(context.WorkFolder, "tags.xml");
             await File.WriteAllTextAsync(tagsPath, MuxBuilder.TagsXml(job, outputs), context.CancellationToken);
+            if (job.Tags.Any(t => t.Value.Length > 0))
+            {
+                context.Log("Your global tags: " + string.Join(", ", job.Tags.Where(t => t.Value.Length > 0).Select(t => $"{t.Name}={t.Value}")));
+            }
         }
 
         var frameRate = playlist.Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
@@ -454,12 +458,17 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         foreach (var track in context.Job.Plan.Kept)
         {
             context.Log($"  {track.Kind} {track.Language} {track.Codec}{(track.Default ? " default" : "")}{(track.Forced ? " forced" : "")}" +
-                        $"{(track.Commentary ? " commentary" : "")}{(string.IsNullOrWhiteSpace(track.Name) ? "" : $" \"{track.Name}\"")}");
+                        $"{(track.Commentary ? " commentary" : "")}{(track.HearingImpaired ? " SDH" : "")}{(track.VisualImpaired ? " AD" : "")}{(string.IsNullOrWhiteSpace(track.Name) ? "" : $" \"{track.Name}\"")}");
         }
 
         if (context.Job.Plan.MergeDolbyVisionLayer)
         {
             context.Log("  + the Dolby Vision enhancement layer, merged into the video");
+        }
+
+        if (context.Job.Profile.WriteTags && context.Job.Tags.Any(t => t.Value.Length > 0))
+        {
+            context.Log("  + your global tags: " + string.Join(", ", context.Job.Tags.Where(t => t.Value.Length > 0).Select(t => $"{t.Name}={t.Value}")));
         }
 
         context.Log("Dry run: nothing was run.");

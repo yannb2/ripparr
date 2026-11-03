@@ -61,8 +61,32 @@
                         </select>
                         <small class="form-text text-muted d-block">The chapter times come from the disc's playlist.</small>
                     </div>
+                    break;
+
+                case "tags":
+                    <h5 class="mb-3"><i class="bi bi-tags text-primary me-2"></i>Global Tags</h5>
                     <Switch Id="tags" @bind-Value="_profile.WriteTags" Label="Write MKV global tags"
-                            Help="TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION, HDR_FORMAT, DV_PROFILE… as tag_release writes them."/>
+                            Help="The automatic tags below, as tag_release writes them, plus your own tags. Off: the MKV gets no global tags."/>
+                    <div class="mb-4">
+                        <div class="text-muted small mb-1">Automatic tags</div>
+                        <div class="d-flex flex-wrap gap-1">
+                            @foreach (var (name, help) in AutomaticTags)
+                            {
+                                <span class="badge text-bg-light border" title="@help">@name</span>
+                            }
+                        </div>
+                        <small class="form-text text-muted d-block">Hover a tag to see where its value comes from.</small>
+                    </div>
+                    <div class="mb-3">
+                        <div class="text-muted small mb-1">Your own tags</div>
+                        <GlobalTagEditor Tags="_profile.CustomTags" Disabled="!_profile.WriteTags" ValueLabel="Value a new job starts with"/>
+                        <small class="form-text text-muted d-block">
+                            Each job shows these on its form, to fill in or change: put a fixed value here (your release group) or leave it
+                            empty to type it per disc. An empty value writes nothing. The value can use the file name placeholders:
+                            <code>{title}</code> <code>{year}</code> <code>{edition}</code> <code>{resolution}</code> <code>{videocodec}</code>
+                            <code>{hdr}</code> <code>{audio}</code> <code>{source}</code>. A tag with the name of an automatic one replaces it.
+                        </small>
+                    </div>
                     break;
 
                 case "video":
@@ -304,10 +328,25 @@
         ("audio", "Audio", "bi-volume-up"),
         ("subtitles", "Subtitles", "bi-chat-text"),
         ("output", "File name", "bi-file-earmark-play"),
+        ("tags", "Tags", "bi-tags"),
         ("dgdemux", "DGDemux", "bi-terminal")
     ];
 
     [Parameter] public string? Id { get; set; }
+
+    private static readonly (string Name, string Help)[] AutomaticTags =
+    [
+        ("TMDB", "movie/<id>, from Radarr or the job form"),
+        ("IMDB", "tt…, from Radarr or the job form"),
+        ("RELEASE_NAME", "the ISO or folder name"),
+        ("SOURCE", "the profile's source word"),
+        ("VIDEO_CODEC", "HEVC, AVC… from MediaInfo"),
+        ("HDR_FORMAT", "DV HDR10, HDR10… from MediaInfo"),
+        ("DV_PROFILE", "the Dolby Vision profile"),
+        ("EDITION", "the job's edition"),
+        ("ORIGINAL_LANGUAGE", "the film's language"),
+        ("RIPPED_WITH", "Ripparr's version and the playlist")
+    ];
 
     private RipProfile? _profile;
     private string _tab = "general";
