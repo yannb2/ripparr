@@ -23,9 +23,12 @@
                     <h5 class="card-title mb-1">@profile.Name</h5>
                     <p class="small text-body-secondary">@profile.Description</p>
                     <div class="small">
-                        <div><span class="text-body-secondary">Audio:</span> @string.Join(", ", profile.AudioLanguages)@(profile.KeepOtherAudioLanguages ? " + others" : "")</div>
-                        <div><span class="text-body-secondary">Subtitles:</span> @string.Join(", ", profile.SubtitleLanguages)@(profile.KeepOtherSubtitleLanguages ? " + others" : "")</div>
-                        <div><span class="text-body-secondary">Dolby Vision layer:</span> @(profile.KeepDolbyVisionLayer ? "kept" : "dropped")</div>
+                        <div><span class="text-body-secondary">Audio:</span> @Names(profile.AudioLanguages)@(profile.KeepOtherAudioLanguages ? " + others" : "")</div>
+                        <div><span class="text-body-secondary">Subtitles:</span> @Names(profile.SubtitleLanguages)@(profile.KeepOtherSubtitleLanguages ? " + others" : "")</div>
+                        @if (profile.SrtLanguages.Count > 0)
+                        {
+                            <div><span class="text-body-secondary">SRT by OCR:</span> @Names(profile.SrtLanguages)</div>
+                        }
                         <div class="sv-path mt-1">@profile.FileNameTemplate</div>
                     </div>
                 </div>
@@ -40,6 +43,9 @@
 </div>
 
 @code {
+    private static string Names(IEnumerable<string> codes) =>
+        string.Join(", ", codes.Select(c => c == "original" ? "original" : Languages.Name(c)));
+
     private List<RipProfile> _profiles = [];
 
     protected override void OnInitialized() => _profiles = Store.Profiles();

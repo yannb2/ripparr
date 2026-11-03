@@ -106,7 +106,7 @@ public static class TrackPlanner
         var mainVideo = videos.FirstOrDefault(t => !t.DolbyVisionLayer);
         foreach (var video in videos)
         {
-            video.Keep = video == mainVideo || (video.DolbyVisionLayer && profile.KeepDolbyVisionLayer);
+            video.Keep = video == mainVideo || video.DolbyVisionLayer; // the layer is always merged
             video.Language = profile.VideoLanguage switch
             {
                 "original" => original ?? "und",

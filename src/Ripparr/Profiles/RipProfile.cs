@@ -35,8 +35,8 @@ public sealed class RipProfile
 
     // ---- Video ----
 
-    /// <summary>Keep the Dolby Vision enhancement layer: BL and EL are combined into one track (profile 7 FEL stays FEL).</summary>
-    public bool KeepDolbyVisionLayer { get; set; } = true;
+    // The Dolby Vision enhancement layer is always merged into the video with dovi_tool
+    // (KeepDolbyVisionLayer is gone since 0.2.2; saved profiles that still have it are fine).
 
     /// <summary>"original" (the film's language), "und", or a code.</summary>
     public string VideoLanguage { get; set; } = "original";

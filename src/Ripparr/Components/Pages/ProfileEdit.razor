@@ -39,9 +39,13 @@
         <div class="card mb-3">
             <div class="card-header fw-semibold">Video</div>
             <div class="card-body">
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" id="dv" @bind="_profile.KeepDolbyVisionLayer"/>
-                    <label class="form-check-label" for="dv">Keep the Dolby Vision enhancement layer (profile 7 FEL stays FEL)</label>
+                <div class="small mb-3">
+                    <span class="badge sv-dv me-1">DV</span>
+                    <span class="text-body-secondary">
+                        Dolby Vision enhancement layer: always merged. DGDemux writes the base layer and the enhancement layer
+                        as separate streams, then Ripparr merges them back into one video track with <code>dovi_tool mux</code>
+                        (profile 7 FEL stays FEL, MEL stays MEL). A disc without an enhancement layer is left as it is.
+                    </span>
                 </div>
                 <label class="form-label small mb-1">Video language: <code>original</code>, <code>und</code> or a code</label>
                 <input class="form-control form-control-sm mb-2" @bind="_profile.VideoLanguage"/>
