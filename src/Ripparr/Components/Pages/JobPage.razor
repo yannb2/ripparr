@@ -29,6 +29,12 @@
         {
             <button class="btn btn-sm btn-outline-danger" @onclick="() => Runner.Cancel(_job.Id)">Cancel</button>
         }
+        @if (_job.DryRun && _job.Status == JobStatus.Done)
+        {
+            <button class="btn btn-sm btn-primary" @onclick="QueueForReal" title="Same playlist, tracks, tags and profile as this dry run">
+                <i class="bi bi-play-fill"></i> Queue the job
+            </button>
+        }
         @if (_job.CanRetry)
         {
             <button class="btn btn-sm btn-outline-secondary" @onclick="Retry">Retry</button>
@@ -313,6 +319,13 @@
         }
 
         return "text-bg-secondary opacity-50";
+    }
+
+    /// <summary>The same job, for real: a new job in the queue, this dry run stays in the list.</summary>
+    private void QueueForReal()
+    {
+        var job = Runner.Enqueue(_job!.ForReal());
+        Navigation.NavigateTo($"job/{job.Id}");
     }
 
     private void Retry()

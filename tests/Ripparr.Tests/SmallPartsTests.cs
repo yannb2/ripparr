@@ -163,4 +163,31 @@ public class SmallPartsTests
             Directory.Delete(folder, true);
         }
     }
+
+    [TestMethod]
+    public void QueuesADryRunForReal()
+    {
+        var dry = new Ripparr.Jobs.Job
+        {
+            Id = 7, DryRun = true, Status = Ripparr.Jobs.JobStatus.Done, SourcePath = "/downloads/Film.iso", Playlist = "00800",
+            Title = "Film", Year = 2020, Error = "x", Warnings = ["w"], Step = "Finish",
+            Tags = [new() { Name = "RELEASE_GROUP", Value = "FraMeSToR" }]
+        };
+        dry.Plan.Tracks.Add(new Ripparr.Profiles.PlannedTrack { Pid = 4113, Keep = true, Name = "Main" });
+        var real = dry.ForReal();
+
+        Assert.IsFalse(real.DryRun);
+        Assert.AreEqual(0, real.Id);
+        Assert.AreEqual(Ripparr.Jobs.JobStatus.Queued, real.Status);
+        Assert.IsNull(real.Error);
+        Assert.IsNull(real.Step);
+        Assert.IsEmpty(real.Warnings);
+        Assert.AreEqual("/downloads/Film.iso", real.SourcePath);
+        Assert.AreEqual("FraMeSToR", real.Tags.Single().Value);
+        Assert.AreEqual("Main", real.Plan.Tracks.Single().Name);
+
+        // A copy: changing it leaves the dry run as it was.
+        real.Plan.Tracks[0].Name = "Other";
+        Assert.AreEqual("Main", dry.Plan.Tracks[0].Name);
+    }
 }
