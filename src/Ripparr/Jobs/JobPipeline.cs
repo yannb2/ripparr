@@ -1,6 +1,7 @@
 using System.Globalization;
 using Ripparr.Disc;
 using Ripparr.Media;
+using Ripparr.Options;
 using Ripparr.Profiles;
 using Ripparr.Tools;
 
@@ -21,6 +22,16 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         // ---- Check ----
         context.Step(JobSteps.Check);
+        var folderProblems = new[] { ("work folder", context.Options.WorkFolder), ("done folder", context.Options.DoneFolder) }
+            .Select(f => FolderCheck.Check(f.Item2) is { } error ? new FolderProblem(f.Item1, f.Item2, error) : null)
+            .OfType<FolderProblem>().ToList();
+        if (folderProblems.Count > 0)
+        {
+            throw new JobFailedException(
+                $"Cannot write to the {string.Join(" and ", folderProblems.Select(p => $"{p.Name} {p.Path}"))}. " +
+                $"Give it to the container's user on the host: {FolderCheck.Hint(folderProblems)}");
+        }
+
         var source = analyzer.Describe(job.SourcePath)
                      ?? throw new JobFailedException($"The source is gone: {job.SourcePath}");
         var analysis = await analyzer.AnalyseAsync(source, context.CancellationToken, fresh: true);
