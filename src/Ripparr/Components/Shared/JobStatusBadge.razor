@@ -1,0 +1,22 @@
+<span class="badge @Css">@Text</span>
+
+@code {
+    [Parameter, EditorRequired] public Job Job { get; set; } = null!;
+
+    private string Css => Job.Status switch
+    {
+        JobStatus.Queued => "text-bg-secondary",
+        JobStatus.Running => "text-bg-primary",
+        JobStatus.Done when Job.Warnings.Count > 0 || Job.Checks.Any(c => c.Warning) => "text-bg-warning",
+        JobStatus.Done => "text-bg-success",
+        JobStatus.Failed => "text-bg-danger",
+        _ => "text-bg-dark"
+    };
+
+    private string Text => Job.Status switch
+    {
+        JobStatus.Done when Job.DryRun => "Dry run done",
+        JobStatus.Done when Job.Warnings.Count > 0 => "Done, warnings",
+        var s => s.ToString()
+    };
+}

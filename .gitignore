@@ -9,3 +9,6 @@ TestResults/
 *.db
 *.db-wal
 *.db-shm
+dev/
+src/Ripparr/dev/
+__pycache__/

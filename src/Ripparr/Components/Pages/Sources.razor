@@ -1,0 +1,94 @@
+@page "/"
+@inject IOptions<RipparrOptions> Options
+@inject NavigationManager Navigation
+@using Microsoft.Extensions.Options
+
+<PageTitle>Sources · Ripparr</PageTitle>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <h2 class="mb-0 me-auto">Sources</h2>
+    <input class="form-control form-control-sm" style="max-width: 18rem" placeholder="Filter by name"
+           @bind="_filter" @bind:event="oninput"/>
+    <button class="btn btn-sm btn-outline-secondary" @onclick="Refresh" disabled="@_loading">
+        <i class="bi bi-arrow-clockwise"></i> Look again
+    </button>
+</div>
+
+<p class="text-body-secondary small">
+    ISO files and folders with a BDMV folder in
+    @foreach (var (root, i) in Options.Value.Sources.Select((r, i) => (r, i)))
+    {
+        @(i > 0 ? ", " : "")<code>@root.Path</code><span class="@(Directory.Exists(root.Path) ? "" : "text-warning")">@(Directory.Exists(root.Path) ? "" : " (not mounted)")</span>
+    }.
+    The work and done folders are skipped.
+</p>
+
+@if (_loading)
+{
+    <div class="text-body-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Looking for discs…</div>
+}
+else if (_sources.Count == 0)
+{
+    <div class="alert alert-secondary">No ISO files or BDMV folders found.</div>
+}
+else
+{
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th class="text-end">Size</th>
+                    <th>Changed</th>
+                    <th>Where</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var source in Filtered)
+                {
+                    <tr class="sv-clickable-row" @onclick="() => Open(source)">
+                        <td class="sv-file-name fw-semibold">@source.Name</td>
+                        <td>
+                            @if (source.Kind == SourceKind.Iso)
+                            {
+                                <span class="badge text-bg-secondary">ISO</span>
+                            }
+                            else
+                            {
+                                <span class="badge text-bg-info">BDMV</span>
+                            }
+                        </td>
+                        <td class="text-end text-nowrap">@Format.Size(source.Size)</td>
+                        <td class="text-nowrap" title="@Format.LocalDate(source.Modified)">@Format.TimeAgo(source.Modified)</td>
+                        <td class="sv-path text-body-secondary">@source.Root/@Path.GetDirectoryName(source.RelativePath)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DiscSource> _sources = [];
+    private string _filter = "";
+    private bool _loading = true;
+
+    private IEnumerable<DiscSource> Filtered => string.IsNullOrWhiteSpace(_filter)
+        ? _sources
+        : _sources.Where(s => s.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync() => await Refresh();
+
+    private async Task Refresh()
+    {
+        _loading = true;
+        var options = Options.Value;
+        _sources = await Task.Run(() => SourceFinder.Find(options.Sources, [options.WorkFolder, options.DoneFolder]));
+        _loading = false;
+    }
+
+    private void Open(DiscSource source) => Navigation.NavigateTo($"disc?path={Uri.EscapeDataString(source.Path)}");
+}

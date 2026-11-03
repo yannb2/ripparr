@@ -1,0 +1,52 @@
+using System.Text.RegularExpressions;
+
+namespace Ripparr.Profiles;
+
+/// <summary>Fills a name template such as "{title} ({year}){ - edition} [{resolution}]".</summary>
+public static partial class Naming
+{
+    /// <summary>
+    /// Replaces each {token} by its value. A brace group with text around the token,
+    /// like "{ - edition}", is dropped as a whole when the token has no value. Empty
+    /// brackets and doubled spaces left behind are removed.
+    /// </summary>
+    public static string Apply(string template, IReadOnlyDictionary<string, string?> values)
+    {
+        var text = TokenRegex().Replace(template, m =>
+        {
+            var key = m.Groups["name"].Value.ToLowerInvariant();
+            if (!values.TryGetValue(key, out var value))
+            {
+                return m.Value; // not a token: leave it
+            }
+
+            return string.IsNullOrWhiteSpace(value) ? "" : m.Groups["before"].Value + value.Trim() + m.Groups["after"].Value;
+        });
+
+        text = EmptyBracketsRegex().Replace(text, "");
+        text = SpacesRegex().Replace(text, " ");
+        return text.Trim().Trim('-').Trim();
+    }
+
+    /// <summary>Removes what Windows, Samba and Jellyfin do not like in a file name.</summary>
+    public static string SafeFileName(string name)
+    {
+        var cleaned = name.Replace(": ", " - ").Replace(':', '-');
+        cleaned = cleaned.Replace('/', ' ').Replace('\\', ' ');
+        foreach (var c in new[] { '?', '*', '"', '<', '>', '|' })
+        {
+            cleaned = cleaned.Replace(c.ToString(), "");
+        }
+
+        return SpacesRegex().Replace(cleaned, " ").Trim().TrimEnd('.');
+    }
+
+    [GeneratedRegex(@"\{(?<before>[^{}A-Za-z]*)(?<name>[A-Za-z]+)(?<after>[^{}A-Za-z]*)\}")]
+    private static partial Regex TokenRegex();
+
+    [GeneratedRegex(@"\[\s*\]|\(\s*\)")]
+    private static partial Regex EmptyBracketsRegex();
+
+    [GeneratedRegex(@"\s{2,}")]
+    private static partial Regex SpacesRegex();
+}

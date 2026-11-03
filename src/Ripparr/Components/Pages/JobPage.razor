@@ -1,0 +1,268 @@
+@page "/job/{Id:long}"
+@implements IDisposable
+@inject JobStore Store
+@inject JobRunner Runner
+@inject JobEvents Events
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>Job @Id · Ripparr</PageTitle>
+
+<div class="mb-2"><a href="queue" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Queue</a></div>
+
+@if (_job == null)
+{
+    <div class="alert alert-warning">There is no job @Id.</div>
+    return;
+}
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+    <h2 class="mb-0 me-2 sv-file-name">@_job.DisplayTitle</h2>
+    <JobStatusBadge Job="_job"/>
+    @if (_job.DryRun)
+    {
+        <span class="badge text-bg-light">Dry run</span>
+    }
+    <span class="ms-auto d-flex gap-2">
+        @if (_job.Status is JobStatus.Queued or JobStatus.Running)
+        {
+            <button class="btn btn-sm btn-outline-danger" @onclick="() => Runner.Cancel(_job.Id)">Cancel</button>
+        }
+        @if (_job.CanRetry)
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Retry">Retry</button>
+        }
+        @if (_job.IsFinished)
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Delete" title="Removes the job from the list (not the files)">Remove</button>
+        }
+    </span>
+</div>
+<div class="small text-body-secondary mb-3">
+    <span class="sv-file-name">@_job.SourceName</span> · playlist @_job.Playlist · profile @_job.Profile.Name
+    · queued @Format.LocalDate(_job.Created)@(_job.Elapsed is { } e ? $" · {Format.Duration(e)}" : "")
+</div>
+
+<div class="d-flex flex-wrap gap-1 mb-3">
+    @foreach (var step in JobSteps.All)
+    {
+        var state = StepState(step);
+        <span class="badge @state">@step</span>
+    }
+</div>
+
+@if (_job.Status == JobStatus.Running)
+{
+    <div class="progress mb-3" style="height: 10px">
+        <div class="progress-bar @(_job.Progress == null ? "progress-bar-striped progress-bar-animated w-100" : "")"
+             style="@(_job.Progress is { } p ? $"width: {p * 100:0.#}%" : "")"></div>
+    </div>
+}
+
+@if (_job.Error != null)
+{
+    <div class="alert alert-danger">@_job.Error</div>
+}
+
+@if (_job.OutputPath != null)
+{
+    <div class="alert alert-success"><i class="bi bi-check-circle me-1"></i> <span class="sv-path">@_job.OutputPath</span></div>
+}
+
+@foreach (var warning in _job.Warnings)
+{
+    <div class="alert alert-warning py-2 small">@warning</div>
+}
+
+@if (_job.Checks.Count > 0)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">Checks</div>
+        <table class="table table-sm mb-0 small">
+            <tbody>
+            @foreach (var check in _job.Checks)
+            {
+                <tr>
+                    <td style="width: 2rem">
+                        @if (!check.Passed)
+                        {
+                            <i class="bi bi-x-circle-fill text-danger"></i>
+                        }
+                        else if (check.Warning)
+                        {
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        }
+                    </td>
+                    <td class="fw-semibold text-nowrap">@check.Name</td>
+                    <td>@check.Detail</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+<div class="card mb-3">
+    <div class="card-header d-flex align-items-center">
+        <span class="fw-semibold me-auto">Tracks</span>
+        <span class="small text-body-secondary">@(_job.Written.Count > 0 ? _job.Written.Count : _job.Plan.Kept.Count()) kept</span>
+    </div>
+    <table class="table table-sm mb-0 small">
+        <tbody>
+        @if (_job.Written.Count > 0)
+        {
+            @foreach (var track in _job.Written)
+            {
+                <tr>
+                    <td>@track.Kind</td>
+                    <td>@track.Codec</td>
+                    <td>@track.Language</td>
+                    <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
+                    <td>@track.Flags</td>
+                </tr>
+            }
+        }
+        else
+        {
+            @foreach (var track in _job.Plan.Kept)
+            {
+                <tr>
+                    <td>@track.Kind</td>
+                    <td>@track.Codec @(track.Layout == "Multi" ? "" : track.Layout)</td>
+                    <td>@track.Language</td>
+                    <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
+                    <td>@(track.Default ? "default " : "")@(track.Forced ? "forced " : "")@(track.Commentary ? "commentary" : "")</td>
+                </tr>
+            }
+        }
+        @if (_job.Plan.MergeDolbyVisionLayer)
+        {
+            <tr>
+                <td colspan="5"><span class="badge sv-dv">DV layer</span> merged into the video</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex align-items-center">
+        <span class="fw-semibold me-auto">Log</span>
+        <span class="small text-body-secondary sv-path">@Events.LogPath(_job.Id)</span>
+    </div>
+    <pre class="sv-raw mb-0 p-2" id="job-log">@string.Join("\n", _lines)</pre>
+</div>
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private Job? _job;
+    private List<string> _lines = [];
+    private bool _scroll = true;
+
+    protected override void OnParametersSet()
+    {
+        Load();
+    }
+
+    protected override void OnInitialized()
+    {
+        Events.Changed += OnChanged;
+    }
+
+    private void Load()
+    {
+        _job = Store.Get(Id);
+        _lines = Events.Lines(Id);
+        _scroll = true;
+    }
+
+    private void OnChanged(long id)
+    {
+        if (id != Id)
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            Load();
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scroll)
+        {
+            _scroll = false;
+            try
+            {
+                await JS.InvokeVoidAsync("ripparrScrollToEnd", "job-log");
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+                // Prerendering: no browser yet.
+            }
+        }
+    }
+
+    private string StepState(string step)
+    {
+        if (_job == null)
+        {
+            return "text-bg-secondary";
+        }
+
+        var steps = JobSteps.All.ToList();
+        var current = _job.Step == null ? -1 : steps.IndexOf(_job.Step);
+        var index = steps.IndexOf(step);
+        if (_job.Status == JobStatus.Done && !_job.DryRun)
+        {
+            return step == JobSteps.DolbyVision && !_job.Plan.MergeDolbyVisionLayer ? "text-bg-secondary opacity-50" : "text-bg-success";
+        }
+
+        if (current < 0)
+        {
+            return "text-bg-secondary opacity-50";
+        }
+
+        if (index < current)
+        {
+            return "text-bg-success";
+        }
+
+        if (index == current)
+        {
+            return _job.Status switch
+            {
+                JobStatus.Running => "text-bg-primary",
+                JobStatus.Failed or JobStatus.Interrupted or JobStatus.Cancelled => "text-bg-danger",
+                _ => "text-bg-success"
+            };
+        }
+
+        return "text-bg-secondary opacity-50";
+    }
+
+    private void Retry()
+    {
+        Runner.Retry(_job!);
+        Load();
+    }
+
+    private void Delete()
+    {
+        Store.Delete(_job!.Id);
+        Navigation.NavigateTo("queue");
+    }
+
+    public void Dispose() => Events.Changed -= OnChanged;
+}

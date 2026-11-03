@@ -1,0 +1,168 @@
+@page "/profiles/{Id}"
+@inject JobStore Store
+@inject NavigationManager Navigation
+
+<PageTitle>@(_profile?.Name ?? "Profile") · Ripparr</PageTitle>
+
+<div class="mb-2"><a href="profiles" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Profiles</a></div>
+
+@if (_profile == null)
+{
+    <div class="alert alert-warning">There is no profile @Id.</div>
+    return;
+}
+
+<div class="d-flex align-items-center mb-3 gap-2">
+    <h2 class="mb-0 me-auto">@_profile.Name</h2>
+    @if (_saved)
+    {
+        <span class="text-success small"><i class="bi bi-check"></i> Saved</span>
+    }
+    <button class="btn btn-primary" @onclick="Save">Save</button>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Profile</div>
+            <div class="card-body">
+                <label class="form-label small mb-1">Name</label>
+                <input class="form-control form-control-sm mb-2" @bind="_profile.Name"/>
+                <label class="form-label small mb-1">Description</label>
+                <input class="form-control form-control-sm mb-2" @bind="_profile.Description"/>
+                <label class="form-label small mb-1">Source word (SOURCE tag and last bracket)</label>
+                <input class="form-control form-control-sm" @bind="_profile.Source"/>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Video</div>
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="dv" @bind="_profile.KeepDolbyVisionLayer"/>
+                    <label class="form-check-label" for="dv">Keep the Dolby Vision enhancement layer (profile 7 FEL stays FEL)</label>
+                </div>
+                <label class="form-label small mb-1">Video language: <code>original</code>, <code>und</code> or a code</label>
+                <input class="form-control form-control-sm mb-2" @bind="_profile.VideoLanguage"/>
+                <label class="form-label small mb-1">Video track name: <code>{resolution}</code> <code>{codec}</code> <code>{hdr}</code>, empty for none</label>
+                <input class="form-control form-control-sm" @bind="_profile.VideoNameTemplate"/>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Chapters</div>
+            <div class="card-body">
+                <select class="form-select form-select-sm" value="@_profile.Chapters" @onchange="e => _profile.Chapters = Enum.Parse<ChapterNaming>(e.Value!.ToString()!)">
+                    <option value="@ChapterNaming.Numbered">Chapter 01, Chapter 02…</option>
+                    <option value="@ChapterNaming.None">Times only, no names</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Audio</div>
+            <div class="card-body">
+                <label class="form-label small mb-1">Languages, in order (<code>original</code> = the film's language)</label>
+                <input class="form-control form-control-sm mb-2" @bind="AudioLanguages"/>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="otherAudio" @bind="_profile.KeepOtherAudioLanguages"/>
+                    <label class="form-check-label" for="otherAudio">Also keep other languages</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="comm" @bind="_profile.KeepCommentary"/>
+                    <label class="form-check-label" for="comm">Keep commentaries</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="lossy" @bind="_profile.DropLossyWhenLossless"/>
+                    <label class="form-check-label" for="lossy">Drop a lossy track when a lossless one exists in the same language</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="core" @bind="_profile.KeepTrueHdCore"/>
+                    <label class="form-check-label" for="core">Keep the AC-3 core of TrueHD tracks as its own track</label>
+                </div>
+                <label class="form-label small mb-1">Track name: <code>{language}</code> <code>{codec}</code> <code>{channels}</code></label>
+                <input class="form-control form-control-sm mb-2" @bind="_profile.AudioNameTemplate"/>
+                <label class="form-label small mb-1">Commentary track name</label>
+                <input class="form-control form-control-sm" @bind="_profile.CommentaryNameTemplate"/>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Subtitles</div>
+            <div class="card-body">
+                <label class="form-label small mb-1">Languages, in order</label>
+                <input class="form-control form-control-sm mb-2" @bind="SubtitleLanguages"/>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="otherSubs" @bind="_profile.KeepOtherSubtitleLanguages"/>
+                    <label class="form-check-label" for="otherSubs">Also keep other languages</label>
+                </div>
+                <label class="form-label small mb-1">Track name: <code>{language}</code></label>
+                <input class="form-control form-control-sm mb-2" @bind="_profile.SubtitleNameTemplate"/>
+                <label class="form-label small mb-1">Forced track name</label>
+                <input class="form-control form-control-sm" @bind="_profile.ForcedSubtitleNameTemplate"/>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">Output</div>
+            <div class="card-body">
+                <p class="small text-body-secondary mb-2">
+                    Tokens: <code>{title}</code> <code>{year}</code> <code>{edition}</code> <code>{resolution}</code>
+                    <code>{videocodec}</code> <code>{hdr}</code> <code>{audio}</code> <code>{source}</code>.
+                    Text inside the braces is kept only when the token has a value: <code>{ - edition}</code>.
+                </p>
+                <label class="form-label small mb-1">File name</label>
+                <input class="form-control form-control-sm mb-1 font-monospace" @bind="_profile.FileNameTemplate" @bind:event="oninput"/>
+                <div class="small text-body-secondary mb-2">Example: <span class="sv-path">@(Example(_profile.FileNameTemplate)).mkv</span></div>
+                <label class="form-label small mb-1">MKV title</label>
+                <input class="form-control form-control-sm mb-1 font-monospace" @bind="_profile.TitleTemplate" @bind:event="oninput"/>
+                <div class="small text-body-secondary mb-2">Example: @Example(_profile.TitleTemplate)</div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="tags" @bind="_profile.WriteTags"/>
+                    <label class="form-check-label" for="tags">Write MKV global tags (TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION, HDR_FORMAT, DV_PROFILE…)</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private RipProfile? _profile;
+    private bool _saved;
+
+    protected override void OnParametersSet() => _profile = Store.Profile(Id);
+
+    private string AudioLanguages
+    {
+        get => string.Join(", ", _profile!.AudioLanguages);
+        set => _profile!.AudioLanguages = SplitList(value);
+    }
+
+    private string SubtitleLanguages
+    {
+        get => string.Join(", ", _profile!.SubtitleLanguages);
+        set => _profile!.SubtitleLanguages = SplitList(value);
+    }
+
+    private static List<string> SplitList(string value) =>
+        value.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(v => v.ToLowerInvariant()).Distinct().ToList();
+
+    private static string Example(string template) => Naming.Apply(template, new Dictionary<string, string?>
+    {
+        ["title"] = "Blade Runner", ["year"] = "1982", ["edition"] = "Final Cut", ["resolution"] = "2160p",
+        ["videocodec"] = "HEVC", ["hdr"] = "DV HDR10", ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux"
+    });
+
+    private void Save()
+    {
+        Store.SaveProfile(_profile!);
+        _saved = true;
+    }
+}

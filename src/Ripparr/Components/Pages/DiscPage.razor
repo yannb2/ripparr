@@ -1,0 +1,424 @@
+@page "/disc"
+@inject DiscAnalyzer Analyzer
+@inject JobStore Store
+@inject JobRunner Runner
+@inject RadarrClient Radarr
+@inject NavigationManager Navigation
+
+<PageTitle>@(_source?.Name ?? "Disc") · Ripparr</PageTitle>
+
+<div class="mb-2"><a href="" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Sources</a></div>
+
+@if (_source == null)
+{
+    <div class="alert alert-warning">This is not an ISO file or a folder with a BDMV folder: <code>@Path</code></div>
+    return;
+}
+
+<h2 class="sv-file-name mb-1">@_source.Name</h2>
+<div class="sv-path text-body-secondary mb-3">@_source.Path</div>
+
+@if (_analysis == null)
+{
+    <div class="text-body-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Reading the playlists…</div>
+    return;
+}
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <span class="badge text-bg-secondary">@(_source.Kind == SourceKind.Iso ? "ISO" : "BDMV folder")</span>
+    <span class="badge text-bg-secondary">@Format.Size(_source.Size)</span>
+    @switch (_analysis.Encryption)
+    {
+        case Encryption.None:
+            <span class="badge text-bg-success">Not encrypted</span>
+            break;
+        case Encryption.Encrypted:
+            <span class="badge text-bg-warning" title="MakeMKV decrypts a copy first.">Encrypted: MakeMKV decrypts it first</span>
+            break;
+        case Encryption.Likely:
+            <span class="badge text-bg-warning" title="The ISO has an AACS folder.">AACS folder: MakeMKV decrypts it first</span>
+            break;
+        default:
+            <span class="badge text-bg-secondary">Encryption unknown</span>
+            break;
+    }
+    @if (!string.IsNullOrEmpty(_analysis.DiscTitle))
+    {
+        <span class="badge text-bg-light">Disc title: @_analysis.DiscTitle</span>
+    }
+    <button class="btn btn-sm btn-link p-0 ms-auto" @onclick="Reload"><i class="bi bi-arrow-clockwise"></i> Read again</button>
+</div>
+
+@if (_analysis.Error != null)
+{
+    <div class="alert alert-danger">@_analysis.Error</div>
+}
+
+@foreach (var note in _analysis.Notes)
+{
+    <div class="alert alert-secondary py-2 small">@note</div>
+}
+
+@if (_analysis.ManyPlaylists)
+{
+    <div class="alert alert-warning py-2 small">
+        Many playlists have nearly the film's length: this disc may hide the real one among fakes. Check the chapter count
+        and clips against a playlist list for this disc before trusting the guess.
+    </div>
+}
+
+<div class="card mb-3">
+    <div class="card-header d-flex align-items-center">
+        <span class="fw-semibold me-auto">Playlists</span>
+        <div class="form-check form-switch mb-0 small">
+            <input class="form-check-input" type="checkbox" id="showAll" @bind="_showAll"/>
+            <label class="form-check-label" for="showAll">Show short and duplicate ones</label>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 small">
+            <thead>
+            <tr>
+                <th></th>
+                <th>Playlist</th>
+                <th>Length</th>
+                <th class="text-end">Chapters</th>
+                <th class="text-end">Clips</th>
+                <th class="text-end">Size</th>
+                <th>Video</th>
+                <th>Audio</th>
+                <th>Subtitles</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var playlist in VisiblePlaylists)
+            {
+                var streams = playlist.Mpls.Streams;
+                <tr class="sv-clickable-row @(_selected == playlist ? "table-active" : "")" @onclick="() => Select(playlist)">
+                    <td><input type="radio" class="form-check-input" checked="@(_selected == playlist)"/></td>
+                    <td class="fw-semibold">@playlist.Name</td>
+                    <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
+                    <td class="text-end">@playlist.Mpls.Chapters.Count</td>
+                    <td class="text-end" title="@string.Join(", ", playlist.Mpls.Clips)">@playlist.Mpls.Clips.Count</td>
+                    <td class="text-end text-nowrap">@Format.Size(playlist.Size)</td>
+                    <td class="text-nowrap">
+                        @string.Join(" ", streams.Where(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer).Take(1).Select(s => $"{StreamCoding.Resolution(s.Format)} {s.CodecName}"))
+                        @if (playlist.Mpls.HasDolbyVisionEnhancementLayer)
+                        {
+                            <span class="badge sv-dv ms-1">DV EL</span>
+                        }
+                    </td>
+                    <td>@string.Join(", ", streams.Where(s => s.Kind == StreamKind.Audio).Select(s => $"{s.Language} {s.CodecName}"))</td>
+                    <td>@string.Join(" ", streams.Where(s => s.Kind == StreamKind.Subtitle).Select(s => s.Language).Distinct())</td>
+                    <td class="text-nowrap">
+                        @if (playlist.MainFeature)
+                        {
+                            <span class="badge text-bg-success">Main feature</span>
+                        }
+                        @if (playlist.PossibleCut)
+                        {
+                            <span class="badge text-bg-info" title="Long and shares most clips with the main feature: probably another cut.">Other cut?</span>
+                        }
+                        @if (playlist.DuplicateOf != null)
+                        {
+                            <span class="badge text-bg-secondary">Same as @playlist.DuplicateOf</span>
+                        }
+                        @if (playlist.Short)
+                        {
+                            <span class="badge text-bg-secondary">Short</span>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (_selected != null && _plan != null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">New job: playlist @_selected.Name</div>
+        <div class="card-body">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Look up in Radarr</label>
+                    <div class="input-group input-group-sm">
+                        <input class="form-control" @bind="_search" @onkeyup="SearchOnEnter"/>
+                        <button class="btn btn-outline-secondary" @onclick="Search" disabled="@(!Radarr.Configured || _searching)">
+                            @if (_searching)
+                            {
+                                <span class="spinner-border spinner-border-sm"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-search"></i>
+                            }
+                        </button>
+                    </div>
+                    @if (!Radarr.Configured)
+                    {
+                        <div class="form-text">Radarr is not set up: fill in the title, year and IDs by hand.</div>
+                    }
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small mb-1">Profile</label>
+                    <select class="form-select form-select-sm" value="@_profileId" @onchange="ChangeProfile">
+                        @foreach (var profile in _profiles)
+                        {
+                            <option value="@profile.Id">@profile.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            @if (_searchError != null)
+            {
+                <div class="alert alert-warning py-2 small">@_searchError</div>
+            }
+
+            @if (_matches.Count > 0)
+            {
+                <div class="list-group list-group-flush mb-3 small">
+                    @foreach (var match in _matches.Take(8))
+                    {
+                        <button class="list-group-item list-group-item-action" @onclick="() => Pick(match)">
+                            <span class="fw-semibold">@match.Title (@match.Year)</span>
+                            <span class="text-body-secondary ms-2">TMDb @match.TmdbId · @match.ImdbId · @Languages.Name(match.OriginalLanguage)</span>
+                            @if (match.LibraryPath != null)
+                            {
+                                <span class="badge text-bg-success ms-2">In Radarr</span>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+
+            <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label small mb-1">Title</label>
+                    <input class="form-control form-control-sm" @bind="_title" @bind:event="oninput"/>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small mb-1">Year</label>
+                    <input class="form-control form-control-sm" type="number" @bind="_year" @bind:event="oninput"/>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Edition</label>
+                    <input class="form-control form-control-sm" placeholder="@(_selected.PossibleCut ? "another cut?" : "")" @bind="_edition" @bind:event="oninput"/>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">TMDb ID</label>
+                    <input class="form-control form-control-sm" type="number" @bind="_tmdb"/>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">IMDb ID</label>
+                    <input class="form-control form-control-sm" @bind="_imdb"/>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small mb-1" title="ISO 639-2, such as eng or fre">Language</label>
+                    <input class="form-control form-control-sm" value="@_original" @onchange="ChangeOriginal" title="The film's original language: decides 'original' in the profile"/>
+                </div>
+            </div>
+
+            <TrackPlanEditor Plan="_plan"/>
+
+            <div class="mt-3 small">
+                <div><span class="text-body-secondary">MKV title:</span> <span class="fw-semibold">@PreviewTitle</span></div>
+                <div><span class="text-body-secondary">File name (expected; codec and HDR words come from the streams):</span> <span class="sv-path">@PreviewFile</span></div>
+            </div>
+
+            @if (_error != null)
+            {
+                <div class="alert alert-danger py-2 small mt-3">@_error</div>
+            }
+
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-primary" @onclick="() => Queue(false)"><i class="bi bi-play-fill"></i> Queue the job</button>
+                <button class="btn btn-outline-secondary" @onclick="() => Queue(true)" title="Prints the commands without running the long steps">Dry run</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Path { get; set; }
+
+    private DiscSource? _source;
+    private DiscAnalysis? _analysis;
+    private PlaylistInfo? _selected;
+    private TrackPlan? _plan;
+    private bool _showAll;
+    private List<RipProfile> _profiles = [];
+    private string _profileId = "";
+
+    private string _search = "";
+    private bool _searching;
+    private string? _searchError;
+    private List<MovieMatch> _matches = [];
+
+    private string _title = "";
+    private int? _year;
+    private string? _edition;
+    private int? _tmdb;
+    private string? _imdb;
+    private string? _original;
+    private string? _error;
+
+    private IEnumerable<PlaylistInfo> VisiblePlaylists => (_showAll
+            ? _analysis!.Playlists
+            : _analysis!.Playlists.Where(p => !p.Short && p.DuplicateOf == null))
+        .OrderByDescending(p => p.MainFeature)
+        .ThenByDescending(p => p.Duration);
+
+    private RipProfile Profile => _profiles.FirstOrDefault(p => p.Id == _profileId) ?? _profiles.FirstOrDefault() ?? new RipProfile();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _source = string.IsNullOrEmpty(Path) ? null : Analyzer.Describe(Path);
+        if (_source == null)
+        {
+            return;
+        }
+
+        _profiles = Store.Profiles();
+        var guess = ReleaseName.Guess(_source.Name);
+        _title = guess.Title;
+        _year = guess.Year;
+        _search = guess.Year is { } y ? $"{guess.Title} {y}" : guess.Title;
+        await Load(false);
+    }
+
+    private async Task Reload() => await Load(true);
+
+    private async Task Load(bool fresh)
+    {
+        _analysis = null;
+        StateHasChanged();
+        _analysis = await Analyzer.AnalyseAsync(_source!, CancellationToken.None, fresh);
+        if (_analysis.MainFeature is { } main)
+        {
+            Select(main);
+        }
+    }
+
+    private void Select(PlaylistInfo playlist)
+    {
+        _selected = playlist;
+        _profileId = playlist.Resolution == "2160p"
+            ? _profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? ""
+            : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
+        BuildPlan();
+    }
+
+    private void BuildPlan()
+    {
+        if (_selected != null)
+        {
+            _plan = TrackPlanner.Build(_selected.Mpls, Profile, _original);
+        }
+    }
+
+    private void ChangeProfile(ChangeEventArgs e)
+    {
+        _profileId = e.Value?.ToString() ?? "";
+        BuildPlan();
+    }
+
+    private void ChangeOriginal(ChangeEventArgs e)
+    {
+        _original = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString()!.Trim().ToLowerInvariant();
+        BuildPlan();
+    }
+
+    private async Task SearchOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Search();
+        }
+    }
+
+    private async Task Search()
+    {
+        _searching = true;
+        _searchError = null;
+        (_matches, _searchError) = await Radarr.SearchAsync(_search, CancellationToken.None);
+        if (_matches.Count == 0 && _searchError == null)
+        {
+            _searchError = "Radarr found nothing.";
+        }
+
+        _searching = false;
+    }
+
+    private void Pick(MovieMatch match)
+    {
+        _title = match.Title;
+        _year = match.Year;
+        _tmdb = match.TmdbId;
+        _imdb = match.ImdbId;
+        _original = match.OriginalLanguage;
+        _matches = [];
+        BuildPlan();
+    }
+
+    private Dictionary<string, string?> PreviewValues()
+    {
+        var video = _selected?.Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer);
+        var audio = _plan?.Kept.FirstOrDefault(t => t.Kind == StreamKind.Audio && t.Default);
+        var dv = _plan?.MergeDolbyVisionLayer == true;
+        var uhd = video != null && StreamCoding.Resolution(video.Format) == "2160p";
+        return new Dictionary<string, string?>
+        {
+            ["title"] = _title,
+            ["year"] = _year?.ToString(),
+            ["edition"] = _edition,
+            ["resolution"] = video == null ? null : StreamCoding.Resolution(video.Format),
+            ["videocodec"] = video?.CodecName,
+            ["hdr"] = dv ? "DV HDR10" : uhd ? "HDR10" : "SDR",
+            ["audio"] = audio == null ? null : audio.Layout is "Multi" or "2.0 + Multi" ? audio.Codec : $"{audio.Codec}-{audio.Layout}",
+            ["source"] = Profile.Source
+        };
+    }
+
+    private string PreviewTitle => Naming.Apply(Profile.TitleTemplate, PreviewValues());
+
+    private string PreviewFile => Naming.SafeFileName(Naming.Apply(Profile.FileNameTemplate, PreviewValues())) + ".mkv";
+
+    private void Queue(bool dryRun)
+    {
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_title) || _year is null)
+        {
+            _error = "A title and a year are needed for the file name.";
+            return;
+        }
+
+        if (_plan == null || !_plan.Kept.Any(t => t.Kind == StreamKind.Video))
+        {
+            _error = "Keep at least the video track.";
+            return;
+        }
+
+        var job = new Job
+        {
+            SourcePath = _source!.Path,
+            SourceKind = _source.Kind,
+            SourceName = _source.Name,
+            Playlist = _selected!.Name,
+            Title = _title.Trim(),
+            Year = _year,
+            Edition = string.IsNullOrWhiteSpace(_edition) ? null : _edition.Trim(),
+            TmdbId = _tmdb,
+            ImdbId = string.IsNullOrWhiteSpace(_imdb) ? null : _imdb.Trim(),
+            OriginalLanguage = _original,
+            Profile = Profile,
+            Plan = _plan,
+            DryRun = dryRun
+        };
+        Runner.Enqueue(job);
+        Navigation.NavigateTo($"job/{job.Id}");
+    }
+}
