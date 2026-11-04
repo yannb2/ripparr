@@ -32,7 +32,7 @@ For foreign-language films there are more steps on the same form:
   the first backs that guess up. Hover the badge for what was found.
 - **Read subtitles** then has Tesseract read every caption of every track: SDH and commentary are checked again
   on all of them (and set both ways), and the text shows in the preview and in **Side by side**, which lines up
-  the captions of the tracks you tick by time (filter: rows where a track has nothing, to find the forced one).
+  the captions of the tracks you tick (the **compare** box next to each subtitle track's preview eye) by time (filter: rows where a track has nothing, to find the forced one).
 
 For a French track, the OCR'd text can also say which French it is: words such as *fin de semaine*, *courriel*,
 *stationnement* or *dépanneur* show **Looks like Québec French**, and *week-end*, *parking*, *portable* or

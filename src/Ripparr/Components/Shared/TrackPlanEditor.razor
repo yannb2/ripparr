@@ -73,6 +73,14 @@
                     @if (track.Kind == StreamKind.Subtitle && Subtitles is { Running: false, Error: null } scan && scan.Tracks.TryGetValue(track.Pid, out var read))
                     {
                         <a class="ms-1" href="discs/@scan.Key/subtitles/@track.Pid" target="_blank" title="Preview the captions (new tab)"><i class="bi bi-eye"></i></a>
+                        @if (Compare != null)
+                        {
+                            <label class="form-check form-check-inline mb-0 ms-1 me-0 small text-nowrap" title="Tick two or more tracks, then Side by side lines their captions up by time">
+                                <input type="checkbox" class="form-check-input" checked="@Compare.Contains(track.Pid)"
+                                       @onchange="e => CompareChanged.InvokeAsync((track.Pid, e.Value is true))"/>
+                                <i class="bi bi-layout-three-columns"></i> compare
+                            </label>
+                        }
                         @if (read.Sdh)
                         {
                             <span class="badge text-bg-info ms-1" title="@read.Reason">SDH found</span>
@@ -166,6 +174,11 @@
 
     /// <summary>The full read of the subtitle tracks, when there is one: caption counts and a preview.</summary>
     [Parameter] public SubtitleScan? Subtitles { get; set; }
+
+    /// <summary>The subtitle tracks ticked for Side by side, when the subtitles were read.</summary>
+    [Parameter] public IReadOnlySet<int>? Compare { get; set; }
+
+    [Parameter] public EventCallback<(int Pid, bool On)> CompareChanged { get; set; }
 
     /// <summary>The address of a short sample of an audio track, when the disc can be read for one.</summary>
     [Parameter] public Func<PlannedTrack, string>? ListenUrl { get; set; }
