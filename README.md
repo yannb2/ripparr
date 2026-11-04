@@ -77,7 +77,10 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
 5. **Subtitles**: every picture subtitle track (PGS) is kept in `/config/subtitles/job-<id>/` for the preview
    page (each caption's picture and time). For the profile's SRT languages, Tesseract reads the pictures, the
    text for the hard of hearing is removed ([door slams], (laughs), `JOHN:`, ♪ lyrics) and an SRT track goes in
-   right after the picture track. An OCR problem is a warning, not a failure.
+   next to the picture track. An OCR problem is a warning, not a failure. Then the subtitle tracks are sorted:
+   by the profile's languages, then within each language by kind in the profile's **Order within a language**
+   (Forced, Full, SDH, Commentary by default), then SRT or PGS first (a profile switch), then as on the disc.
+   An SRT made without the SDH text counts as Full, so it comes before the SDH picture track.
 6. **Dolby Vision**: a separate enhancement layer is merged back into the video with `dovi_tool mux`
    (profile 7 FEL stays FEL), always. Only the job form can leave it out, for a disc whose layer will not demux.
 7. **Build the MKV**: mkvmerge with the track plan (languages, names, default/forced/commentary flags, order),

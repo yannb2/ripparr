@@ -128,6 +128,15 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>Also make an SRT of forced subtitle tracks.</summary>
     public bool SrtForForced { get; set; } = true;
 
+    /// <summary>
+    /// Within each language, the subtitle tracks by kind in this order: forced, full, sdh, commentary.
+    /// Applied at the end of the job, so the SRT tracks made by OCR are sorted too.
+    /// </summary>
+    public List<string> SubtitleKindOrder { get; set; } = [..SubtitleOrder.DefaultKinds];
+
+    /// <summary>A text (SRT) track goes before the picture (PGS) track of the same kind and language, instead of after.</summary>
+    public bool SrtBeforePictures { get; set; }
+
 
     // ---- Chapters ----
 

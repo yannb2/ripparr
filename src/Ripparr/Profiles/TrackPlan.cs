@@ -174,7 +174,10 @@ public static class TrackPlanner
             track.Keep = Rank(subtitleOrder, track.Language) < int.MaxValue || profile.KeepOtherSubtitleLanguages;
         }
 
-        subtitles = subtitles.OrderBy(t => Rank(subtitleOrder, t.Language)).ThenBy(t => t.StreamIndex).ToList();
+        subtitles = subtitles.OrderBy(t => Rank(subtitleOrder, t.Language))
+            .ThenBy(t => SubtitleOrder.Rank(profile, t))
+            .ThenBy(t => t.StreamIndex)
+            .ToList();
 
         return new TrackPlan { Tracks = [..videos, ..audio, ..subtitles] };
     }

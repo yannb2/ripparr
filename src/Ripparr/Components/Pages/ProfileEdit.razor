@@ -192,10 +192,39 @@
                         <NamePreview Rows="TrackNaming.SubtitlePreview(_profile)"/>
                     </div>
 
+                    <h6 class="mt-4 mb-2 border-top pt-3"><i class="bi bi-sort-down text-primary me-2"></i>Order within a language</h6>
+                    <p class="small text-body-secondary mb-2">
+                        The languages come in the order above. Within each language, the tracks come by kind in this order, then
+                        as on the disc. The job sorts again at the end, once the SDH and commentary flags are final and the SRT
+                        tracks are made, so an SRT without SDH text is a <em>Full</em> track and goes before an <em>SDH</em> one.
+                    </p>
+                    <ol class="list-group list-group-numbered mb-2" style="max-width: 22rem">
+                        @{ var kinds = SubtitleOrder.Kinds(_profile); }
+                        @for (var i = 0; i < kinds.Count; i++)
+                        {
+                            var index = i;
+                            <li class="list-group-item d-flex align-items-center py-1">
+                                <span class="ms-2">@SubtitleOrder.Label(kinds[index])</span>
+                                <span class="ms-auto btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary" disabled="@(index == 0)" title="Move up"
+                                            @onclick="() => MoveKind(index, -1)"><i class="bi bi-arrow-up"></i></button>
+                                    <button type="button" class="btn btn-outline-secondary" disabled="@(index == kinds.Count - 1)" title="Move down"
+                                            @onclick="() => MoveKind(index, 1)"><i class="bi bi-arrow-down"></i></button>
+                                </span>
+                            </li>
+                        }
+                    </ol>
+                    <Switch Id="srtFirst" @bind-Value="_profile.SrtBeforePictures" Label="Text (SRT) before pictures (PGS)"
+                            Help="For two tracks of the same kind and language, such as a PGS and the SRT read from it: the SRT first. Off: the picture track first."/>
+                    <div class="small text-body-secondary mb-3">
+                        Example, English with forced, SDH-only full and commentary tracks on the disc:
+                        <span class="text-body">@string.Join(" · ", SubtitleOrderExample())</span>
+                    </div>
+
                     <h6 class="mt-4 mb-2 border-top pt-3"><i class="bi bi-fonts text-primary me-2"></i>Text subtitles (SRT by OCR)</h6>
                     <p class="small text-body-secondary mb-2">
                         Blu-ray subtitles are pictures. For these languages, Tesseract reads them and the MKV also gets an SRT track,
-                        right after the picture track, named with the templates above and <code>{codec}</code> = SRT.
+                        next to the picture track (see the order above), named with the templates above and <code>{codec}</code> = SRT.
                         Every job keeps its subtitle pictures for the preview.
                     </p>
                     <div class="mb-3">
@@ -516,4 +545,28 @@
         }
     }
 
+
+    private void MoveKind(int index, int by)
+    {
+        var kinds = SubtitleOrder.Kinds(_profile);
+        (kinds[index], kinds[index + by]) = (kinds[index + by], kinds[index]);
+        _profile.SubtitleKindOrder = kinds;
+    }
+
+    /// <summary>The order a typical disc gets: forced PGS, SDH PGS with the SDH-free SRT made of it, a commentary.</summary>
+    private IEnumerable<string> SubtitleOrderExample()
+    {
+        PlannedTrack Track(string codec, bool forced = false, bool sdh = false, bool commentary = false) => new()
+        {
+            Kind = StreamKind.Subtitle, Language = "eng", Codec = codec, Forced = forced, HearingImpaired = sdh, Commentary = commentary, Keep = true
+        };
+
+        var tracks = new[]
+        {
+            Track("PGS", sdh: true), Track("PGS", forced: true), Track("PGS", commentary: true), Track("SRT"), Track("SRT", forced: true)
+        };
+        var outputs = tracks.Select(t => new OutputTrack(t, new DemuxedFile("", new StreamFacts()), "")).ToList();
+        return SubtitleOrder.Sort(outputs, _profile).Select(o =>
+            $"{SubtitleOrder.Label(SubtitleOrder.Kind(o.Planned))} {o.Planned.Codec}" + (o.Planned.Codec == "SRT" && SubtitleOrder.Kind(o.Planned) == "full" ? " (SDH removed)" : ""));
+    }
 }
