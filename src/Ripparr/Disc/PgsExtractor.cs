@@ -40,6 +40,19 @@ public sealed class PgsExtractor : IDisposable
         _out90 = (long)outTime * 2;
     }
 
+    /// <summary>
+    /// The next data does not follow on from the last (a quick read jumps to another part of the
+    /// film): PES packets cut short are dropped, not written.
+    /// </summary>
+    public void Break()
+    {
+        foreach (var track in _tracks.Values)
+        {
+            track.Collecting = false;
+            track.Pes.SetLength(0);
+        }
+    }
+
     /// <summary>Takes whole 192-byte packets; anything left over at the end is ignored.</summary>
     public void Feed(ReadOnlySpan<byte> data)
     {

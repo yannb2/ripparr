@@ -74,6 +74,89 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store,
         }
     }
 
+    /// <summary>How long the Listen sample of an audio track is, and where in the playlist it starts.</summary>
+    public const int SampleSeconds = 20;
+
+    public const double SamplePosition = 0.4;
+
+    private readonly ConcurrentDictionary<string, Lazy<Task<string?>>> _samples = new();
+
+    /// <summary>
+    /// 20 seconds of one audio track as AAC (.m4a), to hear whether it is a commentary or an audio
+    /// description. From a folder, or an ISO the mount service mounts: ffmpeg has to seek.
+    /// </summary>
+    public async Task<(string? File, string? Error)> SampleAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int pid)
+    {
+        var key = Key(source, playlist.Name);
+        var file = Path.Combine(options.Value.ThumbnailFolder, key, $"listen-{pid.ToString(CultureInfo.InvariantCulture)}.m4a");
+        if (File.Exists(file))
+        {
+            return (file, null);
+        }
+
+        var work = _samples.GetOrAdd(file, _ => new Lazy<Task<string?>>(() => MakeSampleAsync(source, analysis, playlist, pid, file)));
+        string? error;
+        try
+        {
+            error = await work.Value;
+        }
+        finally
+        {
+            _samples.TryRemove(file, out _);
+        }
+
+        return File.Exists(file) ? (file, null) : (null, error ?? "No sample.");
+    }
+
+    private async Task<string?> MakeSampleAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int pid, string file)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        async Task<string?> Cut(string disc)
+        {
+            var (clip, seconds) = Locate(playlist.Mpls, SamplePosition, ClipStarts(analysis));
+            var path = DiscAnalyzer.ClipPath(disc, clip);
+            if (path == null)
+            {
+                return $"Clip {clip}.m2ts is missing.";
+            }
+
+            var temp = file + ".part.m4a";
+            var result = await Tools.ProcessRunner.RunAsync(options.Value.Tools.FFmpeg,
+            [
+                "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", seconds.ToString("0.###", CultureInfo.InvariantCulture),
+                "-i", path, "-map", $"0:i:{pid.ToString(CultureInfo.InvariantCulture)}", "-t", SampleSeconds.ToString(CultureInfo.InvariantCulture),
+                "-vn", "-sn", "-ac", "2", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-f", "mp4", "-y", temp
+            ], TimeSpan.FromMinutes(2));
+            if (result.ExitCode != 0 || !File.Exists(temp))
+            {
+                File.Delete(temp);
+                return result.Error.Trim().Split('\n').LastOrDefault() is { Length: > 0 } line ? line : "ffmpeg could not cut the sample.";
+            }
+
+            File.Move(temp, file, overwrite: true);
+            return null;
+        }
+
+        try
+        {
+            if (source.Kind != SourceKind.Iso)
+            {
+                return await Cut(SourceFinder.BdmvParent(source.Path) ?? source.Path);
+            }
+
+            var mounted = await IsoMount.BorrowAsync(options.Value.IsoMount, source.Path,
+                store.List(50, [Jobs.JobStatus.Running]).FirstOrDefault(j => j.SourcePath == source.Path && j.MountedAt != null)?.MountedAt,
+                () => store.List(50, [Jobs.JobStatus.Running]).Any(j => j.SourcePath == source.Path),
+                async disc => new Tuple<string?>(await Cut(disc)));
+            return mounted == null ? "Listening to a track of an ISO needs the mount service." : mounted.Item1;
+        }
+        catch (Exception e) when (e is IOException or Win32Exception or InvalidOperationException)
+        {
+            logger.LogWarning(e, "Sample of PID {Pid} in playlist {Playlist} failed", pid, playlist.Name);
+            return e.Message;
+        }
+    }
+
     /// <summary>
     /// Where a point of the playlist falls: which clip, and how far into the clip's file. A playlist
     /// can play only part of a clip (TV discs cut each episode out of one big clip): the item's in
@@ -185,53 +268,14 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store,
         }
     }
 
-    /// <summary>
-    /// With the mount service, an ISO is read like a folder: ffmpeg seeks, so any clip size works.
-    /// Uses a running job's mount of the same ISO, else mounts it and unmounts it after (unless a
-    /// job started on it meanwhile). Null when the service could not mount it.
-    /// </summary>
+    /// <summary>With the mount service, an ISO is read like a folder: ffmpeg seeks, so any clip size works.</summary>
     private async Task<(string? Error, bool Done)?> FromMountedIsoAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, string folder)
     {
-        var settings = options.Value.IsoMount;
-        if (!settings.Enabled)
-        {
-            return null;
-        }
-
-        bool JobUsesIt() => store.List(50, [Jobs.JobStatus.Running]).Any(j => j.SourcePath == source.Path);
-
-        var hostPath = store.List(50, [Jobs.JobStatus.Running]).FirstOrDefault(j => j.SourcePath == source.Path && j.MountedAt != null)?.MountedAt;
-        var ours = false;
-        if (hostPath == null)
-        {
-            var reply = await IsoMount.MountAsync(settings.Socket, settings.ToHost(source.Path), CancellationToken.None);
-            if (reply is not { Ok: true, Path: { } path })
-            {
-                return null;
-            }
-
-            hostPath = path;
-            ours = true;
-        }
-
-        try
-        {
-            var disc = SourceFinder.BdmvParent(settings.ToContainer(hostPath));
-            if (disc == null)
-            {
-                return null;
-            }
-
-            var mountedSource = source with { Path = disc, Kind = SourceKind.Folder };
-            return (await FromFolderAsync(mountedSource, analysis, playlist, folder), true);
-        }
-        finally
-        {
-            if (ours && !JobUsesIt())
-            {
-                await IsoMount.UnmountAsync(settings.Socket, hostPath, CancellationToken.None);
-            }
-        }
+        var running = store.List(50, [Jobs.JobStatus.Running]).Where(j => j.SourcePath == source.Path).ToList();
+        var result = await IsoMount.BorrowAsync(options.Value.IsoMount, source.Path, running.FirstOrDefault(j => j.MountedAt != null)?.MountedAt,
+            () => store.List(50, [Jobs.JobStatus.Running]).Any(j => j.SourcePath == source.Path),
+            async disc => new Tuple<string?>(await FromFolderAsync(source with { Path = disc, Kind = SourceKind.Folder }, analysis, playlist, folder)));
+        return result == null ? null : (result.Item1, true);
     }
 
     /// <summary>Runs ffmpeg with the scaling and output added; null when it worked, else its last line.</summary>

@@ -38,12 +38,19 @@ public class TrackPlannerTests
         var plan = TrackPlanner.Build(Film, new RipProfile(), "eng");
         var audio = plan.Tracks.Where(t => t.Kind == StreamKind.Audio).ToList();
 
-        // TrueHD eng, DTS-HD MA fra, then the commentary; the English AC-3 5.1 is a lossy duplicate.
-        var kept = audio.Where(t => t.Keep).Select(t => $"{t.Codec} {t.Language}{(t.Commentary ? " commentary" : "")}").ToArray();
-        CollectionAssert.AreEqual(new[] { "TrueHD eng", "DTS-HD MA fra", "AC3 eng commentary" }, kept);
+        // TrueHD eng, DTS-HD MA fra, then the stereo AC-3 after the English 5.1: a commentary or an
+        // audio description (the form asks which); the English AC-3 5.1 is a lossy duplicate.
+        var kept = audio.Where(t => t.Keep).Select(t => $"{t.Codec} {t.Language}{(t.Unsure ? " commentary or AD?" : "")}").ToArray();
+        CollectionAssert.AreEqual(new[] { "TrueHD eng", "DTS-HD MA fra", "AC3 eng commentary or AD?" }, kept);
+        Assert.IsFalse(audio.Any(t => t.Commentary || t.VisualImpaired), "neither flag is guessed");
         Assert.IsTrue(audio.Single(t => t.Codec == "TrueHD").Default);
         Assert.AreEqual(1, audio.Count(t => t.Default));
-        Assert.IsFalse(audio.Single(t => t.Codec == "AC3" && !t.Commentary).Keep);
+        Assert.IsFalse(audio.Single(t => t.Codec == "AC3" && !t.CommentaryOrAd).Keep);
+
+        // Answered on the form: no longer unsure.
+        var unsure = audio.Single(t => t.CommentaryOrAd);
+        unsure.VisualImpaired = true;
+        Assert.IsFalse(unsure.Unsure);
     }
 
     [TestMethod]

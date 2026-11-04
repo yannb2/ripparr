@@ -4,7 +4,11 @@ using System.Text.RegularExpressions;
 namespace Ripparr.Subtitles;
 
 /// <summary>What the OCR of a sample of a track's captions says about the track.</summary>
-public sealed record TrackGuess(bool Sdh, bool Commentary, string Reason, int Sampled = 0, int SdhCaptions = 0, int CommentaryCaptions = 0);
+public sealed record TrackGuess(bool Sdh, bool Commentary, string Reason, int Sampled = 0, int SdhCaptions = 0, int CommentaryCaptions = 0)
+{
+    /// <summary>For a French track: Québec or France, from its words.</summary>
+    public RegionHint? French { get; init; }
+}
 
 /// <summary>
 /// Tells SDH and commentary subtitle tracks from the plain ones by what their captions say.

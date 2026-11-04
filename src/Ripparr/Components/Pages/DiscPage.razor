@@ -295,7 +295,7 @@
                     {
                         <i class="bi bi-info-circle text-body-secondary"></i>
                         <span class="text-body-secondary">@subtitleError</span>
-                        <button class="btn btn-sm btn-link p-0" @onclick="ReadSubtitles">Try again</button>
+                        <button class="btn btn-sm btn-link p-0" @onclick="() => ReadSubtitles(_subtitles.Quick)">Try again</button>
                     }
                     else if (_subtitles != null)
                     {
@@ -324,14 +324,29 @@
                         </span>
                         <i class="bi bi-check2 text-success"></i>
                         <span class="text-body-secondary">
-                            @(_subtitles.FullText ? "Subtitles read" : "Subtitles previewed") in @(_subtitles.Took.TotalSeconds < 60 ? $"{_subtitles.Took.TotalSeconds:0.#} s" : Format.Duration(_subtitles.Took)):
-                            caption counts and <i class="bi bi-eye"></i> previews below@(SubtitleFlagsNote).
+                            @if (_subtitles.Quick)
+                            {
+                                @($"Checked in {(_subtitles.Took.TotalSeconds < 60 ? $"{_subtitles.Took.TotalSeconds:0.#} s" : Format.Duration(_subtitles.Took))}, on {_subtitles.QuickNote}: ")
+                                <span>caption counts from that sample only@(SubtitleFlagsNote).</span>
+                            }
+                            else
+                            {
+                                @(_subtitles.FullText ? "Subtitles read" : "Subtitles previewed") @(" in " + (_subtitles.Took.TotalSeconds < 60 ? $"{_subtitles.Took.TotalSeconds:0.#} s" : Format.Duration(_subtitles.Took)) + ":")
+                                <span>caption counts and <i class="bi bi-eye"></i> previews below@(SubtitleFlagsNote).</span>
+                            }
                         </span>
                         @if (_subtitles.Stage.StartsWith("The OCR failed", StringComparison.Ordinal))
                         {
                             <span class="text-danger">@_subtitles.Stage</span>
                         }
-                        @if (!_subtitles.FullText)
+                        @if (_subtitles.Quick)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReadSubtitles(false)"
+                                    title="Reads the whole film once (minutes for a UHD disc): exact caption counts, forced captions and every caption in the preview">
+                                <i class="bi bi-badge-cc"></i> Preview subtitles (whole film)
+                            </button>
+                        }
+                        else if (!_subtitles.FullText)
                         {
                             <button class="btn btn-sm btn-outline-secondary" @onclick="ReadAllText"
                                     title="Tesseract reads every caption of every track: SDH and commentary checked on all of them, and the text shows in the preview and compare pages. A few minutes per track.">
@@ -341,16 +356,20 @@
                     }
                     else
                     {
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="ReadSubtitles"
-                                title="Reads the whole film once (minutes for a UHD disc) for each subtitle track's exact caption count, forced captions, a preview and a quick SDH / commentary check on a sample">
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReadSubtitles(true)"
+                                title="Reads a few slices spread over the film (seconds on a folder or a mounted ISO) and checks a sample of each track's captions for SDH and commentary text">
+                            <i class="bi bi-search"></i> Check SDH and commentary
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReadSubtitles(false)"
+                                title="Reads the whole film once (minutes for a UHD disc) for each subtitle track's exact caption count, forced captions, a preview and the SDH / commentary check">
                             <i class="bi bi-badge-cc"></i> Preview subtitles
                         </button>
-                        <span class="text-body-secondary">Caption counts, previews and a quick SDH / commentary check, to pick the forced or default track. Reads the whole film once.</span>
+                        <span class="text-body-secondary">The check takes seconds; the preview reads the whole film for exact counts and forced captions.</span>
                     }
                 </div>
             }
 
-            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles"/>
+            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles" ListenUrl="@(CanListen ? ListenUrl : null)"/>
 
             <ChapterList Playlist="_selected.Mpls" Naming="Profile.Chapters"/>
 
@@ -395,6 +414,16 @@
     private DiscSource? _source;
     private DiscAnalysis? _analysis;
     private PlaylistInfo? _selected;
+
+    /// <summary>
+    /// ffmpeg cuts a sample from a plain folder, or a plain ISO the mount service mounts: it has to
+    /// seek, and cannot read an encrypted stream.
+    /// </summary>
+    private bool CanListen => _analysis is { Encryption: not Encryption.Encrypted }
+                              && (_source!.Kind != SourceKind.Iso || _mount is { Ok: true });
+
+    private string ListenUrl(PlannedTrack track) =>
+        $"api/discs/listen/{track.Pid}.m4a?path={Uri.EscapeDataString(_source!.Path)}&playlist={Uri.EscapeDataString(_selected!.Name)}";
     private TrackPlan? _plan;
     private bool _showAll;
     private bool _tv;
@@ -544,15 +573,15 @@
     }
     private Timer? _subtitleTimer;
 
-    /// <summary>Starts the full subtitle read (it goes on if the page is left) and follows it.</summary>
-    private void ReadSubtitles()
+    /// <summary>Starts the subtitle read, quick or whole (it goes on if the page is left), and follows it.</summary>
+    private void ReadSubtitles(bool quick)
     {
         if (_selected == null || _analysis == null)
         {
             return;
         }
 
-        _subtitles = Scanner.Start(_source!, _analysis, _selected);
+        _subtitles = Scanner.Start(_source!, _analysis, _selected, quick);
         WatchSubtitles();
     }
 
@@ -615,7 +644,9 @@
         {
             if (_subtitles.Tracks.TryGetValue(track.Pid, out var read))
             {
-                track.Details = $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
+                track.Details = _subtitles.Quick
+                    ? $"{read.Captions:N0} elements in the sample"
+                    : $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
                 if (flag && Profile.DetectSdh && (read.Sdh || both))
                 {
                     track.HearingImpaired = read.Sdh;

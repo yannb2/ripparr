@@ -39,6 +39,16 @@ public sealed class PlannedTrack
     /// <summary>Audio description for the visually impaired (AD).</summary>
     public bool VisualImpaired { get; set; }
 
+    /// <summary>
+    /// Shaped like a commentary or an audio description (a stereo lossy track after a multichannel
+    /// one in the same language): the disc says neither, so the form asks which.
+    /// </summary>
+    public bool CommentaryOrAd { get; set; }
+
+    /// <summary>Still waiting for the answer to "commentary or AD?".</summary>
+    [JsonIgnore]
+    public bool Unsure => CommentaryOrAd && !Commentary && !VisualImpaired;
+
     /// <summary>Text typed on the form: the {description} of the profile's name template ("=..." is the whole name).</summary>
     public string? Name { get; set; }
 
@@ -137,7 +147,7 @@ public static class TrackPlanner
 
         if (profile.DropLossyWhenLossless)
         {
-            foreach (var track in audio.Where(t => t.Keep && !t.Lossless && !t.Commentary))
+            foreach (var track in audio.Where(t => t.Keep && !t.Lossless && !t.Commentary && !t.CommentaryOrAd))
             {
                 if (audio.Any(o => o.Keep && o.Lossless && !o.Commentary && Languages.Same(o.Language, track.Language)))
                 {
@@ -147,11 +157,11 @@ public static class TrackPlanner
         }
 
         audio = audio
-            .OrderBy(t => t.Commentary)
+            .OrderBy(t => t.Commentary || t.CommentaryOrAd)
             .ThenBy(t => Rank(audioOrder, t.Language))
             .ThenBy(t => t.StreamIndex)
             .ToList();
-        var firstAudio = audio.FirstOrDefault(t => t.Keep && !t.Commentary);
+        var firstAudio = audio.FirstOrDefault(t => t.Keep && !t.Commentary && !t.CommentaryOrAd);
         if (firstAudio != null)
         {
             firstAudio.Default = true;
@@ -170,8 +180,9 @@ public static class TrackPlanner
     }
 
     /// <summary>
-    /// A stereo lossy track in a language that already has a multichannel one, listed after
-    /// it, is almost always a commentary. Only a guess: the form shows it and it can be unticked.
+    /// A stereo lossy track in a language that already has a multichannel one, listed after it,
+    /// is a commentary or an audio description: the disc does not say which, so it is marked to
+    /// ask (kept, not the default) rather than flagged either way.
     /// </summary>
     internal static void MarkCommentaries(List<PlannedTrack> audio)
     {
@@ -183,7 +194,7 @@ public static class TrackPlanner
                 continue;
             }
 
-            track.Commentary = audio.Take(i).Any(o => Languages.Same(o.Language, track.Language) && o.Layout is "Multi" or "2.0 + Multi");
+            track.CommentaryOrAd = audio.Take(i).Any(o => Languages.Same(o.Language, track.Language) && o.Layout is "Multi" or "2.0 + Multi");
         }
     }
 

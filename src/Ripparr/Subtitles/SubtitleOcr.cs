@@ -16,7 +16,7 @@ public static class SubtitleOcr
     private const int BatchSize = 150;
 
     /// <summary>ISO 639-2 (as in the MKV) to Tesseract's language names.</summary>
-    public static string TesseractLanguage(string? code) => (code ?? "").ToLowerInvariant() switch
+    public static string TesseractLanguage(string? code) => (code ?? "").ToLowerInvariant().Split('-')[0] switch
     {
         "fre" or "fra" or "fr" => "fra",
         "ger" or "deu" or "de" => "deu",

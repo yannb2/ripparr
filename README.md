@@ -17,8 +17,12 @@ size (a constant bit rate, as AC-3 or a DTS core, is taken as it is). For an ISO
 before MakeMKV has decrypted it: the form then shows what the playlist says (resolution, bit depth, HDR10,
 HDR10+ or Dolby Vision, frame rate, sample rate) and the full details come with the job.
 
-For foreign-language films there are two more steps on the same form:
+For foreign-language films there are more steps on the same form:
 
+- **Check SDH and commentary** is the quick one: it reads 32 slices of 32 MB spread over the film (seconds, not
+  minutes) instead of every byte, and runs the same SDH and commentary checks on the captions found there. The
+  caption counts are from that sample only. Without the mount service an ISO is read from its first 2 GB.
+  **Preview subtitles (whole film)** is still there when the exact counts or every caption are wanted.
 - **Preview subtitles** reads the whole film once (minutes for a UHD disc) and pulls out every picture subtitle
   track. Each track gets its exact caption count, its forced captions and a preview page with every caption's
   picture. Tesseract also reads a sample of 120 captions per track: a track with SDH text (`[door slams]`,
@@ -30,8 +34,23 @@ For foreign-language films there are two more steps on the same form:
   on all of them (and set both ways), and the text shows in the preview and in **Side by side**, which lines up
   the captions of the tracks you tick by time (filter: rows where a track has nothing, to find the forced one).
 
-Both run in the background, go on if the page is left, are kept in the subtitle folder (`disc-*`, pruned with
+For a French track, the OCR'd text can also say which French it is: words such as *fin de semaine*, *courriel*,
+*stationnement* or *dépanneur* show **Looks like Québec French**, and *week-end*, *parking*, *portable* or
+*bagnole* show **Looks like France French** (two words at least, and more of one side than the other). Clicking
+the badge sets the language; the **France · Québec** links under any French track's language box do the same.
+Québec French is written as `fr-CA` in the MKV and named *French (Canada)* in the track name; a disc only says
+`fre`, whichever French it is.
+
+All of them run in the background, go on if the page is left, are kept in the subtitle folder (`disc-*`, pruned with
 the job previews) and work on folders and decrypted ISOs.
+
+### Commentary or audio description?
+
+A stereo lossy track after the multichannel one in the same language is either a commentary or an audio
+description, and the disc does not say which. Such a track is kept (not as the default) and shows **Commentary
+or AD?** with two buttons to answer. The **Listen** button (speaker icon) next to any audio track plays
+20 seconds of it, from 40% into the film, in the browser: cut by ffmpeg to AAC and kept with the extras pictures.
+It works on folders and on plain ISOs with the mount service, not on encrypted discs.
 
 ## What a job does
 

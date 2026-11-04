@@ -27,6 +27,17 @@ public class MuxBuilderTests
 
     private static DemuxedFile Subtitle(string name) => new($"/w/{name}", new StreamFacts { Kind = StreamKind.Subtitle, Format = "PGS" });
 
+    /// <summary>The form's answer to "commentary or AD?" for the stereo AC3: commentary.</summary>
+    private static TrackPlan Answered(TrackPlan plan)
+    {
+        foreach (var track in plan.Tracks.Where(t => t.Unsure))
+        {
+            track.Commentary = true;
+        }
+
+        return plan;
+    }
+
     private static List<DemuxedFile> Files() =>
     [
         Video("00800.hevc", 3840),
@@ -85,7 +96,7 @@ public class MuxBuilderTests
     public void BuildsNamedOutputsInPlanOrder()
     {
         var profile = new RipProfile();
-        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var plan = Answered(TrackPlanner.Build(Film, profile, "eng"));
         var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile, "eng");
 
         CollectionAssert.AreEqual(new[]
@@ -109,7 +120,7 @@ public class MuxBuilderTests
     public void MkvmergeArgumentsCarryFlagsAndOrder()
     {
         var profile = new RipProfile();
-        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var plan = Answered(TrackPlanner.Build(Film, profile, "eng"));
         var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
         var arguments = MuxBuilder.MkvmergeArguments("/o/x.mkv", "Film (2020)", outputs, "/w/ch.txt", "/w/tags.xml", (24000, 1001), "/w/bl-el.hevc");
         var text = string.Join(' ', arguments);
