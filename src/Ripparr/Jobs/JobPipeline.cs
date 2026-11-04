@@ -95,6 +95,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         // ---- Demux ----
         context.Step(JobSteps.Demux);
+        // A retried job starts from an empty folder: streams left by the last try would be read as this one's.
+        TryDeleteFolder(context, context.DemuxFolder);
         Directory.CreateDirectory(context.DemuxFolder);
         var prefix = Path.Combine(context.DemuxFolder, playlist.Name);
         var demuxArguments = DgDemuxCommand.Arguments(job.Profile, context.Options.DgDemuxArguments, mplsPath, prefix,
@@ -810,6 +812,46 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             {
                 return candidate;
             }
+        }
+    }
+
+    /// <summary>A job's work folder, its size, and an MKV still in it (a job that failed its checks keeps it there).</summary>
+    public static (string Path, long Bytes, string? Mkv) WorkFolderInfo(RipparrOptions options, long id)
+    {
+        var folder = Path.Combine(options.WorkFolder, $"job-{id}");
+        try
+        {
+            if (!Directory.Exists(folder))
+            {
+                return (folder, 0, null);
+            }
+
+            var files = new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories).ToList();
+            var mkv = files.FirstOrDefault(f => f.Extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase))?.Name;
+            return (folder, files.Sum(f => f.Length), mkv);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return (folder, 0, null);
+        }
+    }
+
+    /// <summary>Deletes a finished job's work folder; the reason it could not, or null.</summary>
+    public static string? DeleteWorkFolder(RipparrOptions options, long id)
+    {
+        var folder = Path.Combine(options.WorkFolder, $"job-{id}");
+        try
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+
+            return null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return e.Message;
         }
     }
 

@@ -161,7 +161,11 @@ the series folder, or to the season's folder (`Season 01/extras/`). Sonarr skips
 The queue shows what is waiting, running, or needs a look (failed, interrupted, waiting for an answer). Every
 row has **Remove**: a queued or running job is cancelled, the others move to **History**, where done, failed
 and cancelled jobs stay with their result, a search, a status filter, Retry, and a delete that forgets a job and
-its log (never the MKV).
+its log (never the MKV in the done folder).
+
+Removing a failed, cancelled or finished job (from the queue or from History) also deletes its work folder
+(`job-<id>` under the work folder: demuxed streams, and the MKV of a job that failed its checks, after asking).
+A retried job starts its demux from an empty folder.
 
 ## Profiles
 
