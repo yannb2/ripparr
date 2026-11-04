@@ -87,4 +87,21 @@ public class TrackPlannerTests
         plan.Move(firstAudio, 1);
         Assert.AreEqual(index + 1, plan.Tracks.IndexOf(firstAudio));
     }
+
+    [TestMethod]
+    public void DraggingPutsTheTrackInTheTargetsPlace()
+    {
+        var plan = TrackPlanner.Build(Film, new RipProfile(), "eng");
+        var audio = plan.Tracks.Where(t => t.Kind == StreamKind.Audio).ToList();
+        Assert.IsGreaterThanOrEqualTo(3, audio.Count, "the sample film has three audio tracks or more");
+
+        Assert.IsTrue(plan.MoveTo(audio[2], audio[0]));
+        var after = plan.Tracks.Where(t => t.Kind == StreamKind.Audio).ToList();
+        Assert.AreSame(audio[2], after[0]);
+        Assert.AreSame(audio[0], after[1]);
+        Assert.AreSame(audio[1], after[2]);
+
+        var video = plan.Tracks.First(t => t.Kind == StreamKind.Video);
+        Assert.IsFalse(plan.MoveTo(audio[0], video), "not across kinds");
+    }
 }

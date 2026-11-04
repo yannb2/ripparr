@@ -433,7 +433,7 @@
             <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles" ListenUrl="@(CanListen ? ListenUrl : null)"
                              Compare="@(_subtitles is { Running: false, Error: null } ? _compare : null)" CompareChanged="ToggleCompare"/>
 
-            <ChapterList Playlist="_selected.Mpls" Naming="Profile.Chapters"/>
+            <ChapterList Playlist="_selected.Mpls" Naming="Profile.Chapters" Names="_chapterNames"/>
 
             @if (Profile.WriteTags)
             {
@@ -589,7 +589,8 @@
         _draft.Touched = DateTime.UtcNow;
         _draft.Playlists[_selected.Name] = new PlaylistDraft
         {
-            Plan = _plan, ProfileId = _profileId, Tags = _tags, Compare = _compare, Flagged = _flagged, Auto = _auto
+            Plan = _plan, ProfileId = _profileId, Tags = _tags, Compare = _compare, Flagged = _flagged, Auto = _auto,
+            ChapterNames = _chapterNames
         };
     }
 
@@ -691,6 +692,7 @@
             _compare = kept.Compare;
             _flagged = kept.Flagged;
             _auto = kept.Auto;
+            _chapterNames = kept.ChapterNames;
             ApplyProbe();
             ApplySubtitles();
             if (_probe == null)
@@ -702,6 +704,7 @@
         }
 
         _compare = [];
+        _chapterNames = [];
         _profileId = playlist.Resolution == "2160p"
             ? _profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? ""
             : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
@@ -760,6 +763,7 @@
 
     private SubtitleScan? _subtitles;
     private HashSet<int> _compare = [];
+    private Dictionary<int, string> _chapterNames = [];
 
     private void ToggleCompare((int Pid, bool On) change)
     {
@@ -1017,6 +1021,7 @@
             OriginalLanguage = _original,
             Profile = Profile,
             Plan = _plan,
+            ChapterNames = _chapterNames.Where(n => !string.IsNullOrWhiteSpace(n.Value)).ToDictionary(n => n.Key, n => n.Value.Trim()),
             Tags = _tags.Where(t => t.Name.Length > 0).Select(t => t.Copy()).ToList()
         }, null);
     }

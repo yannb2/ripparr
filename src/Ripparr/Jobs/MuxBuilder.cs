@@ -278,8 +278,11 @@ public static partial class MuxBuilder
     public static string? ReleaseGroupWord(string? group) =>
         string.IsNullOrWhiteSpace(group) ? null : string.Join('.', group.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
-    /// <summary>Chapters as an OGM text file mkvmerge reads: CHAPTER01=00:00:00.000 / CHAPTER01NAME=Chapter 01.</summary>
-    public static string ChapterFile(Mpls playlist, ChapterNaming naming)
+    /// <summary>
+    /// Chapters as an OGM text file mkvmerge reads: CHAPTER01=00:00:00.000 / CHAPTER01NAME=Chapter 01.
+    /// A name typed on the disc page wins over the profile's naming.
+    /// </summary>
+    public static string ChapterFile(Mpls playlist, ChapterNaming naming, IReadOnlyDictionary<int, string>? names = null)
     {
         var text = new StringBuilder();
         var number = 0;
@@ -288,10 +291,22 @@ public static partial class MuxBuilder
             number++;
             var id = number.ToString("00", CultureInfo.InvariantCulture);
             text.Append($"CHAPTER{id}={mark.Start:hh\\:mm\\:ss\\.fff}\n");
-            text.Append($"CHAPTER{id}NAME={(naming == ChapterNaming.Numbered ? $"Chapter {id}" : "")}\n");
+            text.Append($"CHAPTER{id}NAME={ChapterName(number, naming, names)}\n");
         }
 
         return text.ToString();
+    }
+
+    /// <summary>The name chapter <paramref name="number"/> gets: the typed one, else "Chapter 01" or none as the profile says.</summary>
+    public static string ChapterName(int number, ChapterNaming naming, IReadOnlyDictionary<int, string>? names = null)
+    {
+        if (names != null && names.TryGetValue(number, out var typed) && !string.IsNullOrWhiteSpace(typed))
+        {
+            // One line per name in the file.
+            return typed.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        }
+
+        return naming == ChapterNaming.Numbered ? $"Chapter {number.ToString("00", CultureInfo.InvariantCulture)}" : "";
     }
 
     /// <summary>MKV global tags (TargetTypeValue 50), the same names tag_release.py writes.</summary>
@@ -358,7 +373,8 @@ public static partial class MuxBuilder
 
         if (chaptersPath != null)
         {
-            arguments.AddRange(["--chapters", chaptersPath]);
+            // The file is written as UTF-8: say so, or typed names with accents depend on the locale.
+            arguments.AddRange(["--chapter-charset", "UTF-8", "--chapters", chaptersPath]);
         }
 
         foreach (var track in outputs)

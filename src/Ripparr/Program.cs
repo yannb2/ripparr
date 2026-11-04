@@ -4,6 +4,7 @@ using Ripparr.Arr;
 using Ripparr.Components;
 using Ripparr.Disc;
 using Ripparr.Jobs;
+using Ripparr.Logging;
 using Ripparr.Options;
 using Ripparr.Profiles;
 using Arrkit.Subtitles;
@@ -14,6 +15,11 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// The Logs page: the app's recent log lines, in memory.
+var memoryLog = new MemoryLog();
+builder.Logging.AddProvider(new MemoryLoggerProvider(memoryLog));
+builder.Services.AddSingleton(memoryLog);
 
 builder.Services.AddOptions<RipparrOptions>()
     .Bind(builder.Configuration.GetSection(RipparrOptions.Section))

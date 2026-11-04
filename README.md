@@ -82,6 +82,10 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
 
 ## What a job does
 
+On the job form, each track has Keep, language, Default, flag buttons (Forced, SDH, Commentary, AD, with the
+icons Muxarr uses) and a description; drag a track by its grip (or use the arrows) to change the order within
+its kind. The job page shows the same flags as icons, and folds its Checks card when every check passed.
+
 1. **Check**: finds the playlist, the size it needs and whether the disc is encrypted (AACS folder, or the
    encryption bits in the first stream packets).
 2. **Prepare**: reads a plain BDMV folder where it is, has the mount service mount a plain ISO read-only
@@ -105,7 +109,8 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
 6. **Dolby Vision**: a separate enhancement layer is merged back into the video with `dovi_tool mux`
    (profile 7 FEL stays FEL), always. Only the job form can leave it out, for a disc whose layer will not demux.
 7. **Build the MKV**: mkvmerge with the track plan (languages, names, default/forced/commentary flags, order),
-   chapters from the playlist, the frame rate from the playlist and the global tags. The **Release label** box
+   chapters from the playlist (named as the profile says; the Chapters card on the job form renames any of them,
+   written as UTF-8), the frame rate from the playlist and the global tags. The **Release label** box
    on the job form (Criterion, Arrow, Kino Lorber...) is who put out the disc, not the cut (that is the
    edition); it is written as the standard Matroska tag `DISTRIBUTED_BY`, which tag_release keeps on later
    retags and edition_tags.py shows in Jellyfin as a `Release: Criterion` tag.
@@ -193,6 +198,12 @@ its log (never the MKV in the done folder).
 Removing a failed, cancelled or finished job (from the queue or from History) also deletes its work folder
 (`job-<id>` under the work folder: demuxed streams, and the MKV of a job that failed its checks, after asking).
 A retried job starts its demux from an empty folder.
+
+## Logs
+
+The **Logs** page shows the app's last 2000 log lines (newest first, kept in memory since the last start), with
+a level filter, a search and the exception of an error one click away. `docker logs` has everything; each job's
+own log is on its page.
 
 ## Settings
 

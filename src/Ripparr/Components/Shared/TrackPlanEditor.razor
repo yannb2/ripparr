@@ -1,4 +1,4 @@
-@* The tracks of a job: keep, language, flags, name and order. Changes go straight into the plan. *@
+@* The tracks of a job: keep, language, flags, name and order (drag the grip, or the arrows). Changes go straight into the plan. *@
 
 <div class="table-responsive">
     <table class="table table-sm align-middle mb-0 small">
@@ -22,7 +22,8 @@
         <tbody>
         @foreach (var track in Plan.Tracks)
         {
-            <tr class="@(track.Keep ? "" : "text-body-secondary")">
+            <tr class="@(track.Keep ? "" : "text-body-secondary") @(DropHere(track) ? "sv-drop-target" : "")"
+                @ondragenter="() => _over = track" @ondragover:preventDefault="@(_dragging != null)" @ondrop="() => Drop(track)">
                 <td><input type="checkbox" class="form-check-input" @bind="track.Keep"/></td>
                 <td class="text-nowrap">
                     @if (track.DolbyVisionLayer)
@@ -127,24 +128,16 @@
                 <td class="text-nowrap">
                     @if (track.Kind == StreamKind.Subtitle)
                     {
-                        <label class="form-check form-check-inline small me-2 mb-0" title="Forced subtitles: only the foreign lines">
-                            <input type="checkbox" class="form-check-input" @bind="track.Forced"/> Forced
-                        </label>
-                        <label class="form-check form-check-inline small me-2 mb-0" title="For the deaf and hard of hearing (the OCR also marks it when it finds SDH text)">
-                            <input type="checkbox" class="form-check-input" @bind="track.HearingImpaired"/> SDH
-                        </label>
+                        <FlagToggle Icon="@TrackFlags.ForcedIcon" Label="Forced" Tip="Forced subtitles: only the foreign lines" @bind-Value="track.Forced"/>
+                        <FlagToggle Icon="@TrackFlags.SdhIcon" Label="SDH" Tip="For the deaf and hard of hearing (the OCR also marks it when it finds SDH text)" @bind-Value="track.HearingImpaired"/>
                     }
                     @if (track.Kind is StreamKind.Audio or StreamKind.Subtitle && !track.DolbyVisionLayer)
                     {
-                        <label class="form-check form-check-inline small me-2 mb-0" title="Commentary">
-                            <input type="checkbox" class="form-check-input" @bind="track.Commentary"/> Comm.
-                        </label>
+                        <FlagToggle Icon="@TrackFlags.CommentaryIcon" Label="Comm." Tip="Commentary" @bind-Value="track.Commentary"/>
                     }
                     @if (track.Kind == StreamKind.Audio)
                     {
-                        <label class="form-check form-check-inline small me-0 mb-0" title="Audio description for the visually impaired">
-                            <input type="checkbox" class="form-check-input" @bind="track.VisualImpaired"/> AD
-                        </label>
+                        <FlagToggle Icon="@TrackFlags.AdIcon" Label="AD" Tip="Audio description for the visually impaired" @bind-Value="track.VisualImpaired"/>
                     }
                 </td>
                 <td>
@@ -156,6 +149,8 @@
                 <td class="text-nowrap">
                     @if (!track.DolbyVisionLayer)
                     {
+                        <span class="sv-grip me-1" draggable="true" title="Drag to move (within its kind)"
+                              @ondragstart="() => _dragging = track" @ondragend="EndDrag"><i class="bi bi-grip-vertical"></i></span>
                         <button class="btn btn-sm btn-link p-0 me-1" title="Up" @onclick="() => Plan.Move(track, -1)"><i class="bi bi-arrow-up"></i></button>
                         <button class="btn btn-sm btn-link p-0" title="Down" @onclick="() => Plan.Move(track, 1)"><i class="bi bi-arrow-down"></i></button>
                     }
@@ -167,6 +162,29 @@
 </div>
 
 @code {
+    private PlannedTrack? _dragging;
+    private PlannedTrack? _over;
+
+    /// <summary>The row under the dragged track, when it can go there (same kind).</summary>
+    private bool DropHere(PlannedTrack track) =>
+        _dragging != null && _over == track && track != _dragging && track.Kind == _dragging.Kind && !track.DolbyVisionLayer;
+
+    private void Drop(PlannedTrack target)
+    {
+        if (_dragging != null)
+        {
+            Plan.MoveTo(_dragging, target);
+        }
+
+        EndDrag();
+    }
+
+    private void EndDrag()
+    {
+        _dragging = null;
+        _over = null;
+    }
+
     [Parameter, EditorRequired] public TrackPlan Plan { get; set; } = new();
 
     /// <summary>The quick read of the playlist's streams, when there is one.</summary>

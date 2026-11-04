@@ -1,0 +1,18 @@
+@* One flag as an icon button that turns on and off, as in Muxarr's editors. *@
+<button type="button" class="btn btn-sm py-0 px-1 me-1 @(Value ? "btn-primary" : "btn-outline-secondary")"
+        title="@Tip (@(Value ? "on" : "off"))" aria-pressed="@(Value ? "true" : "false")" @onclick="Toggle">
+    <i class="bi @Icon"></i>@if (!string.IsNullOrEmpty(Label))
+    {
+        <span class="ms-1">@Label</span>
+    }
+</button>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter, EditorRequired] public string Tip { get; set; } = "";
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public bool Value { get; set; }
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+
+    private Task Toggle() => ValueChanged.InvokeAsync(!Value);
+}
