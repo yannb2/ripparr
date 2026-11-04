@@ -64,18 +64,66 @@ public sealed class JobContext(Job job, RipparrOptions options, JobStore store, 
     }
 
     /// <summary>Runs a tool, logs its command and output, and fails the step when it fails.</summary>
+    private async Task WatchReadsAsync(int pid, long expected, Func<bool> toolReports, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            if (!toolReports() && ProcessReads.Read(pid) is { } read)
+            {
+                Progress(Math.Min(0.99, read / (double)expected));
+            }
+        }
+    }
+
     public async Task<ProcessResult> RunAsync(ProcessSpec spec, TimeSpan timeout, Func<string, bool>? onLine = null,
         bool throwOnError = true)
     {
         Log("$ " + spec.CommandLine);
-        var result = await ProcessRunner.RunAsync(spec, timeout, line =>
+        // A tool that prints no percentage (DGDemux when its output is not a terminal): its progress
+        // is the bytes it has read (/proc/<pid>/io) out of what it should read.
+        var toolProgress = DateTime.MinValue;
+        using var watch = new CancellationTokenSource();
+        Task? watcher = null;
+        if (spec.ExpectedReadBytes is > 0 and var expected)
         {
-            // The handler says whether the line was only progress (not worth logging).
-            if (onLine?.Invoke(line) != true)
+            spec = spec with
             {
-                Log("  " + line);
+                Started = pid => watcher = WatchReadsAsync(pid, expected, () => DateTime.UtcNow - toolProgress < TimeSpan.FromSeconds(15), watch.Token)
+            };
+        }
+
+        ProcessResult result;
+        try
+        {
+            result = await ProcessRunner.RunAsync(spec, timeout, line =>
+            {
+                // The handler says whether the line was only progress (not worth logging).
+                if (onLine?.Invoke(line) == true)
+                {
+                    toolProgress = DateTime.UtcNow;
+                }
+                else
+                {
+                    Log("  " + line);
+                }
+            }, CancellationToken);
+        }
+        finally
+        {
+            await watch.CancelAsync();
+            if (watcher != null)
+            {
+                try
+                {
+                    await watcher;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Stopped with the tool.
+                }
             }
-        }, CancellationToken);
+        }
 
         if (!result.Success && throwOnError)
         {
@@ -86,6 +134,30 @@ public sealed class JobContext(Job job, RipparrOptions options, JobStore store, 
         }
 
         return result;
+    }
+}
+
+/// <summary>Bytes a process has read, from /proc/&lt;pid&gt;/io (Linux).</summary>
+public static class ProcessReads
+{
+    public static long? Read(int pid)
+    {
+        try
+        {
+            foreach (var line in File.ReadLines($"/proc/{pid}/io"))
+            {
+                if (line.StartsWith("rchar:", StringComparison.Ordinal) && long.TryParse(line.AsSpan(6).Trim(), out var bytes))
+                {
+                    return bytes;
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Gone, or not readable: no progress.
+        }
+
+        return null;
     }
 }
 

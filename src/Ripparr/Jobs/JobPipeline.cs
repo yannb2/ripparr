@@ -101,7 +101,11 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         var prefix = Path.Combine(context.DemuxFolder, playlist.Name);
         var demuxArguments = DgDemuxCommand.Arguments(job.Profile, context.Options.DgDemuxArguments, mplsPath, prefix,
             DgDemuxCommand.DemuxedPids(job.Profile, job.Plan));
-        await context.RunAsync(new ProcessSpec(tools.DgDemux, demuxArguments) { WorkingDirectory = context.DemuxFolder }, Long,
+        await context.RunAsync(new ProcessSpec(tools.DgDemux, demuxArguments)
+            {
+                WorkingDirectory = context.DemuxFolder,
+                ExpectedReadBytes = ClipBytes(discFolder, playlist.Mpls.Clips) is > 0 and var clipBytes ? clipBytes : playlist.Size
+            }, Long,
             line =>
             {
                 if (MuxBuilder.PercentProgress(line) is { } p && line.Length < 40)
@@ -191,7 +195,10 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             {
                 videoPath = Path.Combine(context.DemuxFolder, $"{playlist.Name}.bl-el.hevc");
                 await context.RunAsync(new ProcessSpec(tools.DoviTool,
-                    ["mux", "--bl", video.File.Path, "--el", mapping.EnhancementLayer.Path, "-o", videoPath]), Long,
+                    ["mux", "--bl", video.File.Path, "--el", mapping.EnhancementLayer.Path, "-o", videoPath])
+                    {
+                        ExpectedReadBytes = FileBytes(video.File.Path) + FileBytes(mapping.EnhancementLayer.Path)
+                    }, Long,
                     line => MuxBuilder.PercentProgress(line) is { } p && Report(context, p));
                 context.Log($"Merged {mapping.EnhancementLayer.FileName} into {Path.GetFileName(videoPath)}.");
 
@@ -386,6 +393,22 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         _ => "decrypt a copy with MakeMKV"
     };
 
+    private static long FileBytes(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? new FileInfo(path).Length : 0;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>The size of a playlist's clips on the disc, each counted once.</summary>
+    private static long ClipBytes(string discFolder, IEnumerable<string> clips) =>
+        clips.Distinct(StringComparer.OrdinalIgnoreCase).Sum(c => DiscAnalyzer.ClipPath(discFolder, c) is { } path ? FileBytes(path) : 0);
+
     /// <summary>Where the Dolby Vision layer is read from: its own clips, or the film's.</summary>
     private static List<string> LayerClips(string discFolder, PlaylistInfo playlist) =>
         (playlist.Mpls.EnhancementLayerClips ?? playlist.Mpls.Clips).Distinct()
@@ -461,7 +484,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         var result = await context.RunAsync(new ProcessSpec(context.Options.Tools.FFmpeg,
         [
             "-hide_banner", "-loglevel", "error", "-nostdin", "-i", input, "-map", $"0:i:{layer.Pid}", "-c", "copy", "-f", "hevc", "-y", output
-        ]), Long, throwOnError: false);
+        ]) { ExpectedReadBytes = clips.Sum(FileBytes) }, Long, throwOnError: false);
         if (result.ExitCode != 0 || !File.Exists(output) || new FileInfo(output).Length == 0)
         {
             context.Warn("ffmpeg could not copy the enhancement layer out either.");

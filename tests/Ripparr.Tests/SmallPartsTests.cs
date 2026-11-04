@@ -10,6 +10,16 @@ namespace Ripparr.Tests;
 public class SmallPartsTests
 {
     [TestMethod]
+    public void ReadsHowManyBytesAProcessHasRead()
+    {
+        // This test process has read its own assemblies at least.
+        var read = Ripparr.Jobs.ProcessReads.Read(System.Environment.ProcessId);
+        Assert.IsNotNull(read);
+        Assert.IsGreaterThan(0L, read.Value);
+        Assert.IsNull(Ripparr.Jobs.ProcessReads.Read(int.MaxValue));
+    }
+
+    [TestMethod]
     public void RawHevcIsReadByDoviToolAsIs()
     {
         Assert.IsTrue(Ripparr.Media.DoviTool.IsRawHevc("/demux/00800.bl-el.hevc"));

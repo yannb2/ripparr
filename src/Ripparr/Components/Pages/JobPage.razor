@@ -64,32 +64,34 @@
 
 @if (_job.Status == JobStatus.Running)
 {
-    <div class="progress mb-1" style="height: 10px" title="@_job.Step">
-        <div class="progress-bar @(_job.Progress == null ? "progress-bar-striped progress-bar-animated w-100" : "")"
+    <div class="small d-flex flex-wrap gap-2 mb-1">
+        <span class="fw-semibold">@_job.Step</span>
+        @if (_job.Progress is { } stepDone)
+        {
+            <span class="font-monospace">@Percent(stepDone)</span>
+        }
+        @if (_job.StepTimeLeft is { } left)
+        {
+            <span class="text-body-secondary">@($"about {Format.Duration(left)} left")</span>
+        }
+        else if (_job.StepStarted is { } since)
+        {
+            <span class="text-body-secondary">@($"running for {Format.Duration(DateTime.UtcNow - since)}")</span>
+        }
+    </div>
+    <div class="progress mb-2" style="height: 10px" title="The current step">
+        <div class="progress-bar @(_job.Progress == null ? "progress-bar-striped progress-bar-animated w-100 opacity-50" : "")"
              style="@(_job.Progress is { } p ? $"width: {p * 100:0.#}%" : "")"></div>
     </div>
-    <div class="d-flex flex-wrap gap-3 small mb-3">
-        <span>
-            <span class="fw-semibold">@_job.Step</span>
-            @if (_job.Progress is { } stepDone)
-            {
-                <span class="font-monospace">@(" " + Percent(stepDone))</span>
-            }
-            @if (_job.StepTimeLeft is { } left)
-            {
-                <span class="text-body-secondary">@($" · about {Format.Duration(left)} left")</span>
-            }
-            else if (_job.StepStarted is { } since)
-            {
-                <span class="text-body-secondary">@($" · running for {Format.Duration(DateTime.UtcNow - since)}")</span>
-            }
-        </span>
+    <div class="small d-flex flex-wrap gap-2 mb-1 text-body-secondary" title="All the steps, weighted by how long each one usually takes">
+        <span class="fw-semibold">Whole job</span>
         @if (_job.Overall is { } overall)
         {
-            <span class="text-body-secondary" title="All the steps, weighted by how long each one usually takes">
-                Whole job <span class="font-monospace text-body">@Percent(overall)</span>
-            </span>
+            <span class="font-monospace text-body">@Percent(overall)</span>
         }
+    </div>
+    <div class="progress mb-3" style="height: 10px" title="The whole job">
+        <div class="progress-bar bg-success" style="width: @($"{(_job.Overall ?? 0) * 100:0.#}")%"></div>
     </div>
 }
 

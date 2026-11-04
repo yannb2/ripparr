@@ -91,10 +91,12 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
 
 Each step logs the exact command it ran, on the job page and in `/config/logs/job-<id>.log`.
 
-The job page shows the current step's percentage and the time left in it (from its pace so far), and the whole
-job's percentage: the steps done plus the current one's share, each step weighted by how long it usually takes
-(copying or decrypting the disc, DGDemux and mkvmerge move all the data; the OCR counts per SRT track). The
-queue shows both too, and `/api/stats` gives the whole-job figure.
+The job page and the queue show two bars: the current step, with the time left in it (from its pace so far),
+and the whole job: the steps done plus the current one's share, each step weighted by how long it usually takes
+(copying or decrypting the disc, DGDemux and mkvmerge move all the data; the OCR counts per SRT track).
+`/api/stats` gives the whole-job figure. DGDemux prints no percentage when its output is not a terminal, so its
+progress (and that of `dovi_tool mux` and the ffmpeg copy of a Dolby Vision layer) is the bytes the tool has read
+so far (`/proc/<pid>/io`) out of the size of the clips it reads.
 
 ## Mount ISOs instead of unpacking
 
