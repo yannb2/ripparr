@@ -35,8 +35,17 @@ public sealed record PlaylistStream
     /// <summary>True for the Dolby Vision enhancement layer of a UHD disc.</summary>
     public bool DolbyVisionEnhancementLayer { get; init; }
 
+    /// <summary>
+    /// The sub path that carries the stream when it is not in the play item's own clip (stream
+    /// entry type 2, 3 or 4): some Dolby Vision discs keep the enhancement layer in clips of its own.
+    /// </summary>
+    public int? SubPath { get; init; }
+
     public string CodecName => StreamCoding.Name(Coding);
 }
+
+/// <summary>A sub path of a playlist: its type and the clips of its sub play items, in order.</summary>
+public sealed record SubPath(int Type, IReadOnlyList<string> Clips);
 
 public sealed record PlayItem(string Clip, uint InTime, uint OutTime, int ConnectionCondition)
 {
@@ -59,6 +68,17 @@ public sealed class Mpls
     public required IReadOnlyList<PlaylistStream> Streams { get; init; }
 
     public required IReadOnlyList<ChapterMark> Chapters { get; init; }
+
+    public IReadOnlyList<SubPath> SubPaths { get; init; } = [];
+
+    /// <summary>
+    /// The clips that hold the Dolby Vision enhancement layer when it sits in a sub path (its own
+    /// .m2ts files), else null: then it is in the play items' clips, next to the base layer.
+    /// </summary>
+    public IReadOnlyList<string>? EnhancementLayerClips =>
+        Streams.FirstOrDefault(s => s.DolbyVisionEnhancementLayer) is { SubPath: { } id } && id < SubPaths.Count && SubPaths[id].Clips.Count > 0
+            ? SubPaths[id].Clips
+            : null;
 
     public TimeSpan Duration => TimeSpan.FromSeconds(Items.Sum(i => i.Duration45k) / (double)ClockRate);
 
@@ -84,6 +104,7 @@ public sealed class Mpls
 
         var pos = playlistStart + 4 + 2; // length, reserved
         var itemCount = U16(data, pos);
+        var subPathCount = U16(data, pos + 2);
         pos += 4; // item count, subpath count
 
         var items = new List<PlayItem>(itemCount);
@@ -97,6 +118,20 @@ public sealed class Mpls
             var (item, itemStreams) = ParsePlayItem(data.Slice(start, length));
             items.Add(item);
             streams ??= itemStreams;
+            pos = start + length;
+        }
+
+        var subPaths = new List<SubPath>();
+        for (var i = 0; i < subPathCount && pos + 10 <= data.Length; i++)
+        {
+            var length = (int)U32(data, pos);
+            var start = pos + 4;
+            if (start + length > data.Length || length < 6)
+            {
+                break;
+            }
+
+            subPaths.Add(ParseSubPath(data.Slice(start, length)));
             pos = start + length;
         }
 
@@ -143,6 +178,7 @@ public sealed class Mpls
             Version = version,
             Items = items,
             Streams = streams ?? [],
+            SubPaths = subPaths,
             Chapters = chapters
                 .DistinctBy(c => Math.Round(c.Start.TotalMilliseconds))
                 .OrderBy(c => c.Start)
@@ -183,6 +219,23 @@ public sealed class Mpls
         return (new PlayItem(clip, inTime, outTime, connection), streams);
     }
 
+    /// <summary>reserved(8) type(8) flags(16) reserved(8) count(8), then each sub play item: length(16), clip name(5)...</summary>
+    private static SubPath ParseSubPath(ReadOnlySpan<byte> path)
+    {
+        var type = path[1];
+        var count = path[5];
+        var clips = new List<string>();
+        var pos = 6;
+        for (var i = 0; i < count && pos + 7 <= path.Length; i++)
+        {
+            var length = U16(path, pos);
+            clips.Add(Encoding.ASCII.GetString(path.Slice(pos + 2, 5)));
+            pos += 2 + length;
+        }
+
+        return new SubPath(type, clips);
+    }
+
     private static List<PlaylistStream> ParseStn(ReadOnlySpan<byte> stn)
     {
         var streams = new List<PlaylistStream>();
@@ -195,9 +248,11 @@ public sealed class Mpls
         int secondaryAudio = stn[6], secondaryVideo = stn[7], pipPg = stn[8], dv = stn[9];
         var pos = 14;
 
+        int? subPath = null;
         bool Next(ReadOnlySpan<byte> s, ref int p, out int pid, out ReadOnlySpan<byte> attributes)
         {
             pid = 0;
+            subPath = null;
             attributes = default;
             if (p >= s.Length)
             {
@@ -213,6 +268,11 @@ public sealed class Mpls
                 >= 4 when entry[0] == 3 => U16(entry, 2),
                 _ => 0
             };
+            if (entry.Length >= 2 && entry[0] is 2 or 3 or 4)
+            {
+                subPath = entry[1];
+            }
+
             p += 1 + entryLength;
             if (p >= s.Length)
             {
@@ -287,7 +347,7 @@ public sealed class Mpls
         {
             streams.Add(new PlaylistStream
             {
-                Kind = StreamKind.Video, Coding = a[0], Pid = pid, DolbyVisionEnhancementLayer = true,
+                Kind = StreamKind.Video, Coding = a[0], Pid = pid, DolbyVisionEnhancementLayer = true, SubPath = subPath,
                 Format = a.Length > 1 ? (byte)(a[1] >> 4) : (byte)0,
                 Rate = a.Length > 1 ? (byte)(a[1] & 0x0F) : (byte)0
             });

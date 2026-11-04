@@ -10,6 +10,15 @@ namespace Ripparr.Tests;
 public class SmallPartsTests
 {
     [TestMethod]
+    public void RawHevcIsReadByDoviToolAsIs()
+    {
+        Assert.IsTrue(Ripparr.Media.DoviTool.IsRawHevc("/demux/00800.bl-el.hevc"));
+        Assert.IsTrue(Ripparr.Media.DoviTool.IsRawHevc("/demux/00800 PID 4117 EL.H265"));
+        Assert.IsFalse(Ripparr.Media.DoviTool.IsRawHevc("/out/Film (2020).mkv"));
+        Assert.IsFalse(Ripparr.Media.DoviTool.IsRawHevc("/disc/BDMV/STREAM/00004.m2ts"));
+    }
+
+    [TestMethod]
     public void ParsesSevenZipListings()
     {
         const string output = "Path = BDMV\nFolder = +\nSize = \n\nPath = BDMV/STREAM/00055.m2ts\nFolder = -\nSize = 40000000000\n\nPath = AACS/Unit_Key_RO.inf\nFolder = -\nSize = 2\n";

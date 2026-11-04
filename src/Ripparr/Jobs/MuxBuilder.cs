@@ -236,6 +236,15 @@ public static partial class MuxBuilder
     public static string SubtitleCodec(PlannedTrack track, StreamFacts facts) =>
         string.Equals(facts.Format, "SRT (OCR)", StringComparison.Ordinal) || track.Codec == "SRT" ? "SRT" : string.IsNullOrEmpty(track.Codec) ? "PGS" : track.Codec;
 
+    /// <summary>The base layer's facts once its enhancement layer and RPU are merged in: Dolby Vision, BL+EL+RPU.</summary>
+    public static StreamFacts WithEnhancementLayer(StreamFacts facts) => facts.DolbyVision
+        ? facts
+        : facts with
+        {
+            HdrFormat = string.IsNullOrEmpty(facts.HdrFormat) ? "Dolby Vision" : $"Dolby Vision / {facts.HdrFormat}",
+            HdrSettings = string.IsNullOrEmpty(facts.HdrSettings) ? "BL+EL+RPU" : $"BL+EL+RPU / {facts.HdrSettings}"
+        };
+
     /// <summary>The values the file name and title templates use.</summary>
     public static Dictionary<string, string?> NameValues(Job job, IReadOnlyList<OutputTrack> outputs)
     {

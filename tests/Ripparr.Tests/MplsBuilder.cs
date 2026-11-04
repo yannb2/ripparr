@@ -18,6 +18,9 @@ internal sealed class MplsBuilder
     public List<Stream> Subtitles { get; } = [];
     public List<Stream> DolbyVision { get; } = [];
 
+    /// <summary>When set, the Dolby Vision layer sits in a sub path (type 10) made of these clips.</summary>
+    public List<string> LayerClips { get; } = [];
+
     /// <summary>(play item index, 45 kHz time stamp) of each chapter mark.</summary>
     public List<(int Item, uint Time)> Marks { get; } = [];
 
@@ -39,12 +42,29 @@ internal sealed class MplsBuilder
         var playlist = new List<byte>();
         Put16(playlist, 0); // reserved
         Put16(playlist, Items.Count);
-        Put16(playlist, 0); // sub paths
+        Put16(playlist, LayerClips.Count > 0 ? 1 : 0); // sub paths
         foreach (var item in Items)
         {
             var body = PlayItem(item);
             Put16(playlist, body.Count);
             playlist.AddRange(body);
+        }
+
+        if (LayerClips.Count > 0)
+        {
+            var path = new List<byte> { 0, 10, 0, 0, 0, (byte)LayerClips.Count };
+            foreach (var clip in LayerClips)
+            {
+                var sub = new List<byte>();
+                sub.AddRange(Encoding.ASCII.GetBytes(clip.PadLeft(5, '0')));
+                sub.AddRange(Encoding.ASCII.GetBytes("M2TS"));
+                sub.AddRange(new byte[12]); // connection, STC id, in and out times
+                Put16(path, sub.Count);
+                path.AddRange(sub);
+            }
+
+            Put32(playlist, path.Count);
+            playlist.AddRange(path);
         }
 
         var marks = new List<byte>();
@@ -126,7 +146,18 @@ internal sealed class MplsBuilder
 
         foreach (var s in DolbyVision)
         {
-            Entry(stn, s.Pid);
+            if (LayerClips.Count > 0)
+            {
+                // Stream in a sub path clip: type 2, sub path id, sub clip id, PID.
+                stn.AddRange(new byte[] { 9, 2, 0, 0 });
+                Put16(stn, s.Pid);
+                stn.AddRange(new byte[4]);
+            }
+            else
+            {
+                Entry(stn, s.Pid);
+            }
+
             stn.AddRange(new byte[] { 5, s.Coding, (byte)((s.Format << 4) | s.Rate), 0, 0, 0 });
         }
 

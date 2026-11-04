@@ -1,4 +1,5 @@
 using Ripparr.Disc;
+using Ripparr.Jobs;
 
 namespace Ripparr.Tests;
 
@@ -13,6 +14,46 @@ public class MplsTests
         Assert.AreEqual("0300", mpls.Version);
         CollectionAssert.AreEqual(new[] { "00055", "00056" }, mpls.Clips.ToArray());
         Assert.AreEqual(7200, mpls.Duration.TotalSeconds, 0.01);
+    }
+
+    [TestMethod]
+    public void LayerInTheFilmsOwnClipsHasNoSeparateClips()
+    {
+        var mpls = Mpls.Parse(MplsBuilder.UhdFilm().Build());
+
+        Assert.IsNull(mpls.EnhancementLayerClips);
+        Assert.IsEmpty(mpls.SubPaths);
+    }
+
+    [TestMethod]
+    public void ReadsALayerKeptInASubPath()
+    {
+        var builder = MplsBuilder.UhdFilm();
+        builder.LayerClips.AddRange(["00057", "00058"]);
+        var mpls = Mpls.Parse(builder.Build());
+
+        var layer = mpls.Streams.Single(s => s.DolbyVisionEnhancementLayer);
+        Assert.AreEqual(0x1015, layer.Pid);
+        Assert.AreEqual(0, layer.SubPath);
+        Assert.HasCount(1, mpls.SubPaths);
+        Assert.AreEqual(10, mpls.SubPaths[0].Type);
+        CollectionAssert.AreEqual(new[] { "00057", "00058" }, mpls.EnhancementLayerClips!.ToArray());
+        // The film itself and its chapters are read as before.
+        CollectionAssert.AreEqual(new[] { "00055", "00056" }, mpls.Clips.ToArray());
+        Assert.HasCount(4, mpls.Chapters);
+    }
+
+    [TestMethod]
+    public void ListsThePidsFfmpegSees()
+    {
+        const string output = """
+            Input #0, mpegts, from '00004.m2ts':
+              Stream #0:0[0x1011]: Video: hevc (Main 10) (HDMV / 0x564D4448), yuv420p10le(tv, bt2020nc/bt2020/smpte2084), 3840x2160
+              Stream #0:1[0x1100]: Audio: dts (DTS-HD MA) ([134][0][0][0] / 0x0086), 48000 Hz, 5.1(side)
+              Stream #0:2[0x1200]: Subtitle: hdmv_pgs_subtitle ([144][0][0][0] / 0x0090)
+            """;
+
+        CollectionAssert.AreEquivalent(new[] { 0x1011, 0x1100, 0x1200 }, JobPipeline.StreamPids(output).ToArray());
     }
 
     [TestMethod]
