@@ -174,6 +174,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         // ---- Subtitles ----
         context.Step(JobSteps.Subtitles);
         outputs = await SubtitleStep.RunAsync(context, outputs);
+        // The profile's order within each language, now that the flags are final and the SRTs are in.
+        outputs = SubtitleOrder.Sort(outputs, job.Profile);
         context.Save();
 
         // ---- Dolby Vision ----
