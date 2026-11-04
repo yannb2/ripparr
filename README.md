@@ -69,7 +69,10 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
 6. **Dolby Vision**: a separate enhancement layer is merged back into the video with `dovi_tool mux`
    (profile 7 FEL stays FEL), always. Only the job form can leave it out, for a disc whose layer will not demux.
 7. **Build the MKV**: mkvmerge with the track plan (languages, names, default/forced/commentary flags, order),
-   chapters from the playlist, the frame rate from the playlist and the global tags.
+   chapters from the playlist, the frame rate from the playlist and the global tags. The **Release label** box
+   on the job form (Criterion, Arrow, Kino Lorber...) is who put out the disc, not the cut (that is the
+   edition); it is written as the standard Matroska tag `DISTRIBUTED_BY`, which tag_release keeps on later
+   retags and edition_tags.py shows in Jellyfin as a `Release: Criterion` tag.
 8. **Verify**: tracks, languages, duration and chapters against the plan; HDR format; for Dolby Vision, the RPU
    frame count against the video.
 9. **Finish**: moves the file to `done/Title (Year)/`.

@@ -295,6 +295,7 @@ public static partial class MuxBuilder
             ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr : null),
             ("DV_PROFILE", video is { DolbyVision: true } ? video.DolbyVisionProfile : null),
             ("EDITION", string.IsNullOrWhiteSpace(job.Edition) ? null : job.Edition),
+            ("DISTRIBUTED_BY", string.IsNullOrWhiteSpace(job.ReleaseLabel) ? null : job.ReleaseLabel.Trim()),
             ("ORIGINAL_LANGUAGE", job.OriginalLanguage),
             ("RIPPED_WITH", $"Ripparr {AppInfo.Version}, playlist {job.Playlist}")
         };
