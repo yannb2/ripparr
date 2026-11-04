@@ -4,9 +4,13 @@
 
 <PageTitle>Logs · Ripparr</PageTitle>
 
-<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
-    <h2 class="mb-0 me-auto">Logs</h2>
-    <input class="form-control form-control-sm" style="max-width: 16rem" placeholder="Search message or source"
+<div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-4 sv-page-header gap-2">
+    <h2 class="mb-0 me-auto"><i class="bi bi-journal-text me-2"></i>Logs</h2>
+    <button class="btn btn-sm btn-outline-danger" @onclick="Log.Clear"><i class="bi bi-trash me-1"></i>Clear</button>
+</div>
+
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <input class="form-control form-control-sm" style="max-width: 20rem" placeholder="Search message or source"
            @bind="_search" @bind:event="oninput"/>
     <div class="btn-group btn-group-sm" role="group" aria-label="Level">
         @foreach (var (key, label) in Levels)
@@ -14,13 +18,11 @@
             <button type="button" class="btn @(_level == key ? "btn-primary" : "btn-outline-primary")" @onclick="() => _level = key">@label</button>
         }
     </div>
-    <button class="btn btn-sm btn-outline-danger" @onclick="Log.Clear"><i class="bi bi-trash me-1"></i>Clear</button>
+    <span class="small text-body-secondary ms-md-auto">
+        The last @MemoryLog.Capacity lines since the app started, newest first (<code>docker logs</code> has them all).
+        Each job's own log is on its page.
+    </span>
 </div>
-
-<p class="small text-body-secondary">
-    The app's last @MemoryLog.Capacity lines since it started, newest first (<code>docker logs</code> has them all).
-    Each job's own log is on its page.
-</p>
 
 @{
     var shown = Shown.ToList();
