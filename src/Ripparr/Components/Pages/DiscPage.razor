@@ -300,26 +300,17 @@
                     else if (_subtitles != null)
                     {
                         <span class="w-100 order-last d-flex flex-wrap align-items-center gap-2 mt-1">
-                            <span class="text-body-secondary">Compare:</span>
-                            @foreach (var read in _subtitles.Tracks.Values)
-                            {
-                                var language = _subtitles.Languages.GetValueOrDefault(read.Pid);
-                                <label class="form-check form-check-inline mb-0 me-1">
-                                    <input type="checkbox" class="form-check-input" checked="@_compare.Contains(read.Pid)"
-                                           @onchange="e => ToggleCompare(read.Pid, e)"/>
-                                    @(language == null ? "" : Languages.Name(language) + " ")<span class="text-body-secondary">@read.Pid · @read.Captions</span>
-                                </label>
-                            }
                             @if (_compare.Count >= 2)
                             {
                                 <a class="btn btn-sm btn-outline-secondary" target="_blank"
                                    href="@($"discs/{_subtitles.Key}/compare?pids={string.Join(',', _subtitles.Tracks.Keys.Where(_compare.Contains))}")">
-                                    <i class="bi bi-layout-three-columns"></i> Side by side
+                                    <i class="bi bi-layout-three-columns"></i> Side by side (@_compare.Count tracks)
                                 </a>
+                                <button class="btn btn-sm btn-link p-0" @onclick="() => _compare.Clear()">clear</button>
                             }
                             else
                             {
-                                <span class="text-body-secondary">tick two or more tracks</span>
+                                <span class="text-body-secondary">Compare: tick <i class="bi bi-layout-three-columns"></i> compare on two or more subtitle tracks below, then open Side by side</span>
                             }
                         </span>
                         <i class="bi bi-check2 text-success"></i>
@@ -369,7 +360,8 @@
                 </div>
             }
 
-            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles" ListenUrl="@(CanListen ? ListenUrl : null)"/>
+            <TrackPlanEditor Plan="_plan" Probe="@(_probe is { Error: null } ? _probe : null)" Subtitles="_subtitles" ListenUrl="@(CanListen ? ListenUrl : null)"
+                             Compare="@(_subtitles is { Running: false, Error: null } ? _compare : null)" CompareChanged="ToggleCompare"/>
 
             <ChapterList Playlist="_selected.Mpls" Naming="Profile.Chapters"/>
 
@@ -560,15 +552,15 @@
     private SubtitleScan? _subtitles;
     private readonly HashSet<int> _compare = [];
 
-    private void ToggleCompare(int pid, ChangeEventArgs e)
+    private void ToggleCompare((int Pid, bool On) change)
     {
-        if (e.Value is true)
+        if (change.On)
         {
-            _compare.Add(pid);
+            _compare.Add(change.Pid);
         }
         else
         {
-            _compare.Remove(pid);
+            _compare.Remove(change.Pid);
         }
     }
     private Timer? _subtitleTimer;
