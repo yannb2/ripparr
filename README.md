@@ -70,7 +70,9 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
 3. **Demux**: DGDemux writes each stream of the playlist, the Dolby Vision enhancement layer included. Some
    UHD discs keep the layer in a clip of its own (a sub path of the playlist), which DGDemux leaves out: ffmpeg
    then copies it out of that clip. Before the demux, the job checks that the layer's clip really has its
-   stream, and stops at once if it does not (instead of after the whole demux).
+   stream. Some playlists give the layer a PID the clip does not use (0x1500 where the clip has 0x1015): the
+   clip's one other HEVC stream is then taken as the layer. With no such stream the job stops at once
+   (instead of after the whole demux).
 4. **Read streams**: MediaInfo reads every stream (codec, channels, Atmos, DTS:X, HDR format).
 5. **Subtitles**: every picture subtitle track (PGS) is kept in `/config/subtitles/job-<id>/` for the preview
    page (each caption's picture and time). For the profile's SRT languages, Tesseract reads the pictures, the
@@ -159,7 +161,11 @@ the series folder, or to the season's folder (`Season 01/extras/`). Sonarr skips
 The queue shows what is waiting, running, or needs a look (failed, interrupted, waiting for an answer). Every
 row has **Remove**: a queued or running job is cancelled, the others move to **History**, where done, failed
 and cancelled jobs stay with their result, a search, a status filter, Retry, and a delete that forgets a job and
-its log (never the MKV).
+its log (never the MKV in the done folder).
+
+Removing a failed, cancelled or finished job (from the queue or from History) also deletes its work folder
+(`job-<id>` under the work folder: demuxed streams, and the MKV of a job that failed its checks, after asking).
+A retried job starts its demux from an empty folder.
 
 ## Profiles
 

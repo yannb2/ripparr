@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
+using Ripparr.Media;
 using Ripparr.Options;
 
 namespace Ripparr.Jobs;
@@ -93,6 +94,27 @@ public sealed class JobRunner(
         job.Dismissed = true;
         store.Update(job);
         events.Write(id, "Removed from the queue.");
+        DeleteWorkFolder(job);
+    }
+
+    /// <summary>A failed, cancelled or finished job's work folder (demuxed streams, a kept MKV) is deleted with it.</summary>
+    public void DeleteWorkFolder(Job job)
+    {
+        if (job.Status is JobStatus.Queued or JobStatus.Running)
+        {
+            return;
+        }
+
+        var (folder, bytes, _) = JobPipeline.WorkFolderInfo(options.Value, job.Id);
+        if (!Directory.Exists(folder))
+        {
+            return;
+        }
+
+        var error = JobPipeline.DeleteWorkFolder(options.Value, job.Id);
+        events.Write(job.Id, error == null
+            ? $"Deleted its work folder {folder} ({Format.Size(bytes)})."
+            : $"Could not delete its work folder {folder}: {error}");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -4,6 +4,7 @@
 @inject JobRunner Runner
 @inject JobEvents Events
 @inject NavigationManager Navigation
+@inject Microsoft.Extensions.Options.IOptions<RipparrOptions> Options
 
 <PageTitle>Queue · Ripparr</PageTitle>
 
@@ -140,6 +141,13 @@ else
     {
         if (job.Status == JobStatus.Running &&
             !await _confirm.Ask("Remove job", $"{job.DisplayTitle} is running: stop it and move it to History?", "Stop and remove", danger: true))
+        {
+            return;
+        }
+
+        if (job.Status != JobStatus.Running && JobPipeline.WorkFolderInfo(Options.Value, job.Id) is { Mkv: { } mkv } folder &&
+            !await _confirm.Ask("Remove job", $"Its work folder still holds {mkv} ({Format.Size(folder.Bytes)}), which did not pass its checks. " +
+                                              "Removing the job deletes the folder with it.", "Remove and delete", danger: true))
         {
             return;
         }

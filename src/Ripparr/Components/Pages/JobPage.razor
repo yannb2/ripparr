@@ -45,7 +45,7 @@
         }
         @if (_job.IsFinished)
         {
-            <button class="btn btn-sm btn-outline-secondary" @onclick="Delete" title="Removes the job from the list (not the files)">Remove</button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Delete" title="Removes the job from the list, with its work folder (the finished MKV in the done folder stays)">Remove</button>
         }
     </span>
 </div>
@@ -264,7 +264,11 @@ else if (_job.Error != null)
     <pre class="sv-raw mb-0 p-2" id="job-log">@string.Join("\n", _lines)</pre>
 </div>
 
+<ConfirmDialog @ref="_confirm"/>
+
 @code {
+    private ConfirmDialog _confirm = null!;
+
     [Parameter] public long Id { get; set; }
 
     private Job? _job;
@@ -395,9 +399,17 @@ else if (_job.Error != null)
         Load();
     }
 
-    private void Delete()
+    private async Task Delete()
     {
-        Store.Delete(_job!.Id);
+        if (JobPipeline.WorkFolderInfo(Options.Value, _job!.Id) is { Mkv: { } mkv } kept &&
+            !await _confirm.Ask("Remove job", $"Its work folder still holds {mkv} ({Format.Size(kept.Bytes)}), which did not pass its checks. " +
+                                              "Removing the job deletes the folder with it.", "Remove and delete", danger: true))
+        {
+            return;
+        }
+
+        Runner.DeleteWorkFolder(_job);
+        Store.Delete(_job.Id);
         try
         {
             var folder = SubtitleStep.Folder(Options.Value, _job.Id);
