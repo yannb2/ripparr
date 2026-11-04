@@ -166,6 +166,23 @@ public class MuxBuilderTests
     }
 
     [TestMethod]
+    public void TagsXmlWritesTheReleaseLabel()
+    {
+        var job = new Job { Title = "Heat", Year = 1995, SourceName = "HEAT", Playlist = "00800", ReleaseLabel = " Criterion " };
+        StringAssert.Contains(MuxBuilder.TagsXml(job, []), "<Name>DISTRIBUTED_BY</Name><String>Criterion</String>");
+
+        job.ReleaseLabel = null;
+        Assert.DoesNotContain("DISTRIBUTED_BY", MuxBuilder.TagsXml(job, []));
+
+        // A profile tag of the same name still wins, like for the other automatic tags
+        job.ReleaseLabel = "Arrow";
+        job.Tags = [new GlobalTag { Name = "distributed by", Value = "Arrow Video" }];
+        var xml = MuxBuilder.TagsXml(job, []);
+        StringAssert.Contains(xml, "<Name>DISTRIBUTED_BY</Name><String>Arrow Video</String>");
+        Assert.HasCount(1, System.Text.RegularExpressions.Regex.Matches(xml, "<Name>DISTRIBUTED_BY</Name>"));
+    }
+
+    [TestMethod]
     public void TagsXmlWritesYourOwnTags()
     {
         var job = new Job

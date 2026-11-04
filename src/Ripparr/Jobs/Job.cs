@@ -50,6 +50,12 @@ public sealed class Job
     public string Title { get; set; } = "";
     public int? Year { get; set; }
     public string? Edition { get; set; }
+
+    /// <summary>
+    /// Who put out the disc (Criterion, Arrow...), written as the standard Matroska tag DISTRIBUTED_BY.
+    /// Not the cut: that is <see cref="Edition"/>. Jellyfin shows it as a "Release: ..." tag (edition_tags.py).
+    /// </summary>
+    public string? ReleaseLabel { get; set; }
     public int? TmdbId { get; set; }
     public string? ImdbId { get; set; }
 
@@ -182,6 +188,7 @@ public sealed class Job
             Title = copy.Title,
             Year = copy.Year,
             Edition = copy.Edition,
+            ReleaseLabel = copy.ReleaseLabel,
             TmdbId = copy.TmdbId,
             ImdbId = copy.ImdbId,
             OriginalLanguage = copy.OriginalLanguage,
