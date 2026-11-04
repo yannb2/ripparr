@@ -71,6 +71,9 @@ public class RipparrOptions
 
     public ArrOptions Sonarr { get; set; } = new();
 
+    /// <summary>ntfy and Jellyfin when a job ends. The Settings page can change them.</summary>
+    public NotificationOptions Notifications { get; set; } = new();
+
     public static readonly SourceRoot[] DefaultSources =
     [
         new() { Name = "Scratch", Path = "/downloads" },
@@ -202,5 +205,37 @@ public class ArrOptions
 
     public string ApiKey { get; set; } = "";
 
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool Configured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(ApiKey);
+}
+
+/// <summary>Where to say that a job ended, and whether Jellyfin rescans its libraries after a good one.</summary>
+public class NotificationOptions
+{
+    /// <summary>The ntfy topic, server included: https://ntfy.sh/my-ripparr or http://ntfy:80/ripparr.</summary>
+    public string NtfyUrl { get; set; } = "";
+
+    /// <summary>An access token for a protected topic (tk_...), or empty.</summary>
+    public string NtfyToken { get; set; } = "";
+
+    public bool OnDone { get; set; } = true;
+
+    public bool OnFailed { get; set; } = true;
+
+    /// <summary>Dry runs only notify when they fail.</summary>
+    public bool DryRuns { get; set; }
+
+    /// <summary>For example http://jellyfin:8096.</summary>
+    public string JellyfinUrl { get; set; } = "";
+
+    public string JellyfinApiKey { get; set; } = "";
+
+    /// <summary>Ask Jellyfin to scan its libraries after a good job (not a dry run).</summary>
+    public bool RefreshJellyfin { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool NtfyConfigured => !string.IsNullOrWhiteSpace(NtfyUrl);
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool JellyfinConfigured => !string.IsNullOrWhiteSpace(JellyfinUrl) && !string.IsNullOrWhiteSpace(JellyfinApiKey);
 }

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 using Ripparr.Media;
 using Ripparr.Options;
 
@@ -13,12 +12,12 @@ public sealed record SeriesMatch(string Title, int Year, int TvdbId, int? TmdbId
 public sealed record EpisodeInfo(int Season, int Episode, int? Absolute, string Title);
 
 /// <summary>Looks up a series in Sonarr: its title, year, IDs, language, type (anime numbers) and episode titles.</summary>
-public sealed class SonarrClient(IOptions<RipparrOptions> options, ILogger<SonarrClient> logger)
+public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> logger)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
-    private readonly ArrOptions _sonarr = options.Value.Sonarr;
+    private ArrOptions Sonarr => settings.Sonarr;
 
-    public bool Configured => _sonarr.Configured;
+    public bool Configured => Sonarr.Configured;
 
     public async Task<(List<SeriesMatch> Matches, string? Error)> SearchAsync(string term, CancellationToken cancellationToken)
     {
@@ -36,13 +35,13 @@ public sealed class SonarrClient(IOptions<RipparrOptions> options, ILogger<Sonar
     {
         if (!Configured)
         {
-            return (null, "Sonarr is not set up (Ripparr__Sonarr__Url and Ripparr__Sonarr__ApiKey).");
+            return (null, "Sonarr is not set up (Settings > Integrations).");
         }
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{_sonarr.Url.TrimEnd('/')}/api/v3/{path}");
-            request.Headers.Add("X-Api-Key", _sonarr.ApiKey);
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{Sonarr.Url.TrimEnd('/')}/api/v3/{path}");
+            request.Headers.Add("X-Api-Key", Sonarr.ApiKey);
             using var response = await Http.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {

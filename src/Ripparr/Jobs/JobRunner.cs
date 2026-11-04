@@ -10,6 +10,7 @@ public sealed class JobRunner(
     JobStore store,
     JobEvents events,
     JobPipeline pipeline,
+    Notifier notifier,
     IOptions<RipparrOptions> options,
     ILogger<JobRunner> logger) : BackgroundService
 {
@@ -214,6 +215,18 @@ public sealed class JobRunner(
             store.Update(job);
             events.Raise(job.Id);
             _wake.Release();
+        }
+
+        if (job.Status is JobStatus.Done or JobStatus.Failed)
+        {
+            try
+            {
+                await notifier.JobEndedAsync(job, stoppingToken);
+            }
+            catch (Exception e)
+            {
+                logger.LogWarning(e, "Notifications for job {Id} failed", job.Id);
+            }
         }
     }
 

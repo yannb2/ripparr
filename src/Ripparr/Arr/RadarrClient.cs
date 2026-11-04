@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 using Ripparr.Media;
 using Ripparr.Options;
 
@@ -8,25 +7,25 @@ namespace Ripparr.Arr;
 public sealed record MovieMatch(string Title, int Year, int TmdbId, string? ImdbId, string? OriginalLanguage, string? LibraryPath);
 
 /// <summary>Looks up a film in Radarr: the title, year, IDs and original language for names and tags.</summary>
-public sealed class RadarrClient(IOptions<RipparrOptions> options, ILogger<RadarrClient> logger)
+public sealed class RadarrClient(LiveSettings settings, ILogger<RadarrClient> logger)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
-    private readonly ArrOptions _radarr = options.Value.Radarr;
+    private ArrOptions Radarr => settings.Radarr;
 
-    public bool Configured => _radarr.Configured;
+    public bool Configured => Radarr.Configured;
 
     public async Task<(List<MovieMatch> Matches, string? Error)> SearchAsync(string term, CancellationToken cancellationToken)
     {
         if (!Configured)
         {
-            return ([], "Radarr is not set up (Ripparr__Radarr__Url and Ripparr__Radarr__ApiKey).");
+            return ([], "Radarr is not set up (Settings > Integrations).");
         }
 
         try
         {
-            var url = $"{_radarr.Url.TrimEnd('/')}/api/v3/movie/lookup?term={Uri.EscapeDataString(term)}";
+            var url = $"{Radarr.Url.TrimEnd('/')}/api/v3/movie/lookup?term={Uri.EscapeDataString(term)}";
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("X-Api-Key", _radarr.ApiKey);
+            request.Headers.Add("X-Api-Key", Radarr.ApiKey);
             using var response = await Http.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {

@@ -1,0 +1,16 @@
+<p class="text-body-secondary">
+    Ripparr asks Radarr and Sonarr for the title, year, IDs and original language of what it rips, and Sonarr
+    for episode titles. What is saved here wins over the <code>Ripparr__Radarr__…</code> and
+    <code>Ripparr__Sonarr__…</code> environment variables, which only give the starting values.
+</p>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <ArrCard App="Radarr" Key="@LiveSettings.RadarrKey" Icon="bi-film" Example="http://radarr:7878"
+                 Use="Used on the disc page to find the film."/>
+    </div>
+    <div class="col-lg-6">
+        <ArrCard App="Sonarr" Key="@LiveSettings.SonarrKey" Icon="bi-tv" Example="http://sonarr:8989"
+                 Use="Used for TV discs: the series, its episodes and anime numbers."/>
+    </div>
+</div>

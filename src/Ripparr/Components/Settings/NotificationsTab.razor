@@ -1,0 +1,145 @@
+@inject LiveSettings Settings
+@inject Toasts Toasts
+
+<p class="text-body-secondary">
+    When a job ends, Ripparr can send a message to an <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a>
+    topic (phone, desktop) and ask Jellyfin to scan its libraries. A failure here is only logged: it never fails the job.
+</p>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="border rounded p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-bell text-primary"></i>
+                <h5 class="mb-0">ntfy</h5>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="ntfy-url">Topic URL</label>
+                <input id="ntfy-url" class="form-control" placeholder="https://ntfy.sh/my-ripparr" @bind="_options.NtfyUrl"/>
+                <small class="form-text text-muted">The server and the topic. Empty: no messages.</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="ntfy-token">Access token</label>
+                <input id="ntfy-token" type="password" class="form-control" autocomplete="off" placeholder="tk_..." @bind="_options.NtfyToken"/>
+                <small class="form-text text-muted">Only for a protected topic.</small>
+            </div>
+            <Switch Id="on-done" Label="When a job is done" @bind-Value="_options.OnDone"/>
+            <Switch Id="on-failed" Label="When a job fails" @bind-Value="_options.OnFailed"/>
+            <Switch Id="dry-runs" Label="Also when a dry run is done" @bind-Value="_options.DryRuns"
+                    Help="A dry run that fails is always reported."/>
+            @if (_ntfyResult is { } ntfy)
+            {
+                <div class="small mb-3 @(ntfy.Ok ? "text-success" : "text-danger")">@ntfy.Message</div>
+            }
+            <button type="button" class="btn btn-outline-primary btn-sm" disabled="@_busy" @onclick="SendTest">
+                <i class="bi bi-send me-1"></i>Send a test message
+            </button>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="border rounded p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-collection-play text-primary"></i>
+                <h5 class="mb-0">Jellyfin</h5>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="jf-url">URL</label>
+                <input id="jf-url" class="form-control" placeholder="http://jellyfin:8096" @bind="_options.JellyfinUrl"/>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="jf-key">API key</label>
+                <input id="jf-key" type="password" class="form-control" autocomplete="off" @bind="_options.JellyfinApiKey"/>
+                <small class="form-text text-muted">In Jellyfin: Dashboard &gt; API Keys.</small>
+            </div>
+            <Switch Id="jf-refresh" Label="Scan the libraries after a good job" @bind-Value="_options.RefreshJellyfin"
+                    Help="Useful when the Done folder is in a Jellyfin library. Dry runs never scan."/>
+            @if (_jellyfinResult is { } jellyfin)
+            {
+                <div class="small mb-3 @(jellyfin.Ok ? "text-success" : "text-danger")">@jellyfin.Message</div>
+            }
+            <button type="button" class="btn btn-outline-primary btn-sm" disabled="@_busy" @onclick="ScanNow">
+                <i class="bi bi-arrow-repeat me-1"></i>Scan now
+            </button>
+        </div>
+    </div>
+</div>
+
+<StickyBar>
+    <button class="btn btn-primary" @onclick="Save"><i class="bi bi-check-lg me-2"></i>Save</button>
+    @if (Settings.Saved(LiveSettings.NotificationsKey))
+    {
+        <button class="btn btn-light border" @onclick="Reset" title="Forget what was saved here: the environment variables apply again">
+            <i class="bi bi-arrow-counterclockwise me-2"></i>Use environment variables
+        </button>
+    }
+</StickyBar>
+
+@code {
+    private NotificationOptions _options = new();
+    private (bool Ok, string Message)? _ntfyResult;
+    private (bool Ok, string Message)? _jellyfinResult;
+    private bool _busy;
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(Settings.Notifications, JobStore.Json);
+        _options = System.Text.Json.JsonSerializer.Deserialize<NotificationOptions>(json, JobStore.Json) ?? new NotificationOptions();
+    }
+
+    private async Task SendTest()
+    {
+        if (!_options.NtfyConfigured)
+        {
+            _ntfyResult = (false, "Fill in the topic URL.");
+            return;
+        }
+
+        _busy = true;
+        var error = await Notifier.SendAsync(Trimmed(),
+            new JobMessage("Ripparr: test message", "Notifications from Ripparr reach this topic.", "test_tube", "default"),
+            CancellationToken.None);
+        _ntfyResult = error == null ? (true, "Sent. Check the topic.") : (false, error);
+        _busy = false;
+    }
+
+    private async Task ScanNow()
+    {
+        if (!_options.JellyfinConfigured)
+        {
+            _jellyfinResult = (false, "Fill in the URL and the API key.");
+            return;
+        }
+
+        _busy = true;
+        var error = await Notifier.RefreshJellyfinAsync(Trimmed(), CancellationToken.None);
+        _jellyfinResult = error == null ? (true, "Jellyfin started a library scan.") : (false, error);
+        _busy = false;
+    }
+
+    private void Save()
+    {
+        Settings.Save(LiveSettings.NotificationsKey, Trimmed());
+        Toasts.Success("Notifications saved.");
+    }
+
+    private void Reset()
+    {
+        Settings.Reset(LiveSettings.NotificationsKey);
+        Load();
+        Toasts.Show("Notifications use the environment variables again.", "info");
+    }
+
+    private NotificationOptions Trimmed() => new()
+    {
+        NtfyUrl = _options.NtfyUrl.Trim(),
+        NtfyToken = _options.NtfyToken.Trim(),
+        OnDone = _options.OnDone,
+        OnFailed = _options.OnFailed,
+        DryRuns = _options.DryRuns,
+        JellyfinUrl = _options.JellyfinUrl.Trim(),
+        JellyfinApiKey = _options.JellyfinApiKey.Trim(),
+        RefreshJellyfin = _options.RefreshJellyfin
+    };
+}
