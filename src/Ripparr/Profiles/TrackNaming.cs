@@ -42,7 +42,7 @@ public static partial class TrackNaming
     {
         [HearingImpaired] = "{language} (SDH) - {codec}",
         [Forced] = "{language} (Forced) - {codec}",
-        [Commentary] = "{language} (Commentary) - {trackname} - {codec}"
+        [Commentary] = "{language} (Commentary) - {description} - {codec}"
     };
 
     /// <summary>The template for a track: the first flag with an override, or the default.</summary>
@@ -73,7 +73,9 @@ public static partial class TrackNaming
     };
 
     /// <summary>The word values every track template can use: {forced} gives "Forced" on a forced track.</summary>
-    public static Dictionary<string, string?> FlagValues(TrackFlags flags, string? trackName = null) => new()
+    /// <param name="description">The track's Description box on the disc page ({description}).</param>
+    /// <param name="commentaryWord">With nothing typed, {description} of a commentary is "Commentary" (audio).</param>
+    public static Dictionary<string, string?> FlagValues(TrackFlags flags, string? description = null, bool commentaryWord = true) => new()
     {
         ["hi"] = flags.HearingImpaired ? "SDH" : "",
         ["sdh"] = flags.HearingImpaired ? "SDH" : "",
@@ -82,9 +84,9 @@ public static partial class TrackNaming
         ["visualimpaired"] = flags.VisualImpaired ? "AD" : "",
         ["ad"] = flags.VisualImpaired ? "AD" : "",
         ["dub"] = flags.Dub ? "Dub" : "",
-        // A disc track has no name of its own; a commentary is described as one.
-        ["trackname"] = trackName ?? "",
-        ["description"] = string.IsNullOrWhiteSpace(trackName) ? flags.Commentary ? "Commentary" : "" : trackName
+        // A disc track has no name of its own: {description} is what the Description box says; a
+        // commentary with nothing typed is described as one.
+        ["description"] = string.IsNullOrWhiteSpace(description) ? flags.Commentary && commentaryWord ? "Commentary" : "" : description
     };
 
     public static string Audio(RipProfile profile, string language, string codec, string channels, TrackFlags flags, string? trackName = null)
@@ -98,7 +100,8 @@ public static partial class TrackNaming
 
     public static string Subtitle(RipProfile profile, string language, string codec, TrackFlags flags, string? trackName = null)
     {
-        var values = FlagValues(flags, trackName);
+        // The subtitle commentary template says (Commentary) itself: {description} is only what was typed.
+        var values = FlagValues(flags, trackName, commentaryWord: false);
         values["language"] = language;
         values["codec"] = CodecNames.Rename(codec, profile.SubtitleCodecNames);
         return Described(Template(profile.SubtitleNameTemplate, profile.SubtitleNameOverrides, flags), values, trackName);
@@ -109,7 +112,6 @@ public static partial class TrackNaming
     {
         return Described(profile.VideoNameTemplate, new Dictionary<string, string?>
         {
-            ["trackname"] = trackName ?? "",
             ["description"] = trackName ?? "",
             ["language"] = language,
             ["resolution"] = resolution,
@@ -172,8 +174,8 @@ public static partial class TrackNaming
 
     /// <summary>Naming.Apply, then the separators a missing value leaves behind ("English (Commentary) -  - PGS").</summary>
     /// <summary>
-    /// A track template with the text typed for the track on the job (its Name box) as {description}
-    /// (and {trackname}). A template without either gets the text in brackets at the end, so it is
+    /// A track template with the text typed for the track on the job (its Description box) as
+    /// {description}. A template without it gets the text in brackets at the end, so it is
     /// not lost; text starting with "=" is the whole name, as typed.
     /// </summary>
     public static string Described(string template, IReadOnlyDictionary<string, string?> values, string? typed)
@@ -193,9 +195,9 @@ public static partial class TrackNaming
         return name.Length == 0 ? text : $"{name} ({text})";
     }
 
-    /// <summary>Whether a template has a {description} or {trackname} token.</summary>
+    /// <summary>Whether a template has a {description} token.</summary>
     public static bool UsesDescription(string template) =>
-        System.Text.RegularExpressions.Regex.IsMatch(template, @"\{[^{}A-Za-z]*(description|trackname)[^{}A-Za-z]*\}",
+        System.Text.RegularExpressions.Regex.IsMatch(template, @"\{[^{}A-Za-z]*description[^{}A-Za-z]*\}",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     public static string Apply(string template, IReadOnlyDictionary<string, string?> values)

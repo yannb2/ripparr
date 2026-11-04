@@ -88,3 +88,36 @@ public class CodecNamesTests
         Assert.AreEqual("English - SRT", SubtitleStep.SrtName(profile, track, sdhRemoved: true));
     }
 }
+
+[TestClass]
+public class DescriptionTokenTests
+{
+    private static readonly TrackFlags Commentary = new(Commentary: true);
+
+    [TestMethod]
+    public void SubtitleCommentaryTakesTheDescriptionBox()
+    {
+        var profile = new RipProfile();
+
+        Assert.AreEqual("English (Commentary) - PGS", TrackNaming.Subtitle(profile, "English", "PGS", Commentary));
+        Assert.AreEqual("English (Commentary) - Director - PGS", TrackNaming.Subtitle(profile, "English", "PGS", Commentary, "Director"));
+        Assert.AreEqual("English - AC3 2.0 (Commentary)", TrackNaming.Audio(profile, "English", "AC3", "2.0", Commentary));
+        Assert.AreEqual("English - AC3 2.0 (Director)", TrackNaming.Audio(profile, "English", "AC3", "2.0", Commentary, "Director"));
+    }
+
+    [TestMethod]
+    public void SavedProfilesMoveFromTrackNameToDescription()
+    {
+        const string json = """
+            {"Name":"Old","VideoNameTemplate":"{resolution} - {trackname}","AudioNameTemplate":"{language} - {codec}",
+             "SubtitleNameTemplate":"{language} {dub} - {codec}",
+             "SubtitleNameOverrides":{"commentary":"{language} (Commentary) - {trackname} - {codec}","forced":"{language} (Forced) - {codec}"}}
+            """;
+        var profile = System.Text.Json.JsonSerializer.Deserialize<RipProfile>(json)!;
+
+        Assert.AreEqual("{resolution} - {description}", profile.VideoNameTemplate);
+        Assert.AreEqual("{language} (Commentary) - {description} - {codec}", profile.SubtitleNameOverrides["commentary"]);
+        Assert.AreEqual("{language} (Forced) - {codec}", profile.SubtitleNameOverrides["forced"]);
+        Assert.AreEqual("{language} (Commentary) - {description} - {codec}", new RipProfile().SubtitleNameOverrides["commentary"]);
+    }
+}
