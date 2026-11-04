@@ -91,7 +91,7 @@ public static partial class TrackNaming
     {
         var values = FlagValues(flags, trackName);
         values["language"] = language;
-        values["codec"] = codec;
+        values["codec"] = CodecNames.Rename(codec, profile.AudioCodecNames);
         values["channels"] = channels;
         return Described(Template(profile.AudioNameTemplate, profile.AudioNameOverrides, flags), values, trackName);
     }
@@ -100,7 +100,7 @@ public static partial class TrackNaming
     {
         var values = FlagValues(flags, trackName);
         values["language"] = language;
-        values["codec"] = codec;
+        values["codec"] = CodecNames.Rename(codec, profile.SubtitleCodecNames);
         return Described(Template(profile.SubtitleNameTemplate, profile.SubtitleNameOverrides, flags), values, trackName);
     }
 
@@ -113,12 +113,12 @@ public static partial class TrackNaming
             ["description"] = trackName ?? "",
             ["language"] = language,
             ["resolution"] = resolution,
-            ["codec"] = codec,
-            ["hdr"] = dynamicRange,
-            ["range"] = Range(dynamicRange, dvProfile != null),
-            ["dv"] = DolbyVision(profile.DolbyVisionTemplate, dvProfile, dvLayer),
+            ["codec"] = CodecNames.Rename(codec, profile.VideoCodecNames),
+            ["hdr"] = CodecNames.RenameWords(dynamicRange, profile.VideoCodecNames),
+            ["range"] = CodecNames.Rename(Range(dynamicRange, dvProfile != null), profile.VideoCodecNames),
+            ["dv"] = DolbyVision(profile.DolbyVisionTemplate, dvProfile, CodecNames.Rename(dvLayer, profile.VideoCodecNames)),
             ["dvprofile"] = dvProfile,
-            ["dvlayer"] = dvLayer
+            ["dvlayer"] = CodecNames.Rename(dvLayer, profile.VideoCodecNames)
         }, trackName);
     }
 

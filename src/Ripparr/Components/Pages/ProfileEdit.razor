@@ -135,6 +135,8 @@
                             <code>@TrackNaming.DefaultDolbyVision</code>; <code>DV P{dvprofile} {dvlayer}</code> gives "DV P7 FEL".
                             The profile and layer are read with dovi_tool once the layers are merged.
                         </small>
+                        <CodecNamesEditor Names="_profile.VideoCodecNames" Labels="CodecNames.Video.Concat(CodecNames.VideoFeatures)" Changed="StateHasChanged"
+                                          Note="HDR10, HDR10+, HLG, SDR, FEL and MEL are renamed in {range}, {hdr} and {dvlayer} (also inside the Dolby Vision wording)."/>
                         <NamePreview Rows="TrackNaming.Preview(_profile)"/>
                     </div>
                     break;
@@ -163,6 +165,8 @@
                             (Commentary on a commentary), <code>{commentary}</code>, <code>{ad}</code>.
                         </small>
                         <FlagOverrides Overrides="_profile.AudioNameOverrides" Changed="StateHasChanged"/>
+                        <CodecNamesEditor Names="_profile.AudioCodecNames" Labels="CodecNames.Audio" Changed="StateHasChanged"
+                                          Note="When an Atmos label is blank, its codec's name is used with &quot;Atmos&quot; added."/>
                         <NamePreview Rows="TrackNaming.AudioPreview(_profile)"/>
                     </div>
                     break;
@@ -183,6 +187,7 @@
                             <code>{trackname}</code> (empty for disc tracks), <code>{forced}</code>, <code>{sdh}</code>, <code>{commentary}</code>.
                         </small>
                         <FlagOverrides Overrides="_profile.SubtitleNameOverrides" Changed="StateHasChanged"/>
+                        <CodecNamesEditor Names="_profile.SubtitleCodecNames" Labels="CodecNames.Subtitle" Changed="StateHasChanged"/>
                         <NamePreview Rows="TrackNaming.SubtitlePreview(_profile)"/>
                     </div>
 
@@ -199,6 +204,8 @@
                             Help="[door slams], (laughs), JOHN:, ♪ lyrics are left out of the SRT; a caption with nothing else is dropped."/>
                     <Switch Id="detectSdh" @bind-Value="_profile.DetectSdh" Label="Mark SDH subtitle tracks"
                             Help="When the OCR finds SDH text in a tenth of the captions or more, the picture track gets the hearing impaired flag and the SDH name."/>
+                    <Switch Id="srtOnlySdh" @bind-Value="_profile.SrtCleanWhenOnlySdh" Label="Add a track without SDH when a language only has SDH subtitles"
+                            Help="When every full subtitle track of a language is SDH, an SRT of it with the SDH text removed is added, named as a plain track. Works for any kept language, not only those above: a track not read yet is checked on a sample of its captions first."/>
                     <Switch Id="srtForced" @bind-Value="_profile.SrtForForced" Label="Also for forced subtitle tracks"
                             Help="Make an SRT of the forced (foreign lines only) tracks too."/>
                     break;

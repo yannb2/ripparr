@@ -64,6 +64,9 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>What {dv} writes, with {dvprofile} and {dvlayer}. Empty = "Dolby Vision Profile {dvprofile} {dvlayer}".</summary>
     public string DolbyVisionTemplate { get; set; } = "";
 
+    /// <summary>What {codec} writes for each video codec, and {range}/{hdr}/{dvlayer} for HDR10, HDR10+, HLG, SDR, FEL and MEL.</summary>
+    public Dictionary<string, string> VideoCodecNames { get; set; } = [];
+
     // ---- Audio ----
 
     /// <summary>Kept languages, in order. "original" stands for the film's own language.</summary>
@@ -86,6 +89,9 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>Templates for flagged tracks, by flag (sdh, forced, commentary, ad, dub). The first matching flag wins.</summary>
     public Dictionary<string, string> AudioNameOverrides { get; set; } = TrackNaming.DefaultAudioOverrides();
 
+    /// <summary>What {codec} writes for each audio codec label (TrueHD Atmos → "Dolby TrueHD Atmos"); blank keeps the label.</summary>
+    public Dictionary<string, string> AudioCodecNames { get; set; } = [];
+
     // ---- Subtitles ----
 
     public List<string> SubtitleLanguages { get; set; } = ["eng", "fre"];
@@ -98,6 +104,9 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>Templates for flagged tracks, by flag (sdh, forced, commentary, ad, dub). The first matching flag wins.</summary>
     public Dictionary<string, string> SubtitleNameOverrides { get; set; } = TrackNaming.DefaultSubtitleOverrides();
 
+    /// <summary>What {codec} writes for PGS and SRT subtitles.</summary>
+    public Dictionary<string, string> SubtitleCodecNames { get; set; } = [];
+
     /// <summary>
     /// Languages that also get a text (SRT) track, read from the picture subtitles with OCR
     /// (Tesseract). Empty = no SRT tracks. "original" stands for the film's own language.
@@ -109,6 +118,12 @@ public sealed class RipProfile : IJsonOnDeserialized
 
     /// <summary>Mark a subtitle track as SDH (flag and name) when its OCR finds SDH text in many captions.</summary>
     public bool DetectSdh { get; set; } = true;
+
+    /// <summary>
+    /// When every full subtitle track of a language is SDH (no plain one on the disc), add an SRT
+    /// of it with the SDH text removed, also for a language that is not in <see cref="SrtLanguages"/>.
+    /// </summary>
+    public bool SrtCleanWhenOnlySdh { get; set; } = true;
 
     /// <summary>Also make an SRT of forced subtitle tracks.</summary>
     public bool SrtForForced { get; set; } = true;

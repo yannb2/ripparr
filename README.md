@@ -160,6 +160,16 @@ There, the **Description** box of a track fills `{description}` in the profile's
 template `{language} - {codec} {channels} ({description})` gives `English - AC3 2.0 (Director and Writer)`); a
 template without `{description}` gets the text in brackets at the end, and `=Name` types the whole name.
 
+**Codec names** (under each track name, as in the Muxarr fork) set what `{codec}` writes for each detected codec:
+`Dolby TrueHD` for TrueHD gives `English - Dolby TrueHD Atmos 7.1` (a blank Atmos label uses its codec's name with
+"Atmos" added). The video list also renames HDR10, HDR10+, HLG, SDR, FEL and MEL in `{range}`, `{hdr}` and
+`{dvlayer}`. Only track names use them: the file name keeps Radarr's words.
+
+**Add a track without SDH when a language only has SDH subtitles** (Text subtitles card, on by default): when
+every full subtitle track of a kept language is SDH, an SRT of it with the SDH text removed is added after it,
+named as a plain track (`English - SRT`). It works for languages outside the SRT list too: a track that was not
+marked SDH and not read is checked on a sample of 120 captions first, and read in full only when it is SDH.
+
 The default file name follows Radarr's Standard Movie Format in this library:
 `Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BDRemux].mkv`.
 
