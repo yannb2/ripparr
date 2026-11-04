@@ -159,6 +159,21 @@ public class MuxBuilderTests
     }
 
     [TestMethod]
+    public void SdrBracketOnlyAt2160p()
+    {
+        Assert.AreEqual("SDR", TrackNaming.SdrOnlyAt2160p("SDR", "2160p"));
+        Assert.AreEqual("", TrackNaming.SdrOnlyAt2160p("SDR", "1080p"));
+        Assert.AreEqual("HDR10", TrackNaming.SdrOnlyAt2160p("HDR10", "1080p"));
+
+        var values = new Dictionary<string, string?>
+        {
+            ["title"] = "Film", ["year"] = "2001", ["edition"] = null, ["resolution"] = "1080p", ["videocodec"] = "AVC",
+            ["hdr"] = TrackNaming.SdrOnlyAt2160p("SDR", "1080p"), ["audio"] = "DTS-HD MA-5.1", ["source"] = "BDRemux", ["releasegroup"] = null
+        };
+        Assert.AreEqual("Film (2001) [1080p][AVC][DTS-HD MA-5.1][BDRemux]", Naming.Apply(new RipProfile().FileNameTemplate, values));
+    }
+
+    [TestMethod]
     public void ReleaseGroupEndsTheFileName()
     {
         var profile = new RipProfile();

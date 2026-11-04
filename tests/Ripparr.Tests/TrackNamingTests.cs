@@ -15,7 +15,9 @@ public sealed class TrackNamingTests
         Assert.AreEqual("2160p - HEVC - Dolby Vision Profile 7 FEL HDR10",
             TrackNaming.Video(Profile, "English", "2160p", "HEVC", "DV HDR10", "7", "FEL"));
         Assert.AreEqual("2160p - HEVC - HDR10+", TrackNaming.Video(Profile, "English", "2160p", "HEVC", "HDR10Plus", null, null));
-        Assert.AreEqual("1080p - AVC - SDR", TrackNaming.Video(Profile, "English", "1080p", "AVC", "", null, null));
+        // SDR is only said at 2160p.
+        Assert.AreEqual("2160p - HEVC - SDR", TrackNaming.Video(Profile, "English", "2160p", "HEVC", "", null, null));
+        Assert.AreEqual("1080p - AVC", TrackNaming.Video(Profile, "English", "1080p", "AVC", "", null, null));
         Assert.AreEqual("2160p - HEVC - Dolby Vision Profile 5", TrackNaming.Video(Profile, "English", "2160p", "HEVC", "DV", "5", null));
     }
 
@@ -132,7 +134,7 @@ public sealed class TrackNamingTests
         // A template without it keeps the text in brackets at the end.
         Assert.AreEqual("English - TrueHD Atmos 7.1 (Home mix)",
             TrackNaming.Audio(Profile, "English", "TrueHD Atmos", "7.1", new TrackFlags(), "Home mix"));
-        Assert.AreEqual("1080p - AVC - SDR (Open matte)", TrackNaming.Video(Profile, "English", "1080p", "AVC", "", null, null, "Open matte"));
+        Assert.AreEqual("1080p - AVC (Open matte)", TrackNaming.Video(Profile, "English", "1080p", "AVC", "", null, null, "Open matte"));
 
         // "=" types the whole name.
         Assert.AreEqual("My own name", TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(), "= My own name"));

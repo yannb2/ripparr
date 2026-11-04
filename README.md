@@ -153,7 +153,7 @@ numbered from it in disc order (any number can be typed over), and get their tit
 series stopped, so the next disc starts at the next episode.
 
 Each episode is its own job and goes to `done/Series (Year)/Season 01/` (season 0 to `Specials`) as
-`Series S01E05 [1080p][AVC][SDR][TrueHD-5.1][BDRemux] - Episode Title.mkv`, with ` (005)` after `S01E05` for
+`Series S01E05 [1080p][AVC][TrueHD-5.1][BDRemux] - Episode Title.mkv`, with ` (005)` after `S01E05` for
 anime, MKV title `Series S01E05 - Episode Title`, ready for a Sonarr manual import. The profile page has the
 episode templates (`{episode}`, `{absolute}`, `{episodetitle}`). The tags add `TVDB2` (`series/<id>`),
 `TMDB` as `tv/<id>` and `ABSOLUTE_EPISODE`.
@@ -203,6 +203,8 @@ marked SDH and not read is checked on a sample of 120 captions first, and read i
 
 The default file name follows Radarr's Standard Movie Format in this library:
 `Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BDRemux].mkv`.
+"SDR" is only written for 2160p video (`[SDR]` in the file name, `{range}` in the video track name): below 4K
+every disc is SDR, so the HDR bracket is left out, the same rule as tag_release and Radarr's SDR format.
 When the job has a RELEASE_GROUP tag, `{-releasegroup}` adds it at the end (`...[BDRemux]-YANNRIP.mkv`, spaces
 become dots). That is where Radarr and Sonarr read the release group on import, so a custom format can match
 your own rips. Profiles saved before 0.4.12 get `{-releasegroup}` added once, and removing it keeps it out.

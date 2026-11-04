@@ -124,7 +124,7 @@
                         <small class="form-text text-muted d-block">
                             Placeholders: <code>{resolution}</code> (2160p, 1080p), <code>{codec}</code> (HEVC, AVC),
                             <code>{dv}</code> (Dolby Vision Profile 7 FEL), <code>{dvprofile}</code> (7, 8.1), <code>{dvlayer}</code> (FEL, MEL),
-                            <code>{range}</code> (HDR10, HDR10+, HLG, or SDR for video with neither HDR nor Dolby Vision),
+                            <code>{range}</code> (HDR10, HDR10+, HLG, or SDR for 2160p video with neither HDR nor Dolby Vision),
                             <code>{hdr}</code> (as Radarr: DV HDR10), <code>{language}</code>, <code>{description}</code> (the Description box on the disc page). Empty for no name.
                         </small>
                         <div class="mt-2 text-muted small mb-1">Dolby Vision wording</div>
@@ -135,6 +135,13 @@
                             <code>@TrackNaming.DefaultDolbyVision</code>; <code>DV P{dvprofile} {dvlayer}</code> gives "DV P7 FEL".
                             The profile and layer are read with dovi_tool once the layers are merged.
                         </small>
+                        <div class="alert alert-secondary small py-2 mt-2 mb-2">
+                            <i class="bi bi-info-circle me-1"></i><strong>SDR only at 2160p.</strong>
+                            "SDR" is written only for 2160p video, where HDR is the norm and SDR is worth knowing: in <code>{range}</code>
+                            here and in the file name's <code>{hdr}</code> bracket (<code>[SDR]</code>). Below 4K every disc is SDR, so nothing
+                            is written: a 1080p track is "1080p - AVC", and the file name has no HDR bracket. The same rule as
+                            tag_release and Radarr's SDR custom format.
+                        </div>
                         <NamePreview Rows="TrackNaming.Preview(_profile)"/>
                         <CodecNamesEditor Names="_profile.VideoCodecNames" Labels="CodecNames.Video.Concat(CodecNames.VideoFeatures)" Changed="StateHasChanged"
                                           Note="HDR10, HDR10+, HLG, SDR, FEL and MEL are renamed in {range}, {hdr} and {dvlayer} (also inside the Dolby Vision wording)."/>
@@ -442,7 +449,7 @@
     private string Episode(string template) => Naming.Apply(template, new Dictionary<string, string?>
     {
         ["title"] = "Frieren - Beyond Journey's End", ["year"] = "2023", ["resolution"] = "1080p", ["videocodec"] = "AVC",
-        ["hdr"] = "SDR", ["audio"] = "TrueHD-2.0", ["source"] = "BDRemux", ["episode"] = "S01E05", ["absolute"] = "005",
+        ["hdr"] = null, ["audio"] = "TrueHD-2.0", ["source"] = "BDRemux", ["episode"] = "S01E05", ["absolute"] = "005",
         ["episodetitle"] = "Phantoms of the Dead", ["releasegroup"] = ExampleGroup
     });
 

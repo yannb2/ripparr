@@ -262,8 +262,8 @@ public static partial class MuxBuilder
             ["edition"] = job.Edition,
             ["resolution"] = video?.Resolution,
             ["videocodec"] = video?.VideoCodec,
-            // An SDR film gets [SDR], as the rename-only custom format does in Radarr.
-            ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? "SDR" : range,
+            // A 2160p SDR film gets [SDR], as the rename-only custom format does in Radarr; below 4K, nothing.
+            ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? TrackNaming.SdrOnlyAt2160p("SDR", video.Resolution) : range,
             ["audio"] = audioWords,
             ["source"] = job.Profile.Source,
             ["episode"] = job.EpisodeCode,

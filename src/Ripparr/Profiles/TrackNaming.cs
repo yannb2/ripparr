@@ -120,7 +120,7 @@ public static partial class TrackNaming
             ["resolution"] = resolution,
             ["codec"] = CodecNames.Rename(codec, profile.VideoCodecNames),
             ["hdr"] = CodecNames.RenameWords(dynamicRange, profile.VideoCodecNames),
-            ["range"] = CodecNames.Rename(Range(dynamicRange, dvProfile != null), profile.VideoCodecNames),
+            ["range"] = CodecNames.Rename(SdrOnlyAt2160p(Range(dynamicRange, dvProfile != null), resolution), profile.VideoCodecNames),
             ["dv"] = DolbyVision(profile.DolbyVisionTemplate, dvProfile, CodecNames.Rename(dvLayer, profile.VideoCodecNames)),
             ["dvprofile"] = dvProfile,
             ["dvlayer"] = CodecNames.Rename(dvLayer, profile.VideoCodecNames)
@@ -141,6 +141,13 @@ public static partial class TrackNaming
 
         return dolbyVision || (dynamicRange ?? "").Contains("DV", StringComparison.Ordinal) ? "" : "SDR";
     }
+
+    /// <summary>
+    /// "SDR" is only written for 2160p video, where HDR is the norm and SDR is worth saying. Below
+    /// 4K every disc is SDR, so it says nothing: the same rule as tag_release and Radarr's SDR format.
+    /// </summary>
+    public static string? SdrOnlyAt2160p(string? range, string? resolution) =>
+        range == "SDR" && resolution != "2160p" ? "" : range;
 
     /// <summary>The {dv} words: "Dolby Vision Profile 7 FEL", or "DV P7 FEL" from "DV P{dvprofile} {dvlayer}". Empty without Dolby Vision.</summary>
     public static string DolbyVision(string? template, string? dvProfile, string? dvLayer)
@@ -215,6 +222,7 @@ public static partial class TrackNaming
     {
         yield return ("UHD, Dolby Vision FEL", Video(profile, "English", "2160p", "HEVC", "DV HDR10", "7", "FEL"));
         yield return ("UHD, HDR10", Video(profile, "English", "2160p", "HEVC", "HDR10", null, null));
+        yield return ("UHD, SDR", Video(profile, "English", "2160p", "HEVC", "", null, null));
         yield return ("Blu-ray", Video(profile, "English", "1080p", "AVC", "", null, null));
     }
 
