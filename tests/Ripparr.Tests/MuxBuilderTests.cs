@@ -114,7 +114,7 @@ public class MuxBuilderTests
 
         CollectionAssert.AreEqual(new[]
         {
-            "2160p - HEVC - HDR10", "English - TrueHD Atmos 7.1", "French - DTS-HD MA 5.1 Dub", "English - AC3 2.0 (Commentary)",
+            "2160p - HEVC - HDR10", "English - TrueHD Atmos 7.1", "French - DTS-HD Master Audio 5.1 Dub", "English - AC-3 2.0 (Commentary)",
             "English - PGS", "French - PGS"
         }, outputs.Select(o => o.Name).ToArray());
     }
@@ -126,7 +126,7 @@ public class MuxBuilderTests
         var plan = TrackPlanner.Build(Film, profile, "eng");
         var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
 
-        Assert.AreEqual("English - AC3 5.1", outputs[2].Name);
+        Assert.AreEqual("English - AC-3 5.1", outputs[2].Name);
     }
 
     [TestMethod]

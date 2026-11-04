@@ -135,9 +135,9 @@
                             <code>@TrackNaming.DefaultDolbyVision</code>; <code>DV P{dvprofile} {dvlayer}</code> gives "DV P7 FEL".
                             The profile and layer are read with dovi_tool once the layers are merged.
                         </small>
+                        <NamePreview Rows="TrackNaming.Preview(_profile)"/>
                         <CodecNamesEditor Names="_profile.VideoCodecNames" Labels="CodecNames.Video.Concat(CodecNames.VideoFeatures)" Changed="StateHasChanged"
                                           Note="HDR10, HDR10+, HLG, SDR, FEL and MEL are renamed in {range}, {hdr} and {dvlayer} (also inside the Dolby Vision wording)."/>
-                        <NamePreview Rows="TrackNaming.Preview(_profile)"/>
                     </div>
                     break;
 
@@ -160,14 +160,14 @@
                         <div class="text-muted small mb-1">Track name</div>
                         <input class="form-control form-control-sm font-monospace" @bind="_profile.AudioNameTemplate" @bind:event="oninput"/>
                         <small class="form-text text-muted d-block">
-                            Placeholders: <code>{language}</code>, <code>{codec}</code> (TrueHD Atmos, DTS-HD MA), <code>{channels}</code> (7.1),
+                            Placeholders: <code>{language}</code>, <code>{codec}</code> (TrueHD Atmos, DTS-HD Master Audio), <code>{channels}</code> (7.1),
                             <code>{dub}</code> (Dub on audio in another language than the film's own), <code>{description}</code>
                             (the track's Description box on the disc page; Commentary on a commentary with nothing typed), <code>{commentary}</code>, <code>{ad}</code>.
                         </small>
+                        <NamePreview Rows="TrackNaming.AudioPreview(_profile)"/>
                         <FlagOverrides Overrides="_profile.AudioNameOverrides" Changed="StateHasChanged"/>
                         <CodecNamesEditor Names="_profile.AudioCodecNames" Labels="CodecNames.Audio" Changed="StateHasChanged"
-                                          Note="When an Atmos label is blank, its codec's name is used with &quot;Atmos&quot; added."/>
-                        <NamePreview Rows="TrackNaming.AudioPreview(_profile)"/>
+                                          Note="The same labels as in the Muxarr fork. When an Atmos label is blank, its codec's name is used with &quot;Atmos&quot; added."/>
                     </div>
                     break;
 
@@ -187,9 +187,9 @@
                             <code>{description}</code> (what the track's Description box on the disc page says; empty when nothing is typed),
                             <code>{forced}</code>, <code>{sdh}</code>, <code>{commentary}</code>.
                         </small>
+                        <NamePreview Rows="TrackNaming.SubtitlePreview(_profile)"/>
                         <FlagOverrides Overrides="_profile.SubtitleNameOverrides" Changed="StateHasChanged"/>
                         <CodecNamesEditor Names="_profile.SubtitleCodecNames" Labels="CodecNames.Subtitle" Changed="StateHasChanged"/>
-                        <NamePreview Rows="TrackNaming.SubtitlePreview(_profile)"/>
                     </div>
 
                     <h6 class="mt-4 mb-2 border-top pt-3"><i class="bi bi-sort-down text-primary me-2"></i>Order within a language</h6>

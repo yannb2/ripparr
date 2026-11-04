@@ -7,6 +7,42 @@ namespace Ripparr.Tests;
 public class CodecNamesTests
 {
     [TestMethod]
+    public void AudioLabelsAreMuxarrs()
+    {
+        CollectionAssert.AreEqual(new[] { "AC-3", "E-AC-3 Atmos", "DTS-HD Master Audio", "DTS:X", "TrueHD Atmos" },
+            new[] { "AC3", "EAC3 Atmos", "DTS-HD MA", "DTS-X", "TrueHD Atmos" }.Select(CodecNames.Label).ToArray());
+
+        // Yann's Muxarr names, copied as they are.
+        var names = new Dictionary<string, string> { ["E-AC-3"] = "Dolby E-AC-3", ["TrueHD Atmos"] = "Dolby TrueHD/Atmos" };
+        Assert.AreEqual("Dolby E-AC-3", CodecNames.RenameAudio("EAC3", names));
+        Assert.AreEqual("Dolby E-AC-3 Atmos", CodecNames.RenameAudio("EAC3 Atmos", names), "blank Atmos label: codec name + Atmos");
+        Assert.AreEqual("Dolby TrueHD/Atmos", CodecNames.RenameAudio("TrueHD Atmos", names));
+        Assert.AreEqual("DTS-HD Master Audio", CodecNames.RenameAudio("DTS-HD MA", names), "nothing set: Muxarr's label");
+    }
+
+    [TestMethod]
+    public void SavedNamesMoveToTheMuxarrLabels()
+    {
+        var names = new Dictionary<string, string> { ["AC3"] = "Dolby Digital", ["DTS-HD MA"] = "", ["EAC3"] = "old", ["E-AC-3"] = "Dolby E-AC-3" };
+
+        CodecNames.MoveToMuxarrLabels(names);
+
+        Assert.AreEqual("Dolby Digital", names["AC-3"]);
+        Assert.AreEqual("Dolby E-AC-3", names["E-AC-3"], "a name already under the new label wins");
+        Assert.IsFalse(names.ContainsKey("AC3") || names.ContainsKey("EAC3") || names.ContainsKey("DTS-HD MA"));
+    }
+
+    [TestMethod]
+    public void CommentaryIsNotWrittenTwice()
+    {
+        var profile = new RipProfile();
+        profile.AudioNameOverrides["commentary"] = "{language} - {codec} {channels} - Commentary {description}";
+
+        Assert.AreEqual("English - AC-3 2.0 - Commentary", TrackNaming.Audio(profile, "English", "AC3", "2.0", new TrackFlags(Commentary: true)));
+        Assert.AreEqual("English - AC-3 2.0 - Commentary Director", TrackNaming.Audio(profile, "English", "AC3", "2.0", new TrackFlags(Commentary: true), "Director"));
+    }
+
+    [TestMethod]
     public void CustomNamesReplaceTheLabelWithoutCase()
     {
         var names = new Dictionary<string, string> { ["truehd"] = "Dolby TrueHD", ["AC3"] = " Dolby Digital ", ["DTS"] = "" };
@@ -101,8 +137,8 @@ public class DescriptionTokenTests
 
         Assert.AreEqual("English (Commentary) - PGS", TrackNaming.Subtitle(profile, "English", "PGS", Commentary));
         Assert.AreEqual("English (Commentary) - Director - PGS", TrackNaming.Subtitle(profile, "English", "PGS", Commentary, "Director"));
-        Assert.AreEqual("English - AC3 2.0 (Commentary)", TrackNaming.Audio(profile, "English", "AC3", "2.0", Commentary));
-        Assert.AreEqual("English - AC3 2.0 (Director)", TrackNaming.Audio(profile, "English", "AC3", "2.0", Commentary, "Director"));
+        Assert.AreEqual("English - AC-3 2.0 (Commentary)", TrackNaming.Audio(profile, "English", "AC3", "2.0", Commentary));
+        Assert.AreEqual("English - AC-3 2.0 (Director)", TrackNaming.Audio(profile, "English", "AC3", "2.0", Commentary, "Director"));
     }
 
     [TestMethod]

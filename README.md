@@ -189,11 +189,14 @@ profiles that used it now use `{description}`.)
 
 **Codec names** (under each track name, as in the Muxarr fork) set what `{codec}` writes for each detected codec:
 `Dolby TrueHD` for TrueHD gives `English - Dolby TrueHD Atmos 7.1` (a blank Atmos label uses its codec's name with
-"Atmos" added). The video list also renames HDR10, HDR10+, HLG, SDR, FEL and MEL in `{range}`, `{hdr}` and
-`{dvlayer}`. Only track names use them: the file name keeps Radarr's words.
+"Atmos" added). The audio labels are the Muxarr fork's, in its order (AC-3, E-AC-3, DTS-HD Master Audio, DTS:X...),
+so a list can be copied across, and a blank one writes that label, as Muxarr does (names saved under the older
+labels such as AC3 move over on load). The video list also renames HDR10, HDR10+, HLG, SDR, FEL and MEL in
+`{range}`, `{hdr}` and `{dvlayer}`. Only track names use them: the file name keeps Radarr's words. Each track
+name's preview sits right under its template.
 
 **Add a track without SDH when a language only has SDH subtitles** (Text subtitles card, on by default): when
-every full subtitle track of a kept language is SDH, an SRT of it with the SDH text removed is added after it,
+every full subtitle track of a kept language is SDH, an SRT of it with the SDH text removed is added (placed by the order within a language),
 named as a plain track (`English - SRT`). It works for languages outside the SRT list too: a track that was not
 marked SDH and not read is checked on a sample of 120 captions first, and read in full only when it is SDH.
 
