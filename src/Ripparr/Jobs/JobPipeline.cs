@@ -307,7 +307,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         // ---- Verify ----
         context.Step(JobSteps.Verify);
-        job.Checks = await Verifier.VerifyAsync(context, outPath, playlist, outputs, job.Plan.MergeDolbyVisionLayer);
+        job.Checks = await Verifier.VerifyAsync(context, outPath, playlist, outputs, job.Plan.MergeDolbyVisionLayer, title);
         foreach (var check in job.Checks)
         {
             context.Log($"  {(check.Passed ? check.Warning ? "WARN" : "OK  " : "FAIL")} {check.Name}: {check.Detail}");
