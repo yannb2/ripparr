@@ -28,6 +28,15 @@ public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Argument
     public IReadOnlyDictionary<string, string>? Environment { get; init; }
     public string? WorkingDirectory { get; init; }
 
+    /// <summary>
+    /// About how many bytes the tool reads from start to end (the clips it demuxes): when it prints
+    /// no percentage of its own, the job's progress is what it has read so far out of this.
+    /// </summary>
+    public long? ExpectedReadBytes { get; init; }
+
+    /// <summary>Called with the process id once it runs.</summary>
+    public Action<int>? Started { get; init; }
+
     /// <summary>The command as it would be typed in a shell, for the job log.</summary>
     public string CommandLine => string.Join(' ', new[] { FileName }.Concat(Arguments).Select(Quote));
 
@@ -93,6 +102,7 @@ public static class ProcessRunner
         try
         {
             process.Start();
+            spec.Started?.Invoke(process.Id);
         }
         catch (Exception e)
         {
