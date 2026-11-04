@@ -159,6 +159,42 @@ public class MuxBuilderTests
     }
 
     [TestMethod]
+    public void ReleaseGroupEndsTheFileName()
+    {
+        var profile = new RipProfile();
+        var plan = TrackPlanner.Build(Film, profile, "eng");
+        var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
+        var job = new Job { Title = "Film", Year = 2020, Profile = profile, Tags = [new GlobalTag { Name = "release group", Value = " YANNRIP " }] };
+
+        Assert.AreEqual("Film (2020) [2160p][HEVC][HDR10][TrueHD Atmos-7.1][BDRemux]-YANNRIP",
+            Naming.Apply(profile.FileNameTemplate, MuxBuilder.NameValues(job, outputs)));
+
+        job.Tags[0].Value = "Yann Rip";
+        Assert.AreEqual("Yann.Rip", MuxBuilder.NameValues(job, outputs)["releasegroup"], "one word, as Radarr reads it");
+
+        job.Season = 1;
+        job.Episode = 5;
+        job.EpisodeTitle = "Pilot";
+        StringAssert.EndsWith(Naming.Apply(profile.EpisodeFileNameTemplate, MuxBuilder.NameValues(job, outputs)), "] - Pilot-Yann.Rip");
+    }
+
+    [TestMethod]
+    public void SavedProfilesGetTheReleaseGroupOnce()
+    {
+        const string old = "{\"FileNameTemplate\":\"{title} ({year}) [{source}]\",\"EpisodeFileNameTemplate\":\"{title} {episode}\"}";
+        var profile = System.Text.Json.JsonSerializer.Deserialize<RipProfile>(old, JobStore.Json)!;
+
+        Assert.AreEqual("{title} ({year}) [{source}]{-releasegroup}", profile.FileNameTemplate);
+        Assert.AreEqual("{title} {episode}{-releasegroup}", profile.EpisodeFileNameTemplate);
+
+        // Taken out again by hand: it stays out.
+        profile.FileNameTemplate = "{title} ({year}) [{source}]";
+        var copy = System.Text.Json.JsonSerializer.Deserialize<RipProfile>(System.Text.Json.JsonSerializer.Serialize(profile, JobStore.Json), JobStore.Json)!;
+        Assert.AreEqual("{title} ({year}) [{source}]", copy.FileNameTemplate);
+        Assert.AreEqual(RipProfile.DefaultFileName, new RipProfile().FileNameTemplate);
+    }
+
+    [TestMethod]
     public void ChapterFileIsOgm()
     {
         Assert.AreEqual("CHAPTER01=00:00:00.000\nCHAPTER01NAME=Chapter 01\nCHAPTER02=00:10:00.000\nCHAPTER02NAME=Chapter 02\n" +

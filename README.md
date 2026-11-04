@@ -92,7 +92,8 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
    frame count against the video.
 9. **Finish**: moves the file to `done/Title (Year)/`.
 
-Each step logs the exact command it ran, on the job page and in `/config/logs/job-<id>.log`.
+Each step logs the exact command it ran, on the job page and in `/config/logs/job-<id>.log`. When a job finishes, a copy
+of its log is saved next to the MKV with the same name (`Film (2020) [...].log`).
 
 The job page and the queue show two bars: the current step, with the time left in it (from its pace so far),
 and the whole job: the steps done plus the current one's share, each step weighted by how long it usually takes
@@ -202,6 +203,9 @@ marked SDH and not read is checked on a sample of 120 captions first, and read i
 
 The default file name follows Radarr's Standard Movie Format in this library:
 `Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BDRemux].mkv`.
+When the job has a RELEASE_GROUP tag, `{-releasegroup}` adds it at the end (`...[BDRemux]-YANNRIP.mkv`, spaces
+become dots). That is where Radarr and Sonarr read the release group on import, so a custom format can match
+your own rips. Profiles saved before 0.4.12 get `{-releasegroup}` added once, and removing it keeps it out.
 
 ## Tools and updates
 

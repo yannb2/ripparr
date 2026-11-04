@@ -268,9 +268,15 @@ public static partial class MuxBuilder
             ["source"] = job.Profile.Source,
             ["episode"] = job.EpisodeCode,
             ["absolute"] = job.AbsoluteEpisode is { } absolute ? EpisodeNumbers.Absolute(absolute) : null,
-            ["episodetitle"] = job.EpisodeTitle
+            ["episodetitle"] = job.EpisodeTitle,
+            // "-GROUP" at the end of the name: how Radarr and Sonarr read the release group on import.
+            ["releasegroup"] = ReleaseGroupWord(GlobalTag.Find(job.Tags, GlobalTag.ReleaseGroup))
         };
     }
+
+    /// <summary>The release group as one word for a file name: Radarr stops reading it at a space.</summary>
+    public static string? ReleaseGroupWord(string? group) =>
+        string.IsNullOrWhiteSpace(group) ? null : string.Join('.', group.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>Chapters as an OGM text file mkvmerge reads: CHAPTER01=00:00:00.000 / CHAPTER01NAME=Chapter 01.</summary>
     public static string ChapterFile(Mpls playlist, ChapterNaming naming)

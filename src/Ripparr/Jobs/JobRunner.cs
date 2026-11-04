@@ -172,6 +172,7 @@ public sealed class JobRunner(
             job.Status = JobStatus.Done;
             job.Progress = 1;
             context.Log(job.DryRun ? "Dry run finished." : "Job finished.");
+            SaveLogBeside(job);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -213,6 +214,36 @@ public sealed class JobRunner(
             store.Update(job);
             events.Raise(job.Id);
             _wake.Release();
+        }
+    }
+
+    /// <summary>
+    /// A copy of the job's log next to the finished MKV, with the same name ("Film (2020) [...].log"),
+    /// so how the file was made stays with it.
+    /// </summary>
+    private void SaveLogBeside(Job job)
+    {
+        if (job.DryRun || string.IsNullOrEmpty(job.OutputPath) || !File.Exists(job.OutputPath))
+        {
+            return;
+        }
+
+        var target = Path.ChangeExtension(job.OutputPath, ".log");
+        try
+        {
+            var log = events.LogPath(job.Id);
+            if (File.Exists(log))
+            {
+                File.Copy(log, target, overwrite: true);
+            }
+            else
+            {
+                File.WriteAllLines(target, events.Lines(job.Id, int.MaxValue));
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(e, "Could not save the log of job {Id} next to {Path}", job.Id, job.OutputPath);
         }
     }
 }

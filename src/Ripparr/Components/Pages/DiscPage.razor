@@ -381,7 +381,7 @@
             {
                 <div class="mt-3">
                     <div class="small fw-semibold mb-1"><i class="bi bi-tags me-1"></i>Global tags</div>
-                    <GlobalTagEditor Tags="_tags" Placeholder="empty = not written"/>
+                    <GlobalTagEditor Tags="_tags" Placeholder="empty = not written" Changed="StateHasChanged"/>
                     <div class="form-text">
                         From the profile, for this disc. TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION, DISTRIBUTED_BY (the release label), HDR_FORMAT and the other automatic tags
                         are written too; a tag here with the same name replaces the automatic one.
@@ -883,7 +883,8 @@
             ["videocodec"] = video?.CodecName,
             ["hdr"] = dv ? "DV HDR10" : uhd ? "HDR10" : "SDR",
             ["audio"] = audio == null ? null : audio.Layout is "Multi" or "2.0 + Multi" ? audio.Codec : $"{audio.Codec}-{audio.Layout}",
-            ["source"] = Profile.Source
+            ["source"] = Profile.Source,
+            ["releasegroup"] = MuxBuilder.ReleaseGroupWord(GlobalTag.Find(_tags, GlobalTag.ReleaseGroup))
         };
     }
 
