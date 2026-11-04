@@ -50,7 +50,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         {
             var clips = playlist.Mpls.EnhancementLayerClips;
             context.Log($"Dolby Vision enhancement layer: PID {layer.Pid} (0x{layer.Pid:X4}), " +
-                        (clips == null ? "in the film's own clip(s)" : $"in its own clip(s): {string.Join(", ", clips.Select(c => c + ".m2ts"))}") +
+                        (clips == null || clips.SequenceEqual(playlist.Mpls.Clips.Distinct()) ? "in the film's own clip(s)" : $"in its own clip(s): {string.Join(", ", clips.Select(c => c + ".m2ts"))}") +
                         (job.Plan.MergeDolbyVisionLayer ? "." : "; left out on this job."));
         }
 
@@ -80,7 +80,17 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         if (job.Plan.MergeDolbyVisionLayer)
         {
-            await CheckEnhancementLayerAsync(context, discFolder, playlist);
+            if (await CheckEnhancementLayerAsync(context, discFolder, playlist) is { } layerPid)
+            {
+                // The layer is in the clip under another PID than the playlist says: demux and map that one.
+                playlist = playlist.WithMpls(playlist.Mpls.WithLayerPid(layerPid));
+                foreach (var track in job.Plan.Tracks.Where(t => t.DolbyVisionLayer))
+                {
+                    track.Pid = layerPid;
+                }
+
+                context.Save();
+            }
         }
 
         // ---- Demux ----
@@ -381,15 +391,17 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
     /// <summary>
     /// Before the long demux: the layer's PID has to be in the first clip that should hold it.
-    /// A playlist can list a layer its clips do not carry; better to say so now than after an hour.
+    /// Some playlists give the layer a PID its clip does not use (0x1500 where the clip has the
+    /// layer as 0x1015): the clip's one HEVC stream besides the base is the layer then, and its
+    /// PID comes back. A clip with no such stream fails now rather than after an hour.
     /// </summary>
-    private static async Task CheckEnhancementLayerAsync(JobContext context, string discFolder, PlaylistInfo playlist)
+    private static async Task<int?> CheckEnhancementLayerAsync(JobContext context, string discFolder, PlaylistInfo playlist)
     {
         var layer = playlist.Mpls.Streams.FirstOrDefault(s => s.DolbyVisionEnhancementLayer);
         var clip = LayerClips(discFolder, playlist).FirstOrDefault();
         if (layer == null || clip == null)
         {
-            return;
+            return null;
         }
 
         var probe = await ProcessRunner.RunAsync(context.Options.Tools.FFmpeg, ["-hide_banner", "-nostdin", "-i", clip],
@@ -398,18 +410,33 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         if (pids.Count == 0)
         {
             context.Warn($"ffmpeg could not list the streams of {Path.GetFileName(clip)}: the Dolby Vision layer is not checked before the demux.");
-            return;
+            return null;
         }
 
         if (!pids.Contains(layer.Pid))
         {
+            var basePids = playlist.Mpls.Streams.Where(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer).Select(s => s.Pid).ToHashSet();
+            var others = HevcPids(probe.Error).Where(p => !basePids.Contains(p)).ToList();
+            if (others.Count == 1)
+            {
+                context.Log($"The playlist gives the Dolby Vision layer PID {layer.Pid} (0x{layer.Pid:X4}), but {Path.GetFileName(clip)} has it as " +
+                            $"PID {others[0]} (0x{others[0]:X4}), its second HEVC stream: using that one.");
+                return others[0];
+            }
+
             throw new JobFailedException(
                 $"The playlist lists a Dolby Vision enhancement layer (PID {layer.Pid}, 0x{layer.Pid:X4}) but {Path.GetFileName(clip)} has no such stream " +
                 $"(it has PIDs {string.Join(", ", pids.Order().Select(p => $"0x{p:X4}"))}). Untick the layer on the job to keep only the HDR10 base.");
         }
 
         context.Log($"Dolby Vision enhancement layer found in {Path.GetFileName(clip)}.");
+        return null;
     }
+
+    /// <summary>The PIDs of the HEVC video streams ffmpeg lists.</summary>
+    internal static List<int> HevcPids(string ffmpegOutput) =>
+        System.Text.RegularExpressions.Regex.Matches(ffmpegOutput, @"Stream #\d+:\d+\[0x([0-9a-fA-F]+)\][^:]*: Video: hevc")
+            .Select(m => Convert.ToInt32(m.Groups[1].Value, 16)).Distinct().ToList();
 
     /// <summary>The PIDs ffmpeg lists for a transport stream: "Stream #0:1[0x1015]: Video: hevc".</summary>
     internal static HashSet<int> StreamPids(string ffmpegOutput) =>

@@ -71,6 +71,16 @@ public sealed class Mpls
 
     public IReadOnlyList<SubPath> SubPaths { get; init; } = [];
 
+    /// <summary>The same playlist with the Dolby Vision layer under the PID its clip really uses.</summary>
+    public Mpls WithLayerPid(int pid) => new()
+    {
+        Version = Version,
+        Items = Items,
+        Streams = Streams.Select(s => s.DolbyVisionEnhancementLayer ? s with { Pid = pid } : s).ToList(),
+        Chapters = Chapters,
+        SubPaths = SubPaths
+    };
+
     /// <summary>
     /// The clips that hold the Dolby Vision enhancement layer when it sits in a sub path (its own
     /// .m2ts files), else null: then it is in the play items' clips, next to the base layer.

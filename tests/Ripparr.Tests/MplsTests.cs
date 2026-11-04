@@ -57,6 +57,25 @@ public class MplsTests
     }
 
     [TestMethod]
+    public void FindsTheLayerByItsCodecWhenThePlaylistPidIsWrong()
+    {
+        // The Return of the Pink Panther UHD: the playlist says 0x1500, the clip carries the layer as 0x1015.
+        const string output = """
+              Stream #0:0[0x1011]: Video: hevc (Main 10) (HDMV / 0x564D4448), yuv420p10le(tv, bt2020nc/bt2020/smpte2084), 3840x2160
+              Stream #0:1[0x1015]: Video: hevc (Main 10) (HDMV / 0x564D4448), yuv420p10le(tv), 1920x1080
+              Stream #0:2[0x1100]: Audio: dts (DTS-HD MA) ([134][0][0][0] / 0x0086), 48000 Hz, 5.1(side)
+              Stream #0:3[0x12a0]: Subtitle: hdmv_pgs_subtitle ([144][0][0][0] / 0x0090)
+            """;
+
+        CollectionAssert.AreEqual(new[] { 0x1011, 0x1015 }, JobPipeline.HevcPids(output).ToArray());
+
+        var mpls = Mpls.Parse(MplsBuilder.UhdFilm().Build()).WithLayerPid(0x1015);
+        Assert.AreEqual(0x1015, mpls.Streams.Single(s => s.DolbyVisionEnhancementLayer).Pid);
+        Assert.AreEqual(0x1011, mpls.Streams.First(s => s.Kind == StreamKind.Video).Pid);
+        Assert.HasCount(4, mpls.Chapters);
+    }
+
+    [TestMethod]
     public void ReadsStreamsWithLanguagesAndTheDolbyVisionLayer()
     {
         var mpls = Mpls.Parse(MplsBuilder.UhdFilm().Build());

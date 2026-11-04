@@ -28,6 +28,13 @@ public sealed class PlaylistInfo
 
     public TimeSpan Duration => Mpls.Duration;
 
+    /// <summary>A copy for one job, with its playlist corrected (the shared analysis stays as read).</summary>
+    public PlaylistInfo WithMpls(Mpls mpls) => new()
+    {
+        Name = Name, Mpls = mpls, Size = Size, MainFeature = MainFeature, DuplicateOf = DuplicateOf,
+        PossibleCut = PossibleCut, Short = Short, PlayAll = PlayAll
+    };
+
     public string? Resolution => Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
         ? StreamCoding.Resolution(v.Format)
         : null;
