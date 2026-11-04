@@ -27,6 +27,7 @@ builder.Services.AddSingleton<DiscDrafts>();
 builder.Services.AddSingleton<StreamProbe>();
 builder.Services.AddSingleton<SubtitleScanner>();
 builder.Services.AddSingleton<Thumbnails>();
+builder.Services.AddSingleton<PlaylistFinder>();
 builder.Services.AddSingleton<JobPipeline>();
 builder.Services.AddSingleton<RadarrClient>();
 builder.Services.AddSingleton<SonarrClient>();

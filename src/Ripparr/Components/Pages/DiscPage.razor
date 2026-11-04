@@ -3,6 +3,7 @@
 @inject DiscDrafts Drafts
 @inject StreamProbe Probe
 @inject SubtitleScanner Scanner
+@inject PlaylistFinder Finder
 @inject JobStore Store
 @inject JobRunner Runner
 @inject RadarrClient Radarr
@@ -80,11 +81,47 @@
     <div class="alert alert-secondary py-2 small">@note</div>
 }
 
-@if (_analysis.ManyPlaylists)
+@if (_analysis.HidesFilm || _analysis.ManyPlaylists || _analysis.Playlists.Any(p => p.TooLittleData))
 {
     <div class="alert alert-warning py-2 small">
-        Many playlists have nearly the film's length: this disc may hide the real one among fakes. Check the chapter count
-        and clips against a playlist list for this disc before trusting the guess.
+        <div class="mb-1">
+            @if (_analysis.HidesFilm || _analysis.ManyPlaylists)
+            {
+                <span>
+                    @_analysis.Playlists.Count(p => p.Lookalike) playlists have nearly the film's length and use its clips in other
+                    orders: this disc hides the real one among fakes.
+                </span>
+            }
+            @if (_analysis.Playlists.Any(p => p.TooLittleData))
+            {
+                <span>
+                    @_analysis.Playlists.Count(p => p.TooLittleData) long playlist(s) hold far too little data for their length
+                    (they loop tiny clips) and are not taken as the film.
+                </span>
+            }
+        </div>
+        @if (_analysis.HidesFilm || _analysis.ManyPlaylists)
+        {
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <button class="btn btn-sm btn-light border" disabled="@_finding" @onclick="CheckJoins"
+                        title="Compares the last picture of each clip with the first of the next: the film's clips join seamlessly, a fake's jump.">
+                    <i class="bi bi-puzzle me-1"></i>Check clip joins
+                </button>
+                <button class="btn btn-sm btn-light border" disabled="@_finding" @onclick="AskMakeMkv"
+                        title="MakeMKV plays the disc's menus (BD-J too) and names the main feature. Takes a minute or two.">
+                    <i class="bi bi-question-circle me-1"></i>Ask MakeMKV
+                </button>
+                @if (_finding)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                    <span>@_findStatus</span>
+                }
+                else if (_findStatus != null)
+                {
+                    <span>@_findStatus</span>
+                }
+            </div>
+        }
     </div>
 }
 
@@ -152,7 +189,28 @@
                     <td class="text-nowrap">
                         @if (playlist.MainFeature)
                         {
-                            <span class="badge text-bg-success">Main feature</span>
+                            <span class="badge text-bg-success" title="@(playlist.MainReason ?? "The longest playlist, then the one with most chapters.")">Main feature</span>
+                        }
+                        @if (playlist.TooLittleData)
+                        {
+                            <span class="badge text-bg-danger" title="@($"{playlist.BitsPerSecond / 1_000_000:0.0} Mbit/s: a film runs at 10 or more. It loops tiny clips.")">Too little data</span>
+                        }
+                        @if (playlist.Lookalike && !playlist.MainFeature)
+                        {
+                            <span class="badge text-bg-warning" title="Near the film's length, made of its clips in another order: a fake, or the film.">Lookalike</span>
+                        }
+                        @if (playlist.JoinScore is { } joins)
+                        {
+                            <span class="badge @(playlist.Name == _analysis.JoinPick ? "text-bg-success" : "text-bg-light border")"
+                                  title="Mean picture change at its clip joins (0 = seamless). The film's is the lowest.">Joins @joins.ToString("0.0")</span>
+                        }
+                        @if (playlist.Name == _analysis.MakeMkvPick)
+                        {
+                            <span class="badge text-bg-success" title="MakeMKV names this title the main feature.">MakeMKV</span>
+                        }
+                        @if (playlist.Lookalike && playlist.UniqueClips > 0)
+                        {
+                            <span class="badge text-bg-light border" title="Clips no other long playlist uses: the film's own scenes are often among them.">@playlist.UniqueClips own clip(s)</span>
                         }
                         @if (playlist.PossibleCut)
                         {
@@ -573,6 +631,44 @@
         else if (_analysis.MainFeature is { } main)
         {
             Select(main);
+        }
+    }
+
+    private bool _finding;
+    private string? _findStatus;
+
+    private async Task CheckJoins() => await Find(() => Finder.CheckJoinsAsync(_analysis!, status =>
+    {
+        _findStatus = status;
+        InvokeAsync(StateHasChanged);
+    }, CancellationToken.None));
+
+    private async Task AskMakeMkv()
+    {
+        _findStatus = "MakeMKV is reading the disc and its menus...";
+        await Find(() => Finder.AskMakeMkvAsync(_analysis!, CancellationToken.None));
+    }
+
+    private async Task Find(Func<Task<string>> work)
+    {
+        _finding = true;
+        StateHasChanged();
+        try
+        {
+            _findStatus = await work();
+            if (_analysis!.MainFeature is { } main && main != _selected)
+            {
+                Select(main);
+            }
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException)
+        {
+            _findStatus = e.Message;
+        }
+        finally
+        {
+            _finding = false;
+            StateHasChanged();
         }
     }
 

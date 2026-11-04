@@ -63,6 +63,58 @@ public static class ProcessRunner
         return RunAsync(new ProcessSpec(fileName, arguments.ToList()), timeout, null, cancellationToken);
     }
 
+    /// <summary>
+    /// Runs a tool that writes binary data (raw pictures) to stdout and returns those bytes, or
+    /// null when it fails. Stderr is drained and dropped.
+    /// </summary>
+    public static async Task<byte[]?> RunBytesAsync(string fileName, IEnumerable<string> arguments, TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var startInfo = new ProcessStartInfo(fileName)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = new Process { StartInfo = startInfo };
+        process.Start();
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(timeout);
+        try
+        {
+            using var output = new MemoryStream();
+            var copy = process.StandardOutput.BaseStream.CopyToAsync(output, timeoutSource.Token);
+            var drain = process.StandardError.ReadToEndAsync(timeoutSource.Token);
+            await Task.WhenAll(copy, drain);
+            await process.WaitForExitAsync(timeoutSource.Token);
+            return process.ExitCode == 0 ? output.ToArray() : null;
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // Already exited.
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            return null;
+        }
+    }
+
     /// <param name="onLine">Called for every line on stdout and stderr, as it is printed. Carriage
     /// returns also end a line, so progress counters that rewrite one line come through.</param>
     public static async Task<ProcessResult> RunAsync(ProcessSpec spec, TimeSpan timeout, Action<string>? onLine,
