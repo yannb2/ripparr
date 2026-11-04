@@ -272,7 +272,13 @@ the queue, the current job and its progress for a Homepage tile.
 
 ## Building
 
+The subtitle code (PGS reader, OCR, SDH cleaner, classifier) is shared with the Muxarr fork in
+[arrkit](https://github.com/yannb2/arrkit), a git submodule in `arrkit/`. Clone with
+`--recurse-submodules`, or run `git submodule update --init` in an existing clone. To take a newer
+arrkit: `git -C arrkit pull origin main`, then commit the `arrkit` change.
+
 ```
+git clone --recurse-submodules https://github.com/yannb2/ripparr
 dotnet test
 dotnet run --project src/Ripparr     # uses dev/ folders from appsettings.Development.json
 docker build -t ripparr .

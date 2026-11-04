@@ -2,6 +2,9 @@
   <Folder Name="/src/">
     <Project Path="src/Ripparr/Ripparr.csproj" />
   </Folder>
+  <Folder Name="/arrkit/">
+    <Project Path="arrkit/src/Arrkit/Arrkit.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Ripparr.Tests/Ripparr.Tests.csproj" />
   </Folder>

@@ -108,8 +108,12 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY global.json ./
 COPY src/Ripparr/Ripparr.csproj src/Ripparr/
+# arrkit is a git submodule: CI checks it out (submodules: true); locally run
+# "git submodule update --init" before building.
+COPY arrkit/src/Arrkit/Arrkit.csproj arrkit/src/Arrkit/
 RUN dotnet restore src/Ripparr/Ripparr.csproj
 COPY src/ src/
+COPY arrkit/src/ arrkit/src/
 RUN dotnet publish src/Ripparr/Ripparr.csproj -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

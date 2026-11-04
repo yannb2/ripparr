@@ -6,7 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Ripparr.Media;
 using Ripparr.Options;
-using Ripparr.Subtitles;
+using Arrkit.Subtitles;
 
 namespace Ripparr.Disc;
 
