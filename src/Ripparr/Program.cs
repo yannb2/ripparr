@@ -4,6 +4,7 @@ using Ripparr.Arr;
 using Ripparr.Components;
 using Ripparr.Disc;
 using Ripparr.Jobs;
+using Arrkit.Hosting;
 using Arrkit.Logging;
 using Ripparr.Options;
 using Ripparr.Profiles;
@@ -15,6 +16,9 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ASP.NET's data-protection keys (antiforgery tokens) in /config/keys, so they survive an update.
+DataProtectionKeys.PersistKeysIn(builder, Path.GetDirectoryName(builder.Configuration["Ripparr:DatabasePath"] ?? "/config/ripparr.db") ?? "/config", "Ripparr");
 
 // The Logs page: the app's recent log lines, in memory.
 var memoryLog = new MemoryLog();
