@@ -221,6 +221,7 @@ public sealed class RipProfile : IJsonOnDeserialized
     void IJsonOnDeserialized.OnDeserialized()
     {
         ReplaceTrackName();
+        CodecNames.MoveToMuxarrLabels(AudioCodecNames);
         if (CommentaryNameTemplate == null && ForcedSubtitleNameTemplate == null && SrtNameTemplate == null && ForcedSrtNameTemplate == null)
         {
             return;

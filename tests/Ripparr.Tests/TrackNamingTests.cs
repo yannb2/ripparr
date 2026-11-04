@@ -33,9 +33,9 @@ public sealed class TrackNamingTests
     public void AudioNamesFollowTheStandard()
     {
         Assert.AreEqual("English - TrueHD Atmos 7.1", TrackNaming.Audio(Profile, "English", "TrueHD Atmos", "7.1", new TrackFlags()));
-        Assert.AreEqual("French - DTS-HD MA 5.1 Dub", TrackNaming.Audio(Profile, "French", "DTS-HD MA", "5.1", new TrackFlags(Dub: true)));
-        Assert.AreEqual("English - AC3 2.0 (Commentary)", TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(Commentary: true)));
-        Assert.AreEqual("English - AC3 2.0", TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(VisualImpaired: true)));
+        Assert.AreEqual("French - DTS-HD Master Audio 5.1 Dub", TrackNaming.Audio(Profile, "French", "DTS-HD MA", "5.1", new TrackFlags(Dub: true)));
+        Assert.AreEqual("English - AC-3 2.0 (Commentary)", TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(Commentary: true)));
+        Assert.AreEqual("English - AC-3 2.0", TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(VisualImpaired: true)));
     }
 
     [TestMethod]
@@ -124,7 +124,7 @@ public sealed class TrackNamingTests
     public void TypedTextIsTheDescriptionNotTheWholeName()
     {
         // The commentary template has {description}: the typed text goes there.
-        Assert.AreEqual("English - AC3 2.0 (Director and Writer)",
+        Assert.AreEqual("English - AC-3 2.0 (Director and Writer)",
             TrackNaming.Audio(Profile, "English", "AC3", "2.0", new TrackFlags(Commentary: true), "Director and Writer"));
         Assert.AreEqual("English (Commentary) - Director - PGS",
             TrackNaming.Subtitle(Profile, "English", "PGS", new TrackFlags(Commentary: true), "Director"));
@@ -139,6 +139,6 @@ public sealed class TrackNamingTests
 
         // Through the job: the plan's typed text.
         var track = new PlannedTrack { Kind = Ripparr.Disc.StreamKind.Audio, Language = "eng", Codec = "AC3", Commentary = true, Name = "Cast" };
-        Assert.AreEqual("English - AC3 (Cast)", MuxBuilder.TrackName(track, new Ripparr.Media.StreamFacts(), Profile), "no stream facts: no channels");
+        Assert.AreEqual("English - AC-3 (Cast)", MuxBuilder.TrackName(track, new Ripparr.Media.StreamFacts(), Profile), "no stream facts: no channels");
     }
 }

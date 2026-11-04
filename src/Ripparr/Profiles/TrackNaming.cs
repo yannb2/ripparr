@@ -91,11 +91,14 @@ public static partial class TrackNaming
 
     public static string Audio(RipProfile profile, string language, string codec, string channels, TrackFlags flags, string? trackName = null)
     {
-        var values = FlagValues(flags, trackName);
+        var template = Template(profile.AudioNameTemplate, profile.AudioNameOverrides, flags);
+        // A template that already says Commentary does not get it again from an empty {description}.
+        var saysCommentary = Regex.Replace(template ?? "", @"\{[^}]*\}", "").Contains("commentary", StringComparison.OrdinalIgnoreCase);
+        var values = FlagValues(flags, trackName, commentaryWord: !saysCommentary);
         values["language"] = language;
-        values["codec"] = CodecNames.Rename(codec, profile.AudioCodecNames);
+        values["codec"] = CodecNames.RenameAudio(codec, profile.AudioCodecNames);
         values["channels"] = channels;
-        return Described(Template(profile.AudioNameTemplate, profile.AudioNameOverrides, flags), values, trackName);
+        return Described(template, values, trackName);
     }
 
     public static string Subtitle(RipProfile profile, string language, string codec, TrackFlags flags, string? trackName = null)
