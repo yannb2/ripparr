@@ -66,7 +66,7 @@ public static class Languages
         return string.IsNullOrWhiteSpace(code) ? "und" : code.Trim().ToLowerInvariant();
     }
 
-    /// <summary>True when two codes name the same language (fre and fra, ger and deu).</summary>
+    /// <summary>True when two codes name the same language (fre and fra, ger and deu, fre and fr-CA).</summary>
     public static bool Same(string? a, string? b)
     {
         if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b))
@@ -74,9 +74,49 @@ public static class Languages
             return false;
         }
 
-        return string.Equals(BibliographicToTerminology.GetValueOrDefault(a, a),
-            BibliographicToTerminology.GetValueOrDefault(b, b), StringComparison.OrdinalIgnoreCase);
+        return string.Equals(Base(a), Base(b), StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// The language without its region, as a terminology code: fr-CA, fr, fre and fra all give
+    /// fra. A Blu-ray only says "fre"; the region (fr-CA) is set by hand on the job.
+    /// </summary>
+    public static string Base(string code)
+    {
+        var language = code.Trim();
+        var dash = language.IndexOf('-');
+        if (dash > 0)
+        {
+            language = language[..dash];
+        }
+
+        if (language.Length == 2)
+        {
+            try
+            {
+                var three = CultureInfo.GetCultureInfo(language).ThreeLetterISOLanguageName;
+                if (three.Length == 3)
+                {
+                    language = three;
+                }
+            }
+            catch (CultureNotFoundException)
+            {
+            }
+        }
+
+        return BibliographicToTerminology.GetValueOrDefault(language, language).ToLowerInvariant();
+    }
+
+    /// <summary>The region of an IETF tag ("CA" in fr-CA), or null.</summary>
+    public static string? Region(string? code)
+    {
+        var dash = code?.IndexOf('-') ?? -1;
+        return dash > 0 ? code![(dash + 1)..].ToUpperInvariant() : null;
+    }
+
+    /// <summary>French as the disc gives it (fre) or as spoken in Québec (fr-CA): the job form's switch.</summary>
+    public static bool IsFrench(string? code) => !string.IsNullOrWhiteSpace(code) && Base(code) == "fra";
 
     /// <summary>The code MKV uses (bibliographic: fre, ger) for a language name such as Radarr gives ("French").</summary>
     public static string? FromName(string? name)

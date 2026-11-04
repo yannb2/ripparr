@@ -14,7 +14,10 @@ namespace Ripparr.Disc;
 /// <param name="Sdh">The OCR (of a sample, or of every caption after "Read subtitles") found SDH text in enough captions.</param>
 /// <param name="Commentary">The OCR found people talking about making the film.</param>
 /// <param name="Reason">What the OCR found, or why there was none.</param>
-public sealed record ScannedSubtitle(int Pid, int Captions, int Forced, bool Sdh = false, bool Commentary = false, string? Reason = null);
+/// <param name="Region">For French: "CA" when its words look like Québec, "FR" like France, null when unclear.</param>
+/// <param name="RegionEvidence">The words that point there ("fin de semaine, courriel").</param>
+public sealed record ScannedSubtitle(int Pid, int Captions, int Forced, bool Sdh = false, bool Commentary = false, string? Reason = null,
+    string? Region = null, string? RegionEvidence = null);
 
 /// <summary>A full read of a playlist's subtitle tracks: running, done or failed.</summary>
 public sealed class SubtitleScan
@@ -44,6 +47,15 @@ public sealed class SubtitleScan
 
     /// <summary>Goes up each time the SDH and commentary guesses change, so the job form ticks them again.</summary>
     public int GuessVersion { get; set; }
+
+    /// <summary>
+    /// "Check SDH and commentary": only slices of the film were read, so the caption counts are a
+    /// sample (still fine to compare tracks) and forced captions may be missed.
+    /// </summary>
+    public bool Quick { get; set; }
+
+    /// <summary>How the quick check read the film ("32 slices of the film", "the first 2 GB of the ISO").</summary>
+    public string? QuickNote { get; set; }
 }
 
 /// <summary>
@@ -53,21 +65,34 @@ public sealed class SubtitleScan
 /// film (the whole film is read), so it only runs when asked, one at a time, and the result
 /// stays in the subtitle folder (disc-*), pruned with the job previews.
 /// </summary>
-public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<SubtitleScanner> logger)
+public sealed class SubtitleScanner(IOptions<RipparrOptions> options, Jobs.JobStore store, ILogger<SubtitleScanner> logger)
 {
+    /// <summary>The quick check reads this many slices spread over the film...</summary>
+    public const int QuickSlices = 32;
+
+    /// <summary>...of this size each (a few seconds of film each; 1 GB in all).</summary>
+    public const int QuickSliceBytes = 32 * 1024 * 1024;
+
+    /// <summary>An ISO without the mount service can't be read in slices: the quick check reads its start.</summary>
+    public const long QuickIsoBytes = 2L * 1024 * 1024 * 1024;
+
     private const string Done = "scan.json";
     private readonly RipparrOptions _options = options.Value;
     private readonly ConcurrentDictionary<string, SubtitleScan> _scans = new();
     private readonly SemaphoreSlim _one = new(1, 1);
 
-    public static string KeyFor(DiscSource source, PlaylistInfo playlist)
+    public static string KeyFor(DiscSource source, PlaylistInfo playlist, bool quick = false)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{source.Path}|{source.Modified:O}|{playlist.Name}"));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{source.Path}|{source.Modified:O}|{playlist.Name}{(quick ? "|quick" : "")}"));
         return "disc-" + Convert.ToHexStringLower(hash)[..16];
     }
 
-    /// <summary>A scan running or done for this playlist, also one from before a restart.</summary>
-    public SubtitleScan? Find(DiscSource source, PlaylistInfo playlist) => Find(KeyFor(source, playlist));
+    /// <summary>
+    /// A read running or done for this playlist, also one from before a restart: the whole-film
+    /// preview when there is one (that did not fail), else the quick check.
+    /// </summary>
+    public SubtitleScan? Find(DiscSource source, PlaylistInfo playlist) =>
+        Find(KeyFor(source, playlist)) is { Error: null } full ? full : Find(KeyFor(source, playlist, quick: true)) ?? Find(KeyFor(source, playlist));
 
     public SubtitleScan? Find(string key)
     {
@@ -167,7 +192,11 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
                 var before = done;
                 var guess = await GuessAsync(folder, pid, captions, scan.Languages.GetValueOrDefault(pid), installed,
                     MoreThanFirstOfLanguage(scan, pid), all: true, p => scan.Progress = (before + p * captions.Count) / total);
-                scan.Tracks[pid] = scan.Tracks[pid] with { Sdh = guess.Sdh, Commentary = guess.Commentary, Reason = guess.Reason };
+                scan.Tracks[pid] = scan.Tracks[pid] with
+                {
+                    Sdh = guess.Sdh, Commentary = guess.Commentary, Reason = guess.Reason,
+                    Region = guess.French?.Region, RegionEvidence = guess.French?.Region == null ? null : guess.French.Evidence
+                };
                 done += captions.Count;
                 scan.Progress = done / (double)total;
             }
@@ -190,10 +219,13 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
         }
     }
 
-    /// <summary>Starts the read in the background, or hands back the one already running or done.</summary>
-    public SubtitleScan Start(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist)
+    /// <summary>
+    /// Starts the read in the background, or hands back the one already running or done. Quick:
+    /// slices of the film only, for the SDH and commentary check.
+    /// </summary>
+    public SubtitleScan Start(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, bool quick = false)
     {
-        var key = KeyFor(source, playlist);
+        var key = KeyFor(source, playlist, quick);
         if (Find(key) is { Error: null } existing)
         {
             return existing;
@@ -201,7 +233,8 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
 
         var scan = new SubtitleScan
         {
-            Key = key, Running = true, SourceName = source.Name, Playlist = playlist.Name,
+            Key = key, Running = true, SourceName = source.Name, Playlist = playlist.Name, Quick = quick,
+            Stage = quick ? "Reading slices of the film" : "Reading the film",
             Languages = playlist.Mpls.Streams.Where(s => s.Kind == StreamKind.Subtitle && s.Pid > 0)
                 .GroupBy(s => s.Pid).ToDictionary(g => g.Key, g => g.First().Language)
         };
@@ -230,9 +263,11 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
             try
             {
                 using var extractor = new PgsExtractor(outputs);
-                scan.Error = source.Kind == SourceKind.Iso
-                    ? await ReadIsoAsync(scan, source, analysis, playlist, extractor)
-                    : await ReadFolderAsync(scan, source, playlist, extractor);
+                scan.Error = scan.Quick
+                    ? await ReadQuickAsync(scan, source, analysis, playlist, extractor)
+                    : source.Kind == SourceKind.Iso
+                        ? await ReadIsoAsync(scan, source, analysis, playlist, extractor)
+                        : await ReadFolderAsync(scan, source, playlist, extractor);
                 extractor.Finish();
             }
             finally
@@ -258,7 +293,8 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
                 var language = playlist.Mpls.Streams.First(s => s.Pid == pid).Language;
                 var guess = await GuessAsync(folder, pid, captions, language, languages,
                     MoreThanFirstOfLanguage(pids.Select(p => (p, scan.Languages.GetValueOrDefault(p), read[p].Count)).ToList(), pid));
-                scan.Tracks[pid] = new ScannedSubtitle(pid, captions.Count, captions.Count(c => c.Forced), guess.Sdh, guess.Commentary, guess.Reason);
+                scan.Tracks[pid] = new ScannedSubtitle(pid, captions.Count, captions.Count(c => c.Forced), guess.Sdh, guess.Commentary, guess.Reason,
+                    guess.French?.Region, guess.French?.Region == null ? null : guess.French.Evidence);
                 scan.Progress = 0.9 + 0.1 * ++done / pids.Count;
             }
 
@@ -321,7 +357,11 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
             }
 
             var guess = SubtitleClassifier.Guess(ocr, moreThanFirst);
-            return guess with { Reason = (all ? "Every caption: " : "A sample: ") + guess.Reason };
+            return guess with
+            {
+                Reason = (all ? "Every caption: " : "A sample: ") + guess.Reason,
+                French = Languages.IsFrench(language) ? FrenchRegion.Guess(ocr.Select(c => c.Text)) : null
+            };
         }
         catch (Exception e) when (e is InvalidOperationException or IOException)
         {
@@ -393,7 +433,105 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
         return null;
     }
 
-    private async Task<string?> ReadIsoAsync(SubtitleScan scan, DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, PgsExtractor extractor)
+    /// <summary>
+    /// The quick check: slices spread over the playlist's clips (a folder, or an ISO the mount
+    /// service mounts), else the start of the ISO through 7-Zip.
+    /// </summary>
+    private async Task<string?> ReadQuickAsync(SubtitleScan scan, DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, PgsExtractor extractor)
+    {
+        if (source.Kind != SourceKind.Iso)
+        {
+            return await ReadSlicesAsync(scan, source.Path, playlist, extractor);
+        }
+
+        bool Running(Jobs.Job j) => j.SourcePath == source.Path;
+        var mounted = await IsoMount.BorrowAsync(_options.IsoMount, source.Path,
+            store.List(50, [Jobs.JobStatus.Running]).FirstOrDefault(j => Running(j) && j.MountedAt != null)?.MountedAt,
+            () => store.List(50, [Jobs.JobStatus.Running]).Any(Running),
+            async disc => new Tuple<string?>(await ReadSlicesAsync(scan, disc, playlist, extractor)));
+        if (mounted != null)
+        {
+            return mounted.Item1;
+        }
+
+        scan.QuickNote = $"the first {QuickIsoBytes / (1024 * 1024 * 1024)} GB of the film (the mount service would let it read slices of the whole film)";
+        return await ReadIsoAsync(scan, source, analysis, playlist, extractor, QuickIsoBytes);
+    }
+
+    /// <summary>Slices of the same size spread evenly over the playlist's clips, each from an aligned unit.</summary>
+    public static List<(int Item, long Offset)> SlicePlan(IReadOnlyList<long> clipSizes, int slices, int sliceBytes)
+    {
+        var total = clipSizes.Sum();
+        var plan = new List<(int Item, long Offset)>();
+        if (total == 0)
+        {
+            return plan;
+        }
+
+        for (var i = 0; i < slices; i++)
+        {
+            var at = (long)((i + 0.5) / slices * total);
+            var item = 0;
+            while (item < clipSizes.Count - 1 && at >= clipSizes[item])
+            {
+                at -= clipSizes[item];
+                item++;
+            }
+
+            at = Math.Max(0, Math.Min(at, clipSizes[item] - sliceBytes));
+            at -= at % EncryptionCheck.AlignedUnit;
+            if (!plan.Contains((item, at)))
+            {
+                plan.Add((item, at));
+            }
+        }
+
+        return plan;
+    }
+
+    private static async Task<string?> ReadSlicesAsync(SubtitleScan scan, string disc, PlaylistInfo playlist, PgsExtractor extractor)
+    {
+        var items = playlist.Mpls.Items.Select(i => (Item: i, Path: DiscAnalyzer.ClipPath(disc, i.Clip))).ToList();
+        if (items.Any(i => i.Path == null))
+        {
+            return "Some of the playlist's clips are not in BDMV/STREAM.";
+        }
+
+        var main = items.MaxBy(i => new FileInfo(i.Path!).Length).Path!;
+        if (EncryptionCheck.Check(main) == Encryption.Encrypted)
+        {
+            return Encrypted;
+        }
+
+        var sizes = items.Select(i => new FileInfo(i.Path!).Length).ToList();
+        var plan = SlicePlan(sizes, QuickSlices, QuickSliceBytes);
+        var offsets = new long[items.Count];
+        for (var i = 1; i < items.Count; i++)
+        {
+            offsets[i] = offsets[i - 1] + items[i - 1].Item.Duration45k;
+        }
+
+        var buffer = new byte[QuickSliceBytes];
+        var done = 0;
+        foreach (var (index, at) in plan)
+        {
+            var (item, path) = items[index];
+            extractor.Break();
+            extractor.StartItem(offsets[index], item.InTime, item.OutTime);
+            await using var stream = new FileStream(path!, FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.RandomAccess);
+            stream.Position = at;
+            var read = await stream.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false);
+            extractor.Feed(buffer.AsSpan(0, read - read % 192));
+            scan.Progress = 0.9 * ++done / plan.Count;
+        }
+
+        extractor.Break();
+        scan.QuickNote = $"{plan.Count} slices of {QuickSliceBytes / (1024 * 1024)} MB spread over the film";
+        return null;
+    }
+
+    private async Task<string?> ReadIsoAsync(SubtitleScan scan, DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, PgsExtractor extractor,
+        long limit = long.MaxValue)
     {
         var (entries, error) = await new IsoReader(_options.Tools.SevenZip).ListAsync(source.Path, CancellationToken.None);
         if (entries == null)
@@ -401,11 +539,16 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
             return error ?? "7-Zip could not list the ISO.";
         }
 
-        var total = playlist.Mpls.Items.Sum(i => analysis.ClipSizes.GetValueOrDefault(i.Clip));
+        var total = Math.Min(limit, playlist.Mpls.Items.Sum(i => analysis.ClipSizes.GetValueOrDefault(i.Clip)));
         long done = 0, offset = 0;
         var first = true;
         foreach (var item in playlist.Mpls.Items)
         {
+            if (done >= limit)
+            {
+                break;
+            }
+
             var entry = entries.FirstOrDefault(e => !e.Folder && e.Path.EndsWith($"STREAM/{item.Clip}.m2ts", StringComparison.OrdinalIgnoreCase));
             if (entry == null)
             {
@@ -439,8 +582,11 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
                     first = false;
                 }
 
-                done = await PumpAsync(stream, extractor, scan, done, total);
-                await process.WaitForExitAsync();
+                done = await PumpAsync(stream, extractor, scan, done, total, limit);
+                if (done < limit)
+                {
+                    await process.WaitForExitAsync();
+                }
             }
             finally
             {
@@ -456,11 +602,11 @@ public sealed class SubtitleScanner(IOptions<RipparrOptions> options, ILogger<Su
         return null;
     }
 
-    private static async Task<long> PumpAsync(Stream stream, PgsExtractor extractor, SubtitleScan scan, long done, long total)
+    private static async Task<long> PumpAsync(Stream stream, PgsExtractor extractor, SubtitleScan scan, long done, long total, long limit = long.MaxValue)
     {
         var buffer = new byte[4 * 1024 * 1024];
         var filled = 0;
-        while (true)
+        while (done < limit)
         {
             var n = await stream.ReadAsync(buffer.AsMemory(filled));
             if (n == 0)

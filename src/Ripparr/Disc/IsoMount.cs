@@ -23,6 +23,50 @@ public static class IsoMount
     public static Task<MountReply> UnmountAsync(string socket, string path, CancellationToken cancellationToken) =>
         AskAsync(socket, new JsonObject { ["op"] = "unmount", ["path"] = path }, TimeSpan.FromMinutes(1), cancellationToken);
 
+    /// <summary>
+    /// Reads an ISO through the mount service for a short look (pictures, a quick subtitle check):
+    /// uses a running job's mount of the same ISO, else mounts it and unmounts it after, unless a
+    /// job started on it meanwhile. Null when the service is off or could not mount it.
+    /// </summary>
+    /// <param name="jobMount">The host path a running job mounted this ISO at, or null.</param>
+    /// <param name="jobUsesIt">Whether a job is running on this ISO now.</param>
+    /// <param name="work">Gets the disc folder (the one holding BDMV) as the container sees it.</param>
+    public static async Task<T?> BorrowAsync<T>(Options.IsoMountOptions settings, string iso, string? jobMount, Func<bool> jobUsesIt,
+        Func<string, Task<T>> work) where T : class
+    {
+        if (!settings.Enabled)
+        {
+            return null;
+        }
+
+        var hostPath = jobMount;
+        var ours = false;
+        if (hostPath == null)
+        {
+            var reply = await MountAsync(settings.Socket, settings.ToHost(iso), CancellationToken.None);
+            if (reply is not { Ok: true, Path: { } path })
+            {
+                return null;
+            }
+
+            hostPath = path;
+            ours = true;
+        }
+
+        try
+        {
+            var disc = SourceFinder.BdmvParent(settings.ToContainer(hostPath));
+            return disc == null ? null : await work(disc);
+        }
+        finally
+        {
+            if (ours && !jobUsesIt())
+            {
+                await UnmountAsync(settings.Socket, hostPath, CancellationToken.None);
+            }
+        }
+    }
+
     public static async Task<MountReply> AskAsync(string socket, JsonObject request, TimeSpan timeout, CancellationToken cancellationToken)
     {
         if (!File.Exists(socket))

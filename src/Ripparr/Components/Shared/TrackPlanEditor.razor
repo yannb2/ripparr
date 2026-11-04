@@ -45,6 +45,31 @@
                         <span class="text-body-secondary">@(" · " + Languages.Name(track.DiscLanguage))</span>
                     }
                     <span class="text-body-secondary" title="@($"0x{track.Pid:X4}")">@($" · PID {track.Pid}")</span>
+                    @if (track.Kind == StreamKind.Audio && ListenUrl != null && !track.DolbyVisionLayer)
+                    {
+                        <button class="btn btn-sm btn-link p-0 ms-1" title="Listen to 20 seconds of this track" @onclick="() => Listen(track)">
+                            <i class="bi @(_listening == track.Pid ? "bi-volume-up-fill" : "bi-volume-up")"></i>
+                        </button>
+                    }
+                    @if (track.Unsure)
+                    {
+                        <span class="badge text-bg-warning ms-1" title="A stereo track after the multichannel one in the same language: a commentary or an audio description. The disc does not say which; listen to it.">Commentary or AD?</span>
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1" @onclick="() => track.Commentary = true">Commentary</button>
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1" @onclick="() => track.VisualImpaired = true">AD</button>
+                    }
+                    @if (track.Kind == StreamKind.Subtitle && Subtitles is { Running: false, Error: null } regionScan
+                         && regionScan.Tracks.TryGetValue(track.Pid, out var region) && region.Region != null)
+                    {
+                        <button class="badge border-0 ms-1 @(region.Region == "CA" ? "text-bg-info" : "text-bg-secondary")"
+                                title="@($"Words that point there: {region.RegionEvidence}. Click to set the language.")"
+                                @onclick="() => SetRegion(track, region.Region)">
+                            @(region.Region == "CA" ? "Looks like Québec French" : "Looks like France French")
+                        </button>
+                    }
+                    @if (_listening == track.Pid)
+                    {
+                        <div class="mt-1"><audio controls autoplay preload="none" src="@ListenUrl!(track)" style="height: 2rem; max-width: 22rem"></audio></div>
+                    }
                     @if (track.Kind == StreamKind.Subtitle && Subtitles is { Running: false, Error: null } scan && scan.Tracks.TryGetValue(track.Pid, out var read))
                     {
                         <a class="ms-1" href="discs/@scan.Key/subtitles/@track.Pid" target="_blank" title="Preview the captions (new tab)"><i class="bi bi-eye"></i></a>
@@ -71,8 +96,18 @@
                 <td>
                     @if (!track.DolbyVisionLayer)
                     {
-                        <input class="form-control form-control-sm" @bind="track.Language" title="ISO 639-2 code, such as eng or fre"/>
+                        <input class="form-control form-control-sm" @bind="track.Language" title="ISO 639-2 code, such as eng or fre; or an IETF tag such as fr-CA"/>
                         <div class="small text-body-secondary text-truncate">@Languages.Name(track.Language)</div>
+                        @if (Languages.IsFrench(track.Language))
+                        {
+                            <div class="small text-nowrap">
+                                <button class="btn btn-link btn-sm p-0 @(Languages.Region(track.Language) == "CA" ? "text-body-secondary" : "fw-semibold")"
+                                        title="French (fre)" @onclick="@(() => track.Language = "fre")">France</button>
+                                <span class="text-body-secondary">·</span>
+                                <button class="btn btn-link btn-sm p-0 @(Languages.Region(track.Language) == "CA" ? "fw-semibold" : "text-body-secondary")"
+                                        title="French (Canada): fr-CA in the MKV" @onclick="@(() => track.Language = "fr-CA")">Québec</button>
+                            </div>
+                        }
                     }
                 </td>
                 <td>
@@ -131,6 +166,15 @@
 
     /// <summary>The full read of the subtitle tracks, when there is one: caption counts and a preview.</summary>
     [Parameter] public SubtitleScan? Subtitles { get; set; }
+
+    /// <summary>The address of a short sample of an audio track, when the disc can be read for one.</summary>
+    [Parameter] public Func<PlannedTrack, string>? ListenUrl { get; set; }
+
+    private int? _listening;
+
+    private static void SetRegion(PlannedTrack track, string? region) => track.Language = region == "CA" ? "fr-CA" : "fre";
+
+    private void Listen(PlannedTrack track) => _listening = _listening == track.Pid ? null : track.Pid;
 
     private string Approx => Probe?.Estimated == true ? "≈ " : "";
 

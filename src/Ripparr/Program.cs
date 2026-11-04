@@ -100,6 +100,26 @@ app.MapGet("/api/discs/pictures/{index:int}.jpg",
         var (file, error) = await thumbnails.GetAsync(source, analysis, found, index);
         return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "image/jpeg");
     });
+// 20 seconds of an audio track, to tell a commentary from an audio description: only discs inside the sources.
+app.MapGet("/api/discs/listen/{pid:int}.m4a",
+    async (int pid, string path, string playlist, DiscAnalyzer analyzer, Thumbnails thumbnails) =>
+    {
+        var source = analyzer.InSources(path) ? analyzer.Describe(path) : null;
+        if (source == null)
+        {
+            return Results.NotFound();
+        }
+
+        var analysis = await analyzer.AnalyseAsync(source, CancellationToken.None);
+        var found = analysis.Find(playlist);
+        if (found == null || !found.Mpls.Streams.Any(s => s.Kind == StreamKind.Audio && s.Pid == pid))
+        {
+            return Results.NotFound();
+        }
+
+        var (file, error) = await thumbnails.SampleAsync(source, analysis, found, pid);
+        return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "audio/mp4", enableRangeProcessing: true);
+    });
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
