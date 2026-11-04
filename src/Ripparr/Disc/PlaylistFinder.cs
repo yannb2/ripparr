@@ -177,19 +177,25 @@ public sealed class PlaylistFinder(IOptions<RipparrOptions> options, JobStore st
 
         var pick = MainFeatureOf(result.Output);
         analysis.MakeMkvPick = pick;
+        var noJava = JavaFound() ? "" : " No Java runtime is installed, so MakeMKV could not run the disc's BD-J code, which is what finds the real playlist on fake-playlist discs.";
         if (pick == null)
         {
             var reason = MakeMkv.KeyMessages(result.Output).FirstOrDefault()
                          ?? (result.Success ? "it read the disc but named no main feature" : $"it stopped with code {result.ExitCode}");
             logger.LogInformation("MakeMKV named no main feature for {Path}: {Reason}", analysis.Source.Path, reason);
-            return analysis.MakeMkvNote = $"MakeMKV did not name a main feature ({reason}).";
+            return analysis.MakeMkvNote = $"MakeMKV did not name a main feature ({reason}).{noJava}";
         }
 
         analysis.Classify(TimeSpan.FromSeconds(_options.MinPlaylistSeconds));
-        return analysis.MakeMkvNote = analysis.Find(pick) is { MainFeature: true }
+        return analysis.MakeMkvNote = (analysis.Find(pick) is { MainFeature: true }
             ? $"MakeMKV calls playlist {pick} the main feature: it is now the main feature."
-            : $"MakeMKV calls playlist {pick} the main feature, but Ripparr hides it (short, a duplicate, or too little data).";
+            : $"MakeMKV calls playlist {pick} the main feature, but Ripparr hides it (short, a duplicate, or too little data).") + noJava;
     }
+
+    /// <summary>True when a java command is on the PATH, where makemkvcon looks for one.</summary>
+    public static bool JavaFound() =>
+        (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)
+            .Any(folder => folder.Length > 0 && File.Exists(Path.Combine(folder, "java")));
 
     /// <summary>
     /// The playlist ("00800") of the title makemkvcon marks as the main feature. In robot output a

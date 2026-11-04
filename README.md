@@ -23,7 +23,10 @@ film among fakes, and the disc page then says so and offers two checks, the ones
   of every clip with ffmpeg and scores each lookalike by the mean change at its joins (0 = seamless).
   A clear winner (under 70% of the next score) becomes the main feature.
 - **Ask MakeMKV.** makemkvcon plays the disc's menus and names one title the main feature
-  (FPL_MainFeature); Ripparr takes it. Its answer comes before the joins check.
+  (FPL_MainFeature); Ripparr takes it. Its answer comes before the joins check. The menus of a
+  fake-playlist disc are BD-J (Java) programs, so the image has a Java runtime (`default-jre-headless`,
+  on the Tools page); MakeMKV also needs it for some BD+ and AACS Soft-KCD discs
+  ([makemkv.com/bdjava](https://makemkv.com/bdjava)). Without it the answer says so.
 
 ## Before the job: the quick read
 
