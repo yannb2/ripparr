@@ -61,7 +61,7 @@ public static partial class MuxBuilder
         try
         {
             var size = new FileInfo(path).Length;
-            var captions = size == 0 ? [] : Subtitles.PgsReader.Read(path);
+            var captions = size == 0 ? [] : Arrkit.Subtitles.PgsReader.Read(path);
             if (size > 0 && captions.Count == 0 && !StartsWithPg(path))
             {
                 return null;

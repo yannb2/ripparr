@@ -6,7 +6,7 @@ using Ripparr.Disc;
 using Ripparr.Jobs;
 using Ripparr.Options;
 using Ripparr.Profiles;
-using Ripparr.Subtitles;
+using Arrkit.Subtitles;
 using Ripparr.Tools;
 
 // Numbers and dates the same way everywhere (23.976 fps, not 23,976).

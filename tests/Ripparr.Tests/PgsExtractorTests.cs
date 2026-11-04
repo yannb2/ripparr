@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 using Ripparr.Disc;
-using Ripparr.Subtitles;
+using Arrkit.Subtitles;
 
 namespace Ripparr.Tests;
 

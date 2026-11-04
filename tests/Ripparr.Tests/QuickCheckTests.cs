@@ -1,6 +1,6 @@
 using Ripparr.Disc;
 using Ripparr.Media;
-using Ripparr.Subtitles;
+using Arrkit.Subtitles;
 
 namespace Ripparr.Tests;
 

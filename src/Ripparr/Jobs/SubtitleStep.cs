@@ -2,7 +2,7 @@ using System.Text.Json;
 using Ripparr.Disc;
 using Ripparr.Media;
 using Ripparr.Profiles;
-using Ripparr.Subtitles;
+using Arrkit.Subtitles;
 
 namespace Ripparr.Jobs;
 
