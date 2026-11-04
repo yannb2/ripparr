@@ -56,6 +56,12 @@ public sealed class Job
     /// Not the cut: that is <see cref="Edition"/>. Jellyfin shows it as a "Release: ..." tag (edition_tags.py).
     /// </summary>
     public string? ReleaseLabel { get; set; }
+
+    /// <summary>
+    /// Who released the ISO this was remuxed from (FraMeSToR...), written as SOURCE_RELEASE_GROUP. Filled from the
+    /// ISO's name; empty for your own rips. Not RELEASE_GROUP: that is who made this remux.
+    /// </summary>
+    public string? SourceReleaseGroup { get; set; }
     public int? TmdbId { get; set; }
     public string? ImdbId { get; set; }
 
@@ -192,6 +198,7 @@ public sealed class Job
             Year = copy.Year,
             Edition = copy.Edition,
             ReleaseLabel = copy.ReleaseLabel,
+            SourceReleaseGroup = copy.SourceReleaseGroup,
             TmdbId = copy.TmdbId,
             ImdbId = copy.ImdbId,
             OriginalLanguage = copy.OriginalLanguage,

@@ -17,6 +17,8 @@ public sealed class DiscDraft
     public string Title { get; set; } = "";
     public int? Year { get; set; }
     public string? Edition { get; set; }
+    public string? Label { get; set; }
+    public string? SourceGroup { get; set; }
     public int? Tmdb { get; set; }
     public string? Imdb { get; set; }
     public string? Original { get; set; }

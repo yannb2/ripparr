@@ -114,6 +114,9 @@ its kind. The job page shows the same flags as icons, and folds its Checks card 
    on the job form (Criterion, Arrow, Kino Lorber...) is who put out the disc, not the cut (that is the
    edition); it is written as the standard Matroska tag `DISTRIBUTED_BY`, which tag_release keeps on later
    retags and edition_tags.py shows in Jellyfin as a `Release: Criterion` tag.
+   The **Source group** box is who released the ISO (FraMeSToR...): it is read from the ISO's name (the part
+   after the last dash of a release name) and written as `SOURCE_RELEASE_GROUP`, kept apart from your own
+   `RELEASE_GROUP`. It stays empty for a disc label or a name of your own; clear it for your own rips.
 8. **Verify**: tracks (count and order), languages, duration and chapters against the plan (track names, flags and the MKV title only warn); HDR format; for Dolby Vision, the RPU
    frame count against the video.
 9. **Finish**: moves the file to `done/Title (Year)/`.

@@ -261,6 +261,30 @@ public class MuxBuilderTests
     }
 
     [TestMethod]
+    public void TagsXmlWritesTheSourceReleaseGroup()
+    {
+        var job = new Job { Title = "Heat", Year = 1995, SourceName = "Heat.1995.2160p.UHD.BluRay.HEVC.TrueHD-FraMeSToR", Playlist = "00800",
+            SourceReleaseGroup = "FraMeSToR" };
+        StringAssert.Contains(MuxBuilder.TagsXml(job, []), "<Name>SOURCE_RELEASE_GROUP</Name><String>FraMeSToR</String>");
+
+        job.SourceReleaseGroup = " ";
+        Assert.DoesNotContain("SOURCE_RELEASE_GROUP", MuxBuilder.TagsXml(job, []));
+    }
+
+    [TestMethod]
+    public void ReleaseGroupComesFromTheEndOfAReleaseName()
+    {
+        Assert.AreEqual("FraMeSToR", Ripparr.Disc.ReleaseName.Group("Heat.1995.2160p.UHD.BluRay.HEVC.TrueHD-FraMeSToR"));
+        Assert.AreEqual("FraMeSToR", Ripparr.Disc.ReleaseName.Group("Heat.1995.2160p.UHD.BluRay.HEVC.TrueHD-FraMeSToR.iso"));
+        Assert.AreEqual("BHDStudio", Ripparr.Disc.ReleaseName.Group("Spider-Man.2002.COMPLETE.UHD.BLURAY-BHDStudio"));
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Group("HEAT_UHD"), "a disc label");
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Group("Heat (1995)"), "a name of your own");
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Group("Heat.1995.2160p.Blu-ray"), "a format word, not a group");
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Group("Heat.1995.2160p.UHD.BluRay.COMPLETE-2"), "only digits");
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Group("Spider-Man"), "no release name dots");
+    }
+
+    [TestMethod]
     public void TagsXmlWritesYourOwnTags()
     {
         var job = new Job

@@ -320,6 +320,7 @@ public static partial class MuxBuilder
             ("TVDB2", job.TvdbId is { } tvdb ? $"series/{tvdb}" : null),
             ("ABSOLUTE_EPISODE", job.AbsoluteEpisode?.ToString(CultureInfo.InvariantCulture)),
             ("RELEASE_NAME", job.SourceName),
+            ("SOURCE_RELEASE_GROUP", string.IsNullOrWhiteSpace(job.SourceReleaseGroup) ? null : job.SourceReleaseGroup.Trim()),
             ("SOURCE", job.Profile.Source),
             ("VIDEO_CODEC", video?.VideoCodec),
             ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr : null),
