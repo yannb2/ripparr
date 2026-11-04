@@ -191,6 +191,19 @@ Removing a failed, cancelled or finished job (from the queue or from History) al
 (`job-<id>` under the work folder: demuxed streams, and the MKV of a job that failed its checks, after asking).
 A retried job starts its demux from an empty folder.
 
+## Settings
+
+The sidebar's Settings page has four tabs:
+
+- **Profiles**: the profiles below (the old Profiles page; `/profiles` still opens it).
+- **Integrations**: Radarr and Sonarr, each with a Test button (`/api/v3/system/status`). What is saved here
+  is kept in the database and wins over the `Ripparr__Radarr__…` / `Ripparr__Sonarr__…` environment variables,
+  which only give the starting values; "Use environment variables" forgets the saved ones. No restart needed.
+- **Notifications**: when a job ends, a message to an [ntfy](https://ntfy.sh) topic (done and failed, each with
+  a switch; a good dry run only when asked) and, after a good job, a Jellyfin library scan
+  (`POST /Library/Refresh`). Test buttons for both. A failure here is logged and never fails the job.
+- **Status**: folders with free space and the values from the environment (the old Status page).
+
 ## Profiles
 
 A profile decides the track plan: audio and subtitle languages in order (`original` is the film's own language
@@ -262,8 +275,10 @@ the queue, the current job and its progress for a Homepage tile.
 | `Ripparr__DgDemuxArguments` | `-i {input} -o {output}` (a profile can have its own) |
 | `Ripparr__SubtitleFolder` | `/config/subtitles` |
 | `Ripparr__KeepSubtitlePreviews` | `30` (jobs whose subtitle pictures are kept) |
-| `Ripparr__Radarr__Url` / `__ApiKey` | not set: title, year and IDs are typed by hand |
+| `Ripparr__Radarr__Url` / `__ApiKey` | not set: title, year and IDs are typed by hand (Settings > Integrations can set them) |
 | `Ripparr__Sonarr__Url` / `__ApiKey` | not set: series, IDs and episode titles are typed by hand |
+| `Ripparr__Notifications__NtfyUrl` / `__NtfyToken` | not set: no messages (Settings > Notifications can set them) |
+| `Ripparr__Notifications__JellyfinUrl` / `__JellyfinApiKey` / `__RefreshJellyfin` | not set / `false` |
 | `Ripparr__IsoMount__Enabled` | `true` (`false`: always unpack ISOs with 7-Zip) |
 | `Ripparr__IsoMount__Socket` | `/run/ripparr-mount/mount.sock` |
 | `Ripparr__IsoMount__Folder` | `/mnt/pc/iso-mounts` (where the service mounts; left out of the sources) |

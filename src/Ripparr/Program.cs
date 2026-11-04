@@ -20,6 +20,8 @@ builder.Services.AddOptions<RipparrOptions>()
     .PostConfigure(o => o.WithDefaults());
 
 builder.Services.AddSingleton<JobStore>();
+builder.Services.AddSingleton<LiveSettings>();
+builder.Services.AddSingleton<Notifier>();
 builder.Services.AddScoped<Toasts>();
 builder.Services.AddSingleton<JobEvents>();
 builder.Services.AddSingleton<DiscAnalyzer>();

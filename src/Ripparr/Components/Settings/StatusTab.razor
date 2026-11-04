@@ -1,12 +1,12 @@
-@page "/status"
 @inject IOptions<RipparrOptions> Options
 @inject JobStore Store
-@inject RadarrClient Radarr
+@inject LiveSettings Live
 @using Microsoft.Extensions.Options
 
-<PageTitle>Status · Ripparr</PageTitle>
-
-<h2 class="mb-3">Status</h2>
+<p class="text-body-secondary">
+    What Ripparr runs with. Folders and these values come from the environment variables (<code>Ripparr__…</code>)
+    and need a restart to change; the other tabs change their settings right away.
+</p>
 
 <div class="row g-3">
     <div class="col-lg-6">
@@ -36,7 +36,9 @@
                 <tr><td class="text-body-secondary">Clean the job folder after a good job</td><td>@(Options.Value.CleanWorkFolder ? "yes" : "no")</td></tr>
                 <tr><td class="text-body-secondary">Spare space kept</td><td>@Options.Value.SpareSpaceGb GB</td></tr>
                 <tr><td class="text-body-secondary">DGDemux arguments (default; a profile can change them)</td><td><code>@Options.Value.DgDemuxArguments</code></td></tr>
-                <tr><td class="text-body-secondary">Radarr</td><td>@(Radarr.Configured ? Options.Value.Radarr.Url : "not set up")</td></tr>
+                <tr><td class="text-body-secondary">Radarr</td><td>@Arr(Live.Radarr)</td></tr>
+                <tr><td class="text-body-secondary">Sonarr</td><td>@Arr(Live.Sonarr)</td></tr>
+                <tr><td class="text-body-secondary">ntfy</td><td>@(Live.Notifications.NtfyConfigured ? Live.Notifications.NtfyUrl : "not set up")</td></tr>
                 <tr><td class="text-body-secondary">Jobs in the database</td><td>@_jobCount</td></tr>
                 <tr><td class="text-body-secondary">Version</td><td>@AppInfo.Version</td></tr>
                 </tbody>
@@ -47,6 +49,8 @@
 
 @code {
     private int _jobCount;
+
+    private static string Arr(ArrOptions arr) => arr.Configured ? arr.Url : "not set up";
 
     protected override void OnInitialized() => _jobCount = Store.List(100000).Count;
 
