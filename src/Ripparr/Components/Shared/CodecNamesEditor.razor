@@ -1,0 +1,59 @@
+@* What {codec} writes for each detected codec, as in the Muxarr fork's profiles. *@
+<div class="mt-2">
+    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" @onclick="() => _open = !_open">
+        <i class="bi bi-fonts me-1"></i>Codec names
+        @if (Names.Count(n => !string.IsNullOrWhiteSpace(n.Value)) is var count and > 0)
+        {
+            <span class="badge text-bg-secondary ms-1">@count</span>
+        }
+        <i class="bi @(_open ? "bi-chevron-up" : "bi-chevron-down") ms-1"></i>
+    </button>
+    @if (_open)
+    {
+        <div class="d-flex flex-column gap-2 ms-2 mt-2 border-start ps-3">
+            @foreach (var label in Labels)
+            {
+                var current = label;
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge text-bg-secondary text-start text-truncate" style="width: 9rem" title="@label">@label</span>
+                    <input type="text" class="form-control form-control-sm" style="max-width: 20rem" placeholder="@label"
+                           value="@Get(current)" @oninput="e => Set(current, e.Value?.ToString())"/>
+                </div>
+            }
+        </div>
+        <small class="form-text text-muted d-block mt-1">
+            What <code>{codec}</code> writes for each detected codec, for example "Dolby TrueHD" for TrueHD. Leave blank to keep the
+            built-in name. @Note Only track names use them: the file name keeps Radarr's words.
+        </small>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Dictionary<string, string> Names { get; set; } = [];
+    [Parameter, EditorRequired] public IEnumerable<string> Labels { get; set; } = [];
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private bool _open;
+
+    protected override void OnInitialized() => _open = Names.Any(n => !string.IsNullOrWhiteSpace(n.Value));
+
+    private string Get(string label) =>
+        Names.FirstOrDefault(n => string.Equals(n.Key, label, StringComparison.OrdinalIgnoreCase)).Value ?? "";
+
+    private async Task Set(string label, string? value)
+    {
+        // One entry per label, whatever its case.
+        foreach (var key in Names.Keys.Where(k => string.Equals(k, label, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            Names.Remove(key);
+        }
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            Names[label] = value.Trim();
+        }
+
+        await Changed.InvokeAsync();
+    }
+}

@@ -596,6 +596,17 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                         string.Join(", ", srt.Select(t => $"\"{SubtitleStep.SrtName(context.Job.Profile, t)}\"")));
         }
 
+        if (context.Job.Profile.SrtCleanWhenOnlySdh)
+        {
+            var subtitles = context.Job.Plan.Kept.Where(t => t.Kind == StreamKind.Subtitle).ToList();
+            var clean = SubtitleStep.OnlySdh(subtitles, t => t, t => t.HearingImpaired,
+                t => context.Job.Profile.SrtRemoveSdh && SubtitleStep.WantsSrt(context.Job.Profile, t, context.Job.OriginalLanguage)).ToList();
+            context.Log(clean.Count > 0
+                ? "Then: only SDH subtitles in " + string.Join(", ", clean.Select(t => Languages.Name(t.Language))) + ": an SRT without the SDH text: " +
+                  string.Join(", ", clean.Select(t => $"\"{SubtitleStep.SrtName(context.Job.Profile, t, sdhRemoved: true)}\""))
+                : "Then: a language whose subtitle tracks all turn out to be SDH gets an SRT without the SDH text (tracks not marked are checked on a sample).");
+        }
+
         context.Log("Then: mediainfo on each stream, dovi_tool mux for the Dolby Vision layer, mkvmerge with these tracks:");
         foreach (var track in context.Job.Plan.Kept)
         {
