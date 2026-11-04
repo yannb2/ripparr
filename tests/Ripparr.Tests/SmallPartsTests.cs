@@ -106,6 +106,45 @@ public class SmallPartsTests
     }
 
     [TestMethod]
+    public void VerifyWarnsAboutNamesFlagsAndTitleAndFailsOnOrder()
+    {
+        const string json = """
+            {"container":{"properties":{"duration":7200000000000,"title":"Film (2020)"}},
+             "chapters":[{"num_entries":4}],
+             "tracks":[{"type":"video","properties":{"language":"eng","track_name":"2160p - HEVC","default_track":true}},
+                       {"type":"audio","properties":{"language":"eng","track_name":"English - AC-3 2.0","default_track":false,"flag_commentary":true}},
+                       {"type":"subtitles","properties":{"language":"eng","track_name":"English (SDH) - PGS","forced_track":false,"flag_hearing_impaired":false}}]}
+            """;
+        var summary = Verifier.ParseIdentify(json)!;
+        Assert.AreEqual("Film (2020)", summary.Title);
+        Assert.IsTrue(summary.Tracks[1].Commentary);
+
+        var playlist = new PlaylistInfo { Name = "00800", Mpls = Mpls.Parse(MplsBuilder.UhdFilm(120).Build()) };
+        var facts = new StreamFacts();
+        List<OutputTrack> outputs =
+        [
+            new(new Profiles.PlannedTrack { Kind = StreamKind.Video, Language = "eng", Default = true }, new DemuxedFile("/v", facts), "2160p - HEVC"),
+            new(new Profiles.PlannedTrack { Kind = StreamKind.Audio, Language = "eng", Commentary = true }, new DemuxedFile("/a", facts), "English - AC-3 2.0"),
+            new(new Profiles.PlannedTrack { Kind = StreamKind.Subtitle, Language = "eng", HearingImpaired = true }, new DemuxedFile("/s", facts), "English (SDH) - PGS")
+        ];
+
+        var checks = Verifier.Compare(summary, playlist, outputs, "Film (2020)");
+        Assert.IsTrue(checks.All(c => c.Passed));
+        var flags = checks.Single(c => c.Name == "Flags");
+        Assert.IsTrue(flags.Warning);
+        Assert.AreEqual("track 3: SDH off, planned on", flags.Detail);
+        Assert.IsFalse(checks.Single(c => c.Name == "Names").Warning);
+        Assert.IsFalse(checks.Single(c => c.Name == "Title").Warning);
+        Assert.IsTrue(Verifier.Compare(summary, playlist, outputs, "Other (2020)").Single(c => c.Name == "Title").Warning);
+
+        // The audio and subtitle tracks swapped: a real failure.
+        List<OutputTrack> swapped = [outputs[0], outputs[2], outputs[1]];
+        var order = Verifier.Compare(summary, playlist, swapped).Single(c => c.Name == "Order");
+        Assert.IsFalse(order.Passed);
+        StringAssert.Contains(order.Detail, "track 2 is audio, planned subtitle");
+    }
+
+    [TestMethod]
     public void JobStoreKeepsJobsProfilesAndSettings()
     {
         var path = Path.Combine(Path.GetTempPath(), $"ripparr-{Guid.NewGuid():N}.db");

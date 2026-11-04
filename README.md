@@ -114,7 +114,7 @@ its kind. The job page shows the same flags as icons, and folds its Checks card 
    on the job form (Criterion, Arrow, Kino Lorber...) is who put out the disc, not the cut (that is the
    edition); it is written as the standard Matroska tag `DISTRIBUTED_BY`, which tag_release keeps on later
    retags and edition_tags.py shows in Jellyfin as a `Release: Criterion` tag.
-8. **Verify**: tracks, languages, duration and chapters against the plan; HDR format; for Dolby Vision, the RPU
+8. **Verify**: tracks (count and order), languages, duration and chapters against the plan (track names, flags and the MKV title only warn); HDR format; for Dolby Vision, the RPU
    frame count against the video.
 9. **Finish**: moves the file to `done/Title (Year)/`.
 
