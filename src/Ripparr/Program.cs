@@ -4,7 +4,7 @@ using Ripparr.Arr;
 using Ripparr.Components;
 using Ripparr.Disc;
 using Ripparr.Jobs;
-using Ripparr.Logging;
+using Arrkit.Logging;
 using Ripparr.Options;
 using Ripparr.Profiles;
 using Arrkit.Subtitles;
