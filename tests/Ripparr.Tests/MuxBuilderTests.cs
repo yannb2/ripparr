@@ -138,7 +138,7 @@ public class MuxBuilderTests
         var arguments = MuxBuilder.MkvmergeArguments("/o/x.mkv", "Film (2020)", outputs, "/w/ch.txt", "/w/tags.xml", (24000, 1001), "/w/bl-el.hevc");
         var text = string.Join(' ', arguments);
 
-        StringAssert.StartsWith(text, "--gui-mode -o /o/x.mkv --title Film (2020) --global-tags /w/tags.xml --chapters /w/ch.txt");
+        StringAssert.StartsWith(text, "--gui-mode -o /o/x.mkv --title Film (2020) --global-tags /w/tags.xml --chapter-charset UTF-8 --chapters /w/ch.txt");
         StringAssert.Contains(text, "--default-duration 0:24000/1001p /w/bl-el.hevc");
         StringAssert.Contains(text, "--track-name 0:English - TrueHD Atmos 7.1 --default-track-flag 0:yes /w/00800_1100.thd");
         StringAssert.Contains(text, "--commentary-flag 0:yes /w/00800_1103.ac3");
@@ -215,6 +215,20 @@ public class MuxBuilderTests
         Assert.AreEqual("CHAPTER01=00:00:00.000\nCHAPTER01NAME=Chapter 01\nCHAPTER02=00:10:00.000\nCHAPTER02NAME=Chapter 02\n" +
                         "CHAPTER03=01:00:00.000\nCHAPTER03NAME=Chapter 03\nCHAPTER04=01:15:00.000\nCHAPTER04NAME=Chapter 04\n",
             MuxBuilder.ChapterFile(Film, ChapterNaming.Numbered));
+    }
+
+    [TestMethod]
+    public void TypedChapterNamesWinOverTheProfile()
+    {
+        var names = new Dictionary<int, string> { [2] = "  The Heist\n", [3] = " ", [9] = "Not on the disc" };
+        var file = MuxBuilder.ChapterFile(Film, ChapterNaming.Numbered, names);
+
+        StringAssert.Contains(file, "CHAPTER01NAME=Chapter 01\n");
+        StringAssert.Contains(file, "CHAPTER02NAME=The Heist\n");
+        StringAssert.Contains(file, "CHAPTER03NAME=Chapter 03\n", "a blank name keeps the profile's");
+        Assert.DoesNotContain("Not on the disc", file);
+        Assert.AreEqual("", MuxBuilder.ChapterName(1, ChapterNaming.None));
+        Assert.AreEqual("Prologue", MuxBuilder.ChapterName(1, ChapterNaming.None, new Dictionary<int, string> { [1] = "Prologue" }));
     }
 
     [TestMethod]

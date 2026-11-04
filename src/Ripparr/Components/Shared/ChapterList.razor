@@ -1,4 +1,4 @@
-@* The playlist's chapters in a card that opens and closes: where each starts, how long it runs and the name it gets in the MKV. *@
+@* The playlist's chapters in a card that opens and closes: where each starts, how long it runs and the name it gets in the MKV, which can be typed. *@
 
 <div class="card mt-3">
     <button type="button" class="card-header d-flex align-items-center gap-2 border-0 w-100 text-start bg-transparent"
@@ -10,6 +10,10 @@
         {
             <span class="small text-body-secondary ms-1">
                 @(Naming == ChapterNaming.Numbered ? "named Chapter 01, Chapter 02…" : "times only, no names") · from the playlist
+                @if (Renamed > 0)
+                {
+                    <span>· @Renamed renamed</span>
+                }
             </span>
         }
     </button>
@@ -37,7 +41,10 @@
                             <th class="text-end">#</th>
                             <th>Start</th>
                             <th>Length</th>
-                            <th>Name in the MKV</th>
+                            <th>Name in the MKV @if (Names != null)
+                                {
+                                    <span class="fw-normal text-body-secondary">(type to rename; empty keeps the profile's)</span>
+                                }</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -53,7 +60,19 @@
                                         <span class="badge text-bg-warning ms-1 font-sans-serif" title="Often a mark at the very end of the film or on a logo">very short</span>
                                     }
                                 </td>
-                                <td>@(chapter.Name.Length == 0 ? "(no name)" : chapter.Name)</td>
+                                <td>
+                                    @if (Names != null)
+                                    {
+                                        var number = chapter.Number;
+                                        <input class="form-control form-control-sm" aria-label="@($"Name of chapter {number}")"
+                                               placeholder="@(Default(number).Length == 0 ? "(no name)" : Default(number))"
+                                               value="@Names.GetValueOrDefault(number)" @onchange="e => Rename(number, e.Value as string)"/>
+                                    }
+                                    else
+                                    {
+                                        @(chapter.Name.Length == 0 ? "(no name)" : chapter.Name)
+                                    }
+                                </td>
                             </tr>
                         }
                         </tbody>
@@ -68,7 +87,26 @@
     [Parameter, EditorRequired] public Mpls Playlist { get; set; } = null!;
     [Parameter] public ChapterNaming Naming { get; set; }
 
+    /// <summary>Typed names by chapter number, edited in place; null shows the names read-only.</summary>
+    [Parameter] public Dictionary<int, string>? Names { get; set; }
+
     private bool _open;
+
+    private int Renamed => Names?.Count(n => !string.IsNullOrWhiteSpace(n.Value) && n.Key <= Playlist.Chapters.Count) ?? 0;
+
+    private string Default(int number) => MuxBuilder.ChapterName(number, Naming);
+
+    private void Rename(int number, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Names!.Remove(number);
+        }
+        else
+        {
+            Names![number] = name.Trim();
+        }
+    }
 
     /// <summary>Each chapter with its length (to the next one, or to the end) and the name the job writes.</summary>
     private IEnumerable<(int Number, TimeSpan Start, TimeSpan Length, string Name)> Chapters()
@@ -77,8 +115,7 @@
         for (var i = 0; i < marks.Count; i++)
         {
             var end = i + 1 < marks.Count ? marks[i + 1].Start : Playlist.Duration;
-            var number = (i + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
-            yield return (i + 1, marks[i].Start, end - marks[i].Start, Naming == ChapterNaming.Numbered ? $"Chapter {number}" : "");
+            yield return (i + 1, marks[i].Start, end - marks[i].Start, MuxBuilder.ChapterName(i + 1, Naming, Names));
         }
     }
 }

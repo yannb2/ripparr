@@ -265,7 +265,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         if (playlist.Mpls.Chapters.Count > 0)
         {
             chaptersPath = Path.Combine(context.WorkFolder, "chapters.txt");
-            await File.WriteAllTextAsync(chaptersPath, MuxBuilder.ChapterFile(playlist.Mpls, job.Profile.Chapters), context.CancellationToken);
+            await File.WriteAllTextAsync(chaptersPath, MuxBuilder.ChapterFile(playlist.Mpls, job.Profile.Chapters, job.ChapterNames), context.CancellationToken);
         }
 
         string? tagsPath = null;

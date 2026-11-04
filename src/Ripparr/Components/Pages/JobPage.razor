@@ -123,8 +123,16 @@ else if (_job.Error != null)
 
 @if (_job.Checks.Count > 0)
 {
-    <div class="card mb-3">
-        <div class="card-header fw-semibold">Checks</div>
+    var failed = _job.Checks.Count(c => !c.Passed);
+    var warned = _job.Checks.Count(c => c.Passed && c.Warning);
+    @* All good: folded, the header says so. Anything wrong: open. *@
+    <FoldingCard Title="Checks" Open="@(failed + warned > 0)">
+        <Summary>
+            <span class="small @(failed > 0 ? "text-danger" : warned > 0 ? "text-warning" : "text-success")">
+                @(failed > 0 ? $"{failed} failed" : warned > 0 ? $"{warned} warning{(warned == 1 ? "" : "s")}" : $"all {_job.Checks.Count} passed")
+            </span>
+        </Summary>
+        <ChildContent>
         <table class="table table-sm mb-0 small">
             <tbody>
             @foreach (var check in _job.Checks)
@@ -150,7 +158,8 @@ else if (_job.Error != null)
             }
             </tbody>
         </table>
-    </div>
+        </ChildContent>
+    </FoldingCard>
 }
 
 <div class="card mb-3">
@@ -185,7 +194,7 @@ else if (_job.Error != null)
                     <td class="text-end text-nowrap">@(track.Size > 0 ? Format.Size(track.Size) : "")</td>
                     <td title="@track.Language">@Languages.Name(track.Language)</td>
                     <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
-                    <td>@track.Flags</td>
+                    <td class="text-nowrap"><TrackFlags Words="@track.Flags"/></td>
                 </tr>
             }
             @if (_job.Written.Sum(t => t.Size) is > 0 and var total)
@@ -208,7 +217,7 @@ else if (_job.Error != null)
                     <td class="text-end text-body-secondary" colspan="2">after the demux</td>
                     <td title="@track.Language">@Languages.Name(track.Language)</td>
                     <td>@(string.IsNullOrWhiteSpace(track.Name) ? "" : $"\"{track.Name}\"")</td>
-                    <td>@(track.Default ? "default " : "")@(track.Forced ? "forced " : "")@(track.Commentary ? "commentary" : "")</td>
+                    <td class="text-nowrap"><TrackFlags Default="track.Default" Forced="track.Forced" Sdh="track.HearingImpaired" Commentary="track.Commentary" Ad="track.VisualImpaired"/></td>
                 </tr>
             }
         }
@@ -225,11 +234,9 @@ else if (_job.Error != null)
 
 @if (_job.Subtitles.Count > 0)
 {
-    <div class="card mb-3">
-        <div class="card-header d-flex align-items-center">
-            <span class="fw-semibold me-auto">Subtitles</span>
-            <span class="small text-body-secondary">pictures kept for the preview</span>
-        </div>
+    <FoldingCard Title="Subtitles">
+        <Summary><span class="small text-body-secondary">@_job.Subtitles.Count kept for the preview@(_job.Subtitles.Any(t => t.Ocr) ? $", {_job.Subtitles.Count(t => t.Ocr)} made into SRT" : "")</span></Summary>
+        <ChildContent>
         <table class="table table-sm mb-0 small align-middle">
             <tbody>
             @foreach (var subtitle in _job.Subtitles)
@@ -255,7 +262,8 @@ else if (_job.Error != null)
             }
             </tbody>
         </table>
-    </div>
+        </ChildContent>
+    </FoldingCard>
 }
 
 <div class="card">

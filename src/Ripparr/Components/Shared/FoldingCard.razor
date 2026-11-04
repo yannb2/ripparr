@@ -1,0 +1,35 @@
+@* A card whose header opens and closes it, like Chapters and Extras. *@
+<div class="card @Class">
+    <button type="button" class="card-header d-flex align-items-center gap-2 border-0 w-100 text-start bg-transparent"
+            @onclick="() => _open = !_open" aria-expanded="@(_open ? "true" : "false")">
+        <i class="bi @(_open ? "bi-chevron-down" : "bi-chevron-right")"></i>
+        <span class="fw-semibold me-auto">@Title</span>
+        @Summary
+    </button>
+    @if (_open)
+    {
+        @ChildContent
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? Summary { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Class { get; set; } = "mb-3";
+
+    /// <summary>Open at first; the user's clicks win after that.</summary>
+    [Parameter] public bool Open { get; set; } = true;
+
+    private bool _open;
+    private bool _set;
+
+    protected override void OnParametersSet()
+    {
+        if (!_set)
+        {
+            _open = Open;
+            _set = true;
+        }
+    }
+}

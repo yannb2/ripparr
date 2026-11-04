@@ -39,6 +39,9 @@ public sealed class PlaylistDraft
     /// <summary>The subtitle read's guesses already put on the plan, so they don't come back over an untick.</summary>
     public (TrackPlan? Plan, int Version) Flagged { get; init; }
 
+    /// <summary>Chapter names typed in the Chapters card, by chapter number.</summary>
+    public Dictionary<int, string> ChapterNames { get; init; } = [];
+
     /// <summary>SDH and commentary as the app last set them: a flag changed by hand is not set again by a read.</summary>
     public Dictionary<int, (bool Sdh, bool Commentary)> Auto { get; init; } = [];
 }

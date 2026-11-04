@@ -1,0 +1,35 @@
+@* A track's flags as small icons, the way Muxarr shows them: default, forced, SDH, commentary, AD. *@
+@foreach (var (on, icon, tip) in Flags())
+{
+    if (on)
+    {
+        <span class="badge text-bg-secondary me-1 sv-flag" title="@tip"><i class="bi @icon"></i></span>
+    }
+}
+
+@code {
+    [Parameter] public bool Default { get; set; }
+    [Parameter] public bool Forced { get; set; }
+    [Parameter] public bool Sdh { get; set; }
+    [Parameter] public bool Commentary { get; set; }
+    [Parameter] public bool Ad { get; set; }
+
+    /// <summary>The flags as a job wrote them ("default forced SDH"), instead of the booleans.</summary>
+    [Parameter] public string? Words { get; set; }
+
+    public const string DefaultIcon = "bi-play-circle";
+    public const string ForcedIcon = "bi-lock";
+    public const string SdhIcon = "bi-ear";
+    public const string CommentaryIcon = "bi-chat-quote";
+    public const string AdIcon = "bi-eye";
+
+    private IEnumerable<(bool On, string Icon, string Tip)> Flags()
+    {
+        var words = (Words ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        yield return (Default || words.Contains("default"), DefaultIcon, "Default: players pick this track");
+        yield return (Forced || words.Contains("forced"), ForcedIcon, "Forced: shows even when subtitles are off");
+        yield return (Sdh || words.Contains("SDH"), SdhIcon, "SDH: for the deaf and hard of hearing");
+        yield return (Commentary || words.Contains("commentary"), CommentaryIcon, "Commentary");
+        yield return (Ad || words.Contains("AD"), AdIcon, "Audio description for the visually impaired");
+    }
+}

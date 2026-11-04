@@ -16,6 +16,7 @@
                 var next = this.get() === "dark" ? "light" : "dark";
                 try { localStorage.setItem("ripparr-theme", next); } catch (e) { }
                 this.apply(next);
+                return next;
             }
         };
         ripparrTheme.apply(ripparrTheme.get());

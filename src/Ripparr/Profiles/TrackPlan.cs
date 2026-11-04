@@ -83,6 +83,24 @@ public sealed class TrackPlan
         (Tracks[index], Tracks[target]) = (Tracks[target], Tracks[index]);
     }
 
+    /// <summary>
+    /// Drag and drop: puts the track where <paramref name="target"/> is, the tracks between shifting
+    /// by one. Only within the same kind, as <see cref="Move"/>.
+    /// </summary>
+    public bool MoveTo(PlannedTrack track, PlannedTrack target)
+    {
+        var from = Tracks.IndexOf(track);
+        var to = Tracks.IndexOf(target);
+        if (from < 0 || to < 0 || from == to || track.Kind != target.Kind || track.DolbyVisionLayer || target.DolbyVisionLayer)
+        {
+            return false;
+        }
+
+        Tracks.RemoveAt(from);
+        Tracks.Insert(to, track);
+        return true;
+    }
+
     /// <summary>Makes one Default per kind at most: the first kept video, the given audio, forced subtitles only.</summary>
     public void SetDefault(PlannedTrack track)
     {
