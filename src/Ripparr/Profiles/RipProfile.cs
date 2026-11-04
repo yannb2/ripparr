@@ -26,6 +26,16 @@ public sealed class GlobalTag
         string.Join('_', (name ?? "").Trim().ToUpperInvariant().Split([' ', '-'], StringSplitOptions.RemoveEmptyEntries));
 
     public GlobalTag Copy() => new() { Name = Name, Value = Value };
+
+    public const string ReleaseGroup = "RELEASE_GROUP";
+
+    /// <summary>The value of a tag in the list (names compared as Matroska names), or null when it is empty or missing.</summary>
+    public static string? Find(IEnumerable<GlobalTag> tags, string name)
+    {
+        var wanted = Normalise(name);
+        var value = tags.LastOrDefault(t => Normalise(t.Name) == wanted)?.Value?.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
 }
 
 public sealed class RipProfile : IJsonOnDeserialized
@@ -145,11 +155,23 @@ public sealed class RipProfile : IJsonOnDeserialized
     // ---- Output ----
 
     /// <summary>
-    /// Tokens: {title} {year} {edition} {resolution} {videocodec} {hdr} {audio} {source}.
+    /// Tokens: {title} {year} {edition} {resolution} {videocodec} {hdr} {audio} {source} {releasegroup}.
     /// Text inside the braces is kept only when the token has a value: "{ - edition}".
     /// </summary>
-    public string FileNameTemplate { get; set; } =
-        "{title} ({year}){ - edition} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]";
+    public string FileNameTemplate { get; set; } = DefaultFileName;
+
+    /// <summary>
+    /// The film's name in Radarr's Standard Movie Format, then "-GROUP" when the job has a
+    /// RELEASE_GROUP tag, so Radarr reads the release group from the name on import.
+    /// </summary>
+    public const string DefaultFileName =
+        "{title} ({year}){ - edition} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{-releasegroup}";
+
+    /// <summary>What the file name placeholders end with since 0.4.12: the job's RELEASE_GROUP tag.</summary>
+    public const string ReleaseGroupToken = "{-releasegroup}";
+
+    /// <summary>Set once {-releasegroup} was added to a profile saved before it existed, so removing it sticks.</summary>
+    public bool ReleaseGroupTokenAdded { get; set; }
 
     /// <summary>The MKV title. Same tokens.</summary>
     public string TitleTemplate { get; set; } = "{title} ({year}){ - edition}";
@@ -161,7 +183,7 @@ public sealed class RipProfile : IJsonOnDeserialized
     public string EpisodeFileNameTemplate { get; set; } = DefaultEpisodeFileName;
 
     public const string DefaultEpisodeFileName =
-        "{title} {episode}{ (absolute)} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{ - episodetitle}";
+        "{title} {episode}{ (absolute)} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{ - episodetitle}{-releasegroup}";
 
     /// <summary>A TV episode's MKV title.</summary>
     public string EpisodeTitleTemplate { get; set; } = DefaultEpisodeTitle;
@@ -218,10 +240,31 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// A profile saved before 0.3.0 (it still has the old names) moves to the 0.3.0 names: a name
     /// left at the old default takes the new default, a name of your own is kept.
     /// </summary>
+    /// <summary>Profiles saved before 0.4.12 get {-releasegroup} at the end of both file names, once.</summary>
+    private void AddReleaseGroupToken()
+    {
+        if (ReleaseGroupTokenAdded)
+        {
+            return;
+        }
+
+        ReleaseGroupTokenAdded = true;
+        if (!FileNameTemplate.Contains("releasegroup", StringComparison.OrdinalIgnoreCase))
+        {
+            FileNameTemplate = FileNameTemplate.TrimEnd() + ReleaseGroupToken;
+        }
+
+        if (!EpisodeFileNameTemplate.Contains("releasegroup", StringComparison.OrdinalIgnoreCase))
+        {
+            EpisodeFileNameTemplate = EpisodeFileNameTemplate.TrimEnd() + ReleaseGroupToken;
+        }
+    }
+
     void IJsonOnDeserialized.OnDeserialized()
     {
         ReplaceTrackName();
         CodecNames.MoveToMuxarrLabels(AudioCodecNames);
+        AddReleaseGroupToken();
         if (CommentaryNameTemplate == null && ForcedSubtitleNameTemplate == null && SrtNameTemplate == null && ForcedSrtNameTemplate == null)
         {
             return;

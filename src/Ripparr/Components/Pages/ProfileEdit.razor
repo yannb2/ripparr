@@ -247,8 +247,12 @@
                         <input class="form-control form-control-sm font-monospace" @bind="_profile.FileNameTemplate" @bind:event="oninput"/>
                         <small class="form-text text-muted d-block">
                             Placeholders: <code>{title}</code> <code>{year}</code> <code>{edition}</code> <code>{resolution}</code>
-                            <code>{videocodec}</code> <code>{hdr}</code> <code>{audio}</code> <code>{source}</code>.
+                            <code>{videocodec}</code> <code>{hdr}</code> <code>{audio}</code> <code>{source}</code>
+                            <code>{releasegroup}</code>.
                             Text inside the braces is kept only when the placeholder has a value: <code>{ - edition}</code>.
+                            <code>{-releasegroup}</code> at the end writes "-GROUP" from the job's RELEASE_GROUP tag, which is how
+                            Radarr and Sonarr read the release group on import (a custom format can then match it).
+                            Nothing is written when the tag is empty.
                         </small>
                         <div class="mt-2 text-muted small"><i class="bi bi-eye me-1"></i>Preview: <code>@(Example(_profile.FileNameTemplate)).mkv</code></div>
                     </div>
@@ -425,17 +429,21 @@
         _profile!.VideoLanguage = mode == "code" ? "eng" : mode;
     }
 
-    private static string Example(string template) => Naming.Apply(template, new Dictionary<string, string?>
+    // The profile's own RELEASE_GROUP value when it has one, otherwise a stand-in.
+    private string? ExampleGroup => MuxBuilder.ReleaseGroupWord(GlobalTag.Find(_profile?.CustomTags ?? [], GlobalTag.ReleaseGroup) ?? "GROUP");
+
+    private string Example(string template) => Naming.Apply(template, new Dictionary<string, string?>
     {
         ["title"] = "Blade Runner", ["year"] = "1982", ["edition"] = "Final Cut", ["resolution"] = "2160p",
-        ["videocodec"] = "HEVC", ["hdr"] = "DV HDR10", ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux"
+        ["videocodec"] = "HEVC", ["hdr"] = "DV HDR10", ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux",
+        ["releasegroup"] = ExampleGroup
     });
 
-    private static string Episode(string template) => Naming.Apply(template, new Dictionary<string, string?>
+    private string Episode(string template) => Naming.Apply(template, new Dictionary<string, string?>
     {
         ["title"] = "Frieren - Beyond Journey's End", ["year"] = "2023", ["resolution"] = "1080p", ["videocodec"] = "AVC",
         ["hdr"] = "SDR", ["audio"] = "TrueHD-2.0", ["source"] = "BDRemux", ["episode"] = "S01E05", ["absolute"] = "005",
-        ["episodetitle"] = "Phantoms of the Dead"
+        ["episodetitle"] = "Phantoms of the Dead", ["releasegroup"] = ExampleGroup
     });
 
     private bool Write()

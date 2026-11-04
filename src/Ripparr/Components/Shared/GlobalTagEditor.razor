@@ -4,12 +4,12 @@
     {
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <input class="form-control form-control-sm font-monospace" style="max-width: 14rem" placeholder="TAG_NAME" disabled="@(Disabled || FixedNames)"
-                   value="@tag.Name" @onchange="e => tag.Name = GlobalTag.Normalise(e.Value?.ToString())"/>
+                   value="@tag.Name" @onchange="e => { tag.Name = GlobalTag.Normalise(e.Value?.ToString()); return Changed.InvokeAsync(); }"/>
             <input class="form-control form-control-sm" style="max-width: 28rem; flex: 1 1 12rem" placeholder="@(Placeholder ?? ValueLabel)" disabled="@Disabled"
-                   @bind="tag.Value" @bind:event="oninput"/>
+                   @bind="tag.Value" @bind:event="oninput" @bind:after="Changed.InvokeAsync"/>
             @if (!FixedNames)
             {
-                <button type="button" class="btn btn-sm btn-link text-body-secondary p-0" title="Remove" disabled="@Disabled" @onclick="() => Tags.Remove(tag)">
+                <button type="button" class="btn btn-sm btn-link text-body-secondary p-0" title="Remove" disabled="@Disabled" @onclick="() => { Tags.Remove(tag); return Changed.InvokeAsync(); }">
                     <i class="bi bi-x-lg"></i>
                 </button>
             }
@@ -40,5 +40,12 @@
     /// <summary>On the job form the names come from the profile; only extra rows can be named.</summary>
     [Parameter] public bool FixedNames { get; set; }
 
-    private void Add(string name) => Tags.Add(new GlobalTag { Name = name });
+    /// <summary>A tag changed: lets the page update what depends on it (the file name preview shows RELEASE_GROUP).</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private Task Add(string name)
+    {
+        Tags.Add(new GlobalTag { Name = name });
+        return Changed.InvokeAsync();
+    }
 }
