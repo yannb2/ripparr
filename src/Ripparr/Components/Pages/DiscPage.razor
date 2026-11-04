@@ -1,5 +1,6 @@
 @page "/disc"
 @inject DiscAnalyzer Analyzer
+@inject DiscDrafts Drafts
 @inject StreamProbe Probe
 @inject SubtitleScanner Scanner
 @inject JobStore Store
@@ -65,7 +66,8 @@
     {
         <span class="badge text-bg-light">Disc title: @_analysis.DiscTitle</span>
     }
-    <button class="btn btn-sm btn-link p-0 ms-auto" @onclick="Reload"><i class="bi bi-arrow-clockwise"></i> Read again</button>
+    <button class="btn btn-sm btn-link p-0 ms-auto" @onclick="StartOver" title="Puts back the title, tracks, tags and extras as on a first visit (your edits are kept while you go to other pages)"><i class="bi bi-eraser"></i> Start over</button>
+    <button class="btn btn-sm btn-link p-0 ms-3" @onclick="Reload"><i class="bi bi-arrow-clockwise"></i> Read again</button>
 </div>
 
 @if (_analysis.Error != null)
@@ -407,7 +409,7 @@
 
 @if (!_tv && _selected != null && _plan != null)
 {
-    <ExtrasPicker Source="_source" Analysis="_analysis" Profiles="_profiles" FilmPlaylist="_selected" FilmJob="FilmJob"/>
+    <ExtrasPicker Source="_source" Analysis="_analysis" Profiles="_profiles" FilmPlaylist="_selected" FilmJob="FilmJob" State="_draft!.Extras"/>
 }
 
 @code {
@@ -472,14 +474,83 @@
         }
 
         _profiles = Store.Profiles();
-        var guess = ReleaseName.Guess(_source.Name);
-        _title = guess.Title;
-        _year = guess.Year;
-        _search = guess.Year is { } y ? $"{guess.Title} {y}" : guess.Title;
+        _draft = Drafts.Get(_source.Path);
+        if (_draft.Saved)
+        {
+            _title = _draft.Title;
+            _year = _draft.Year;
+            _edition = _draft.Edition;
+            _tmdb = _draft.Tmdb;
+            _imdb = _draft.Imdb;
+            _original = _draft.Original;
+            _search = _draft.Search;
+            _showAll = _draft.ShowAll;
+        }
+        else
+        {
+            Guess();
+        }
+
         await Load(false);
     }
 
-    private async Task Reload() => await Load(true);
+    private void Guess()
+    {
+        var guess = ReleaseName.Guess(_source!.Name);
+        _title = guess.Title;
+        _year = guess.Year;
+        _edition = null;
+        _tmdb = null;
+        _imdb = null;
+        _original = null;
+        _matches = [];
+        _search = guess.Year is { } y ? $"{guess.Title} {y}" : guess.Title;
+    }
+
+    /// <summary>The page's edits, kept while you go to other pages (subtitle preview, a job, the menu).</summary>
+    private DiscDraft? _draft;
+
+    /// <summary>Saves the form into the disc's draft after each change.</summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_draft == null || _analysis == null || _selected == null || _plan == null)
+        {
+            return;
+        }
+
+        _draft.Playlist = _selected.Name;
+        _draft.Tv = _tv;
+        _draft.ShowAll = _showAll;
+        _draft.Search = _search;
+        _draft.Title = _title;
+        _draft.Year = _year;
+        _draft.Edition = _edition;
+        _draft.Tmdb = _tmdb;
+        _draft.Imdb = _imdb;
+        _draft.Original = _original;
+        _draft.Touched = DateTime.UtcNow;
+        _draft.Playlists[_selected.Name] = new PlaylistDraft
+        {
+            Plan = _plan, ProfileId = _profileId, Tags = _tags, Compare = _compare, Flagged = _flagged, Auto = _auto
+        };
+    }
+
+    /// <summary>"Read again": the disc read anew, so each playlist's tracks are planned anew too.</summary>
+    private async Task Reload()
+    {
+        _draft?.Playlists.Clear();
+        await Load(true);
+    }
+
+    private async Task StartOver()
+    {
+        _draft = Drafts.Reset(_source!.Path);
+        _tags = [];
+        _compare = [];
+        _showAll = false;
+        Guess();
+        await Load(false);
+    }
 
     /// <summary>The mount service's answer to a ping, for plain ISOs (null: not asked, or switched off).</summary>
     private MountReply? _mount;
@@ -494,8 +565,12 @@
             : null;
         _tvGuess = EpisodeFinder.LooksLikeTv(_analysis);
         _episodeCount = EpisodeFinder.Find(_analysis).Count;
-        _tv = _tvGuess;
-        if (_analysis.MainFeature is { } main)
+        _tv = _draft?.Tv ?? _tvGuess;
+        if (_draft?.Playlist is { } name && _analysis.Playlists.FirstOrDefault(p => p.Name == name) is { } kept)
+        {
+            Select(kept);
+        }
+        else if (_analysis.MainFeature is { } main)
         {
             Select(main);
         }
@@ -511,6 +586,26 @@
         _probe = Probe.Cached(_source!, playlist);
         _subtitles = Scanner.Find(_source!, playlist);
         WatchSubtitles();
+        // Back on a playlist already edited: its tracks, profile and tags as they were left.
+        if (_draft != null && _draft.Playlists.TryGetValue(playlist.Name, out var kept) && _profiles.Any(p => p.Id == kept.ProfileId))
+        {
+            _profileId = kept.ProfileId;
+            _plan = kept.Plan;
+            _tags = kept.Tags;
+            _compare = kept.Compare;
+            _flagged = kept.Flagged;
+            _auto = kept.Auto;
+            ApplyProbe();
+            ApplySubtitles();
+            if (_probe == null)
+            {
+                _ = ReadStreams();
+            }
+
+            return;
+        }
+
+        _compare = [];
         _profileId = playlist.Resolution == "2160p"
             ? _profiles.FirstOrDefault(p => p.Id == "uhd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? ""
             : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
@@ -568,7 +663,7 @@
     }
 
     private SubtitleScan? _subtitles;
-    private readonly HashSet<int> _compare = [];
+    private HashSet<int> _compare = [];
 
     private void ToggleCompare((int Pid, bool On) change)
     {
@@ -635,6 +730,9 @@
     /// </summary>
     private (TrackPlan? Plan, int Version) _flagged;
 
+    /// <summary>The SDH and commentary flags as the app last set them on each subtitle track: a difference is your choice.</summary>
+    private Dictionary<int, (bool Sdh, bool Commentary)> _auto = [];
+
     /// <summary>
     /// The caption counts on the job's subtitle tracks, so the job keeps them too, and the SDH
     /// (when the profile detects SDH) and commentary flags the OCR of a sample found.
@@ -652,21 +750,27 @@
         _flagged = (_plan, _subtitles.GuessVersion);
         foreach (var track in _plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle))
         {
+            // A flag changed by hand since the app last set it stays as you left it.
+            var auto = _auto.GetValueOrDefault(track.Pid, (Sdh: track.HearingImpaired, Commentary: track.Commentary));
+            var sdhByHand = track.HearingImpaired != auto.Sdh;
+            var commentaryByHand = track.Commentary != auto.Commentary;
             if (_subtitles.Tracks.TryGetValue(track.Pid, out var read))
             {
                 track.Details = _subtitles.Quick
                     ? $"{read.Captions:N0} elements in the sample"
                     : $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
-                if (flag && Profile.DetectSdh && (read.Sdh || both))
+                if (flag && Profile.DetectSdh && (read.Sdh || both) && !sdhByHand)
                 {
                     track.HearingImpaired = read.Sdh;
                 }
 
-                if (flag && (read.Commentary || both))
+                if (flag && (read.Commentary || both) && !commentaryByHand)
                 {
                     track.Commentary = read.Commentary;
                 }
             }
+
+            _auto[track.Pid] = (sdhByHand ? auto.Sdh : track.HearingImpaired, commentaryByHand ? auto.Commentary : track.Commentary);
         }
     }
 
@@ -713,6 +817,7 @@
         if (_selected != null)
         {
             _plan = TrackPlanner.Build(_selected.Mpls, Profile, _original);
+            _auto = _plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle).ToDictionary(t => t.Pid, t => (t.HearingImpaired, t.Commentary));
             ApplyProbe();
             ApplySubtitles();
         }

@@ -23,6 +23,7 @@ builder.Services.AddSingleton<JobStore>();
 builder.Services.AddScoped<Toasts>();
 builder.Services.AddSingleton<JobEvents>();
 builder.Services.AddSingleton<DiscAnalyzer>();
+builder.Services.AddSingleton<DiscDrafts>();
 builder.Services.AddSingleton<StreamProbe>();
 builder.Services.AddSingleton<SubtitleScanner>();
 builder.Services.AddSingleton<Thumbnails>();

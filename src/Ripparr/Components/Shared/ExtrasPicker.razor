@@ -4,13 +4,13 @@
 
 <div class="card mb-3">
     <button type="button" class="card-header d-flex align-items-center gap-2 border-0 w-100 text-start bg-transparent"
-            @onclick="() => _open = !_open" aria-expanded="@(_open ? "true" : "false")">
-        <i class="bi @(_open ? "bi-chevron-down" : "bi-chevron-right")"></i>
+            @onclick="() => State.Open = !State.Open" aria-expanded="@(State.Open ? "true" : "false")">
+        <i class="bi @(State.Open ? "bi-chevron-down" : "bi-chevron-right")"></i>
         <span class="fw-semibold">Extras</span>
         <span class="badge text-bg-secondary">@Candidates.Count()</span>
         <span class="small text-body-secondary ms-1">featurettes, trailers, deleted scenes… one job each, next to the @(Tv ? "series" : "film")</span>
     </button>
-    @if (_open)
+    @if (State.Open)
     {
         <div class="card-body pt-2">
             <div class="d-flex flex-wrap align-items-center gap-3 small mb-2">
@@ -19,7 +19,7 @@
                     The title, year and IDs come from the @(Tv ? "series" : "film's form") above.
                 </span>
                 <div class="form-check form-switch mb-0 ms-auto">
-                    <input class="form-check-input" type="checkbox" id="extrasAll" @bind="_showAll"/>
+                    <input class="form-check-input" type="checkbox" id="extrasAll" @bind="State.ShowAll"/>
                     <label class="form-check-label" for="extrasAll">Show duplicates and "play all"</label>
                 </div>
             </div>
@@ -113,7 +113,7 @@
                 <div class="d-flex flex-wrap align-items-end gap-2">
                     <div>
                         <label class="form-label small mb-1">Profile</label>
-                        <select class="form-select form-select-sm" @bind="_profileId">
+                        <select class="form-select form-select-sm" @bind="State.ProfileId">
                             @foreach (var profile in Profiles)
                             {
                                 <option value="@profile.Id">@profile.Name</option>
@@ -123,7 +123,7 @@
                     @if (Season is { } season)
                     {
                         <div class="form-check form-switch mb-1">
-                            <input class="form-check-input" type="checkbox" id="extrasSeason" @bind="_inSeason"/>
+                            <input class="form-check-input" type="checkbox" id="extrasSeason" @bind="State.InSeason"/>
                             <label class="form-check-label small" for="extrasSeason">In the @EpisodeNumbers.SeasonFolder(season) folder</label>
                         </div>
                     }
@@ -167,30 +167,19 @@
     /// <summary>The film's job as the form would queue it (title, year, IDs, language, tags), or the reason it can't be.</summary>
     [Parameter, EditorRequired] public Func<(Job? Job, string? Error)> FilmJob { get; set; } = null!;
 
-    private sealed class ExtraRow
-    {
-        public bool Selected { get; set; }
-        public string Type { get; set; } = "featurettes";
-        public string Name { get; set; } = "";
-        public bool Pictures { get; set; }
-    }
+    /// <summary>The card's picks and names: the disc page keeps them while you go to another page.</summary>
+    [Parameter] public ExtrasPickerState State { get; set; } = new();
 
-    private readonly Dictionary<string, ExtraRow> _rows = new();
-    private bool _open;
-    private bool _showAll;
-    private bool _inSeason;
-
-    private int? SeasonFor => _inSeason ? Season : null;
-    private string _profileId = "";
+    private int? SeasonFor => State.InSeason ? Season : null;
     private string? _error;
 
     private Job? Film => FilmJob().Job;
 
     protected override void OnParametersSet()
     {
-        if (_profileId.Length == 0 || Profiles.All(p => p.Id != _profileId))
+        if (State.ProfileId.Length == 0 || Profiles.All(p => p.Id != State.ProfileId))
         {
-            _profileId = Profiles.FirstOrDefault(p => p.Id == RipProfile.ExtrasId)?.Id ?? Profiles.FirstOrDefault()?.Id ?? "";
+            State.ProfileId = Profiles.FirstOrDefault(p => p.Id == RipProfile.ExtrasId)?.Id ?? Profiles.FirstOrDefault()?.Id ?? "";
         }
     }
 
@@ -202,28 +191,28 @@
         .Where(p => p.Duration >= TimeSpan.FromSeconds(10))
         .OrderBy(p => p.Name, StringComparer.Ordinal);
 
-    private IEnumerable<PlaylistInfo> Visible => _showAll ? Free : Candidates;
+    private IEnumerable<PlaylistInfo> Visible => State.ShowAll ? Free : Candidates;
 
-    private ExtraRow Row(PlaylistInfo playlist)
+    private ExtrasPickerState.Row Row(PlaylistInfo playlist)
     {
-        if (!_rows.TryGetValue(playlist.Name, out var row))
+        if (!State.Rows.TryGetValue(playlist.Name, out var row))
         {
             // Short ones are usually trailers.
-            row = new ExtraRow { Type = playlist.Duration < TimeSpan.FromMinutes(3.5) ? "trailers" : "featurettes" };
-            _rows[playlist.Name] = row;
+            row = new ExtrasPickerState.Row { Type = playlist.Duration < TimeSpan.FromMinutes(3.5) ? "trailers" : "featurettes" };
+            State.Rows[playlist.Name] = row;
         }
 
         return row;
     }
 
     /// <summary>Typing a name ticks the row.</summary>
-    private static void TypeName(ExtraRow row, string? name)
+    private static void TypeName(ExtrasPickerState.Row row, string? name)
     {
         row.Name = name ?? "";
         row.Selected |= row.Name.Length > 0;
     }
 
-    private IEnumerable<(PlaylistInfo Playlist, ExtraRow Row)> Selected =>
+    private IEnumerable<(PlaylistInfo Playlist, ExtrasPickerState.Row Row)> Selected =>
         Visible.Select(p => (p, Row(p))).Where(x => x.Item2.Selected);
 
     private int SelectedCount => Selected.Count();
@@ -251,7 +240,7 @@
             return;
         }
 
-        var profile = Profiles.FirstOrDefault(p => p.Id == _profileId) ?? film.Profile;
+        var profile = Profiles.FirstOrDefault(p => p.Id == State.ProfileId) ?? film.Profile;
         var jobs = new List<Job>();
         foreach (var (playlist, row) in Selected.ToList())
         {
