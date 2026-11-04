@@ -83,7 +83,7 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>Keep the AC-3 core DGDemux writes next to a TrueHD track.</summary>
     public bool KeepTrueHdCore { get; set; }
 
-    /// <summary>Tokens: {language} {codec} {channels} {dub} {description} {trackname} and the flag words.</summary>
+    /// <summary>Tokens: {language} {codec} {channels} {dub} {description} and the flag words.</summary>
     public string AudioNameTemplate { get; set; } = TrackNaming.DefaultAudio;
 
     /// <summary>Templates for flagged tracks, by flag (sdh, forced, commentary, ad, dub). The first matching flag wins.</summary>
@@ -98,7 +98,7 @@ public sealed class RipProfile : IJsonOnDeserialized
 
     public bool KeepOtherSubtitleLanguages { get; set; }
 
-    /// <summary>Tokens: {language} {codec} {dub} {trackname} and the flag words. SRT tracks use it too, with {codec} = SRT.</summary>
+    /// <summary>Tokens: {language} {codec} {dub} {description} and the flag words. SRT tracks use it too, with {codec} = SRT.</summary>
     public string SubtitleNameTemplate { get; set; } = TrackNaming.DefaultSubtitle;
 
     /// <summary>Templates for flagged tracks, by flag (sdh, forced, commentary, ad, dub). The first matching flag wins.</summary>
@@ -183,11 +183,35 @@ public sealed class RipProfile : IJsonOnDeserialized
     public string? ForcedSrtNameTemplate { get; set; }
 
     /// <summary>
+    /// Before 0.4.5 a template could use {trackname}; {description} (the Description box on the
+    /// disc page) took its place.
+    /// </summary>
+    private void ReplaceTrackName()
+    {
+        static string Swap(string template) => string.IsNullOrEmpty(template)
+            ? template
+            : System.Text.RegularExpressions.Regex.Replace(template, @"\{(\W*)trackname(\W*)\}", "{$1description$2}",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        VideoNameTemplate = Swap(VideoNameTemplate);
+        AudioNameTemplate = Swap(AudioNameTemplate);
+        SubtitleNameTemplate = Swap(SubtitleNameTemplate);
+        foreach (var overrides in new[] { AudioNameOverrides, SubtitleNameOverrides })
+        {
+            foreach (var key in overrides.Keys.ToList())
+            {
+                overrides[key] = Swap(overrides[key]);
+            }
+        }
+    }
+
+    /// <summary>
     /// A profile saved before 0.3.0 (it still has the old names) moves to the 0.3.0 names: a name
     /// left at the old default takes the new default, a name of your own is kept.
     /// </summary>
     void IJsonOnDeserialized.OnDeserialized()
     {
+        ReplaceTrackName();
         if (CommentaryNameTemplate == null && ForcedSubtitleNameTemplate == null && SrtNameTemplate == null && ForcedSrtNameTemplate == null)
         {
             return;

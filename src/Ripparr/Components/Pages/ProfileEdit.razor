@@ -125,7 +125,7 @@
                             Placeholders: <code>{resolution}</code> (2160p, 1080p), <code>{codec}</code> (HEVC, AVC),
                             <code>{dv}</code> (Dolby Vision Profile 7 FEL), <code>{dvprofile}</code> (7, 8.1), <code>{dvlayer}</code> (FEL, MEL),
                             <code>{range}</code> (HDR10, HDR10+, HLG, or SDR for video with neither HDR nor Dolby Vision),
-                            <code>{hdr}</code> (as Radarr: DV HDR10), <code>{language}</code>. Empty for no name.
+                            <code>{hdr}</code> (as Radarr: DV HDR10), <code>{language}</code>, <code>{description}</code> (the Description box on the disc page). Empty for no name.
                         </small>
                         <div class="mt-2 text-muted small mb-1">Dolby Vision wording</div>
                         <input class="form-control form-control-sm font-monospace" placeholder="@TrackNaming.DefaultDolbyVision"
@@ -162,7 +162,7 @@
                         <small class="form-text text-muted d-block">
                             Placeholders: <code>{language}</code>, <code>{codec}</code> (TrueHD Atmos, DTS-HD MA), <code>{channels}</code> (7.1),
                             <code>{dub}</code> (Dub on audio in another language than the film's own), <code>{description}</code>
-                            (Commentary on a commentary), <code>{commentary}</code>, <code>{ad}</code>.
+                            (the track's Description box on the disc page; Commentary on a commentary with nothing typed), <code>{commentary}</code>, <code>{ad}</code>.
                         </small>
                         <FlagOverrides Overrides="_profile.AudioNameOverrides" Changed="StateHasChanged"/>
                         <CodecNamesEditor Names="_profile.AudioCodecNames" Labels="CodecNames.Audio" Changed="StateHasChanged"
@@ -184,7 +184,8 @@
                         <input class="form-control form-control-sm font-monospace" @bind="_profile.SubtitleNameTemplate" @bind:event="oninput"/>
                         <small class="form-text text-muted d-block">
                             Placeholders: <code>{language}</code>, <code>{codec}</code> (PGS, or SRT for the OCR tracks), <code>{dub}</code>,
-                            <code>{trackname}</code> (empty for disc tracks), <code>{forced}</code>, <code>{sdh}</code>, <code>{commentary}</code>.
+                            <code>{description}</code> (what the track's Description box on the disc page says; empty when nothing is typed),
+                            <code>{forced}</code>, <code>{sdh}</code>, <code>{commentary}</code>.
                         </small>
                         <FlagOverrides Overrides="_profile.SubtitleNameOverrides" Changed="StateHasChanged"/>
                         <CodecNamesEditor Names="_profile.SubtitleCodecNames" Labels="CodecNames.Subtitle" Changed="StateHasChanged"/>

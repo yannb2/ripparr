@@ -158,7 +158,10 @@ options). Three come built in (UHD remux,
 Blu-ray remux and Extras), and they can be copied and changed. The plan can still be edited per job on the disc page.
 There, the **Description** box of a track fills `{description}` in the profile's name template (the commentary
 template `{language} - {codec} {channels} ({description})` gives `English - AC3 2.0 (Director and Writer)`); a
-template without `{description}` gets the text in brackets at the end, and `=Name` types the whole name.
+template without `{description}` gets the text in brackets at the end, and `=Name` types the whole name. The
+subtitle commentary template `{language} (Commentary) - {description} - {codec}` gives `English (Commentary) - PGS`
+with nothing typed and `English (Commentary) - Director - PGS` with "Director". (`{trackname}` is gone: saved
+profiles that used it now use `{description}`.)
 
 **Codec names** (under each track name, as in the Muxarr fork) set what `{codec}` writes for each detected codec:
 `Dolby TrueHD` for TrueHD gives `English - Dolby TrueHD Atmos 7.1` (a blank Atmos label uses its codec's name with
