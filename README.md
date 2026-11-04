@@ -7,6 +7,24 @@ MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix bu
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
 [Specarr](https://github.com/yannb2/Specarr), with the same look as the [Muxarr fork](https://github.com/yannb2/muxarr).
 
+## Finding the film on discs with fake playlists
+
+Ripparr takes the longest playlist as the film, then the one with most chapters. Some discs hide the
+film among fakes, and the disc page then says so and offers two checks, the ones people use by hand
+([MakeMKV forum: deobfuscating playlists](https://forum.makemkv.com/forum/viewtopic.php?p=53480),
+[GetMPLS](https://forum.makemkv.com/forum/viewtopic.php?p=86401)):
+
+- **Too little data.** A long playlist under 3 Mbit/s loops a few tiny clips (The Fabelmans UHD has a
+  4-hour one of 540 MB). It is never taken as the film and gets a red badge.
+- **Lookalikes.** Playlists near the film's length made of its clips in other orders are marked; the
+  "own clips" badge counts clips no other long playlist uses, as GetMPLS does.
+- **Check clip joins.** The film's clips follow each other seamlessly, so the last picture of one clip
+  and the first of the next look alike; a fake's shuffled order jumps. Ripparr reads those two pictures
+  of every clip with ffmpeg and scores each lookalike by the mean change at its joins (0 = seamless).
+  A clear winner (under 70% of the next score) becomes the main feature.
+- **Ask MakeMKV.** makemkvcon plays the disc's menus and names one title the main feature
+  (FPL_MainFeature); Ripparr takes it. Its answer comes before the joins check.
+
 ## Before the job: the quick read
 
 Picking a playlist on the disc page reads its streams in a few seconds, before anything is queued: MediaInfo
