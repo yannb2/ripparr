@@ -53,6 +53,19 @@ public class MuxBuilderTests
     ];
 
     [TestMethod]
+    public void MergedLayerNamesTheFileDvHdr10()
+    {
+        var hdr10 = new StreamFacts { Kind = StreamKind.Video, HdrFormat = "SMPTE ST 2086", HdrCompatibility = "HDR10" };
+        var merged = MuxBuilder.WithEnhancementLayer(hdr10);
+
+        Assert.AreEqual("HDR10", hdr10.DynamicRange);
+        Assert.AreEqual("DV HDR10", merged.DynamicRange);
+        Assert.IsTrue(merged.DualLayer);
+        Assert.AreEqual("DV HDR10Plus", MuxBuilder.WithEnhancementLayer(new StreamFacts
+            { Kind = StreamKind.Video, HdrFormat = "SMPTE ST 2094 App 4", HdrCompatibility = "HDR10+ Profile A / HDR10" }).DynamicRange);
+    }
+
+    [TestMethod]
     public void MapsFilesByPidAndFindsTheLayerAndCores()
     {
         var mapping = MuxBuilder.Map(Film, Files());

@@ -46,6 +46,13 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         context.Log($"Playlist {playlist.Name}: {Format.Duration(playlist.Duration)}, {playlist.Mpls.Chapters.Count} chapters, " +
                     $"{playlist.Mpls.Clips.Count} clip(s), {Format.Size(playlist.Size)}" +
                     (playlist.Mpls.HasDolbyVisionEnhancementLayer ? ", Dolby Vision enhancement layer" : ""));
+        if (playlist.Mpls.Streams.FirstOrDefault(s => s.DolbyVisionEnhancementLayer) is { } layer)
+        {
+            var clips = playlist.Mpls.EnhancementLayerClips;
+            context.Log($"Dolby Vision enhancement layer: PID {layer.Pid} (0x{layer.Pid:X4}), " +
+                        (clips == null ? "in the film's own clip(s)" : $"in its own clip(s): {string.Join(", ", clips.Select(c => c + ".m2ts"))}") +
+                        (job.Plan.MergeDolbyVisionLayer ? "." : "; left out on this job."));
+        }
 
         var prepare = PrepareMode(source, analysis, context.Options.IsoMount.Enabled && !job.UnpackIso);
         context.Log($"Encryption: {analysis.Encryption}. Prepare: {Describe(prepare)}.");
@@ -69,6 +76,11 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         if (firstClip != null && EncryptionCheck.Check(firstClip) == Encryption.Encrypted)
         {
             throw new JobFailedException("The streams are still encrypted. MakeMKV could not decrypt them: check its key and messages on the Tools page.");
+        }
+
+        if (job.Plan.MergeDolbyVisionLayer)
+        {
+            await CheckEnhancementLayerAsync(context, discFolder, playlist);
         }
 
         // ---- Demux ----
@@ -119,6 +131,16 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             context.Log($"  {Path.GetFileName(path)}: {Describe(facts)}");
         }
 
+        // DGDemux leaves out a Dolby Vision layer kept in clips of its own: ffmpeg copies it out.
+        if (job.Plan.MergeDolbyVisionLayer && files.Count(f => f.Kind == StreamKind.Video) < 2 && !files.Any(f => f.Facts.DualLayer))
+        {
+            var layerFile = await ExtractEnhancementLayerAsync(context, discFolder, playlist, prefix);
+            if (layerFile != null)
+            {
+                files.Add(layerFile);
+            }
+        }
+
         var mapping = MuxBuilder.Map(playlist.Mpls, files, DgDemuxCommand.DemuxedPids(job.Profile, job.Plan));
         foreach (var warning in mapping.Warnings)
         {
@@ -150,7 +172,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             }
             else if (mapping.EnhancementLayer == null || video == null)
             {
-                throw new JobFailedException("The plan keeps the Dolby Vision layer but DGDemux wrote no enhancement layer file. " +
+                throw new JobFailedException("The plan keeps the Dolby Vision layer but neither DGDemux nor ffmpeg could write the enhancement layer. " +
                                              "Untick the layer on the job to keep only the HDR10 base.");
             }
             else
@@ -160,6 +182,12 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                     ["mux", "--bl", video.File.Path, "--el", mapping.EnhancementLayer.Path, "-o", videoPath]), Long,
                     line => MuxBuilder.PercentProgress(line) is { } p && Report(context, p));
                 context.Log($"Merged {mapping.EnhancementLayer.FileName} into {Path.GetFileName(videoPath)}.");
+
+                // MediaInfo sees no Dolby Vision in a raw stream (no container record to read): the merged
+                // video is marked so here, so that the name says DV HDR10 as Radarr would on the MKV.
+                var index = outputs.IndexOf(video);
+                video = video with { File = video.File with { Facts = MuxBuilder.WithEnhancementLayer(video.File.Facts) } };
+                outputs[index] = video;
             }
         }
 
@@ -345,6 +373,83 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         Prepare.Mount => "mount the ISO read-only and read it in place",
         _ => "decrypt a copy with MakeMKV"
     };
+
+    /// <summary>Where the Dolby Vision layer is read from: its own clips, or the film's.</summary>
+    private static List<string> LayerClips(string discFolder, PlaylistInfo playlist) =>
+        (playlist.Mpls.EnhancementLayerClips ?? playlist.Mpls.Clips).Distinct()
+        .Select(c => DiscAnalyzer.ClipPath(discFolder, c) ?? "").Where(p => p.Length > 0).ToList();
+
+    /// <summary>
+    /// Before the long demux: the layer's PID has to be in the first clip that should hold it.
+    /// A playlist can list a layer its clips do not carry; better to say so now than after an hour.
+    /// </summary>
+    private static async Task CheckEnhancementLayerAsync(JobContext context, string discFolder, PlaylistInfo playlist)
+    {
+        var layer = playlist.Mpls.Streams.FirstOrDefault(s => s.DolbyVisionEnhancementLayer);
+        var clip = LayerClips(discFolder, playlist).FirstOrDefault();
+        if (layer == null || clip == null)
+        {
+            return;
+        }
+
+        var probe = await ProcessRunner.RunAsync(context.Options.Tools.FFmpeg, ["-hide_banner", "-nostdin", "-i", clip],
+            TimeSpan.FromMinutes(2), cancellationToken: context.CancellationToken);
+        var pids = StreamPids(probe.Error);
+        if (pids.Count == 0)
+        {
+            context.Warn($"ffmpeg could not list the streams of {Path.GetFileName(clip)}: the Dolby Vision layer is not checked before the demux.");
+            return;
+        }
+
+        if (!pids.Contains(layer.Pid))
+        {
+            throw new JobFailedException(
+                $"The playlist lists a Dolby Vision enhancement layer (PID {layer.Pid}, 0x{layer.Pid:X4}) but {Path.GetFileName(clip)} has no such stream " +
+                $"(it has PIDs {string.Join(", ", pids.Order().Select(p => $"0x{p:X4}"))}). Untick the layer on the job to keep only the HDR10 base.");
+        }
+
+        context.Log($"Dolby Vision enhancement layer found in {Path.GetFileName(clip)}.");
+    }
+
+    /// <summary>The PIDs ffmpeg lists for a transport stream: "Stream #0:1[0x1015]: Video: hevc".</summary>
+    internal static HashSet<int> StreamPids(string ffmpegOutput) =>
+        System.Text.RegularExpressions.Regex.Matches(ffmpegOutput, @"Stream #\d+:\d+\[0x([0-9a-fA-F]+)\]")
+            .Select(m => Convert.ToInt32(m.Groups[1].Value, 16)).ToHashSet();
+
+    /// <summary>The layer copied out of its clips with ffmpeg (several clips are read as one stream).</summary>
+    private static async Task<DemuxedFile?> ExtractEnhancementLayerAsync(JobContext context, string discFolder, PlaylistInfo playlist, string prefix)
+    {
+        var layer = playlist.Mpls.Streams.FirstOrDefault(s => s.DolbyVisionEnhancementLayer);
+        var clips = LayerClips(discFolder, playlist);
+        if (layer == null || clips.Count == 0)
+        {
+            return null;
+        }
+
+        context.Log($"DGDemux wrote no enhancement layer: copying PID {layer.Pid} out of {string.Join(", ", clips.Select(Path.GetFileName))} with ffmpeg.");
+        var output = $"{prefix} PID {layer.Pid} EL.hevc";
+        var input = clips.Count == 1 ? clips[0] : "concat:" + string.Join('|', clips);
+        var result = await context.RunAsync(new ProcessSpec(context.Options.Tools.FFmpeg,
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-i", input, "-map", $"0:i:{layer.Pid}", "-c", "copy", "-f", "hevc", "-y", output
+        ]), Long, throwOnError: false);
+        if (result.ExitCode != 0 || !File.Exists(output) || new FileInfo(output).Length == 0)
+        {
+            context.Warn("ffmpeg could not copy the enhancement layer out either.");
+            return null;
+        }
+
+        var info = await context.RunAsync(new ProcessSpec(context.Options.Tools.MediaInfo, ["--Output=JSON", output]), TimeSpan.FromMinutes(10), _ => true);
+        var facts = MediaInfoReader.Parse(info.Output).FirstOrDefault();
+        if (facts?.Kind != StreamKind.Video)
+        {
+            context.Warn($"mediainfo sees no video in {Path.GetFileName(output)}.");
+            return null;
+        }
+
+        context.Log($"  {Path.GetFileName(output)}: {Describe(facts)}");
+        return new DemuxedFile(output, facts);
+    }
 
     private static string Describe(StreamFacts facts) => facts.Kind switch
     {

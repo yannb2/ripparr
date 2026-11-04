@@ -44,6 +44,13 @@ Québec French is written as `fr-CA` in the MKV and named *French (Canada)* in t
 All of them run in the background, go on if the page is left, are kept in the subtitle folder (`disc-*`, pruned with
 the job previews) and work on folders and decrypted ISOs.
 
+SDH and commentary flags you set by hand stay as you set them: a later read only changes the ones it set itself.
+
+Everything typed and ticked on the disc page (title, year, IDs, each playlist's tracks, profile and tags, the
+extras card) is kept while the app runs: a subtitle preview, the job page after a dry run or another menu does
+not reset the form. **Start over** puts the page back as on a first visit; **Read again** reads the disc anew
+and plans the tracks anew.
+
 ### Commentary or audio description?
 
 A stereo lossy track after the multichannel one in the same language is either a commentary or an audio
@@ -60,7 +67,10 @@ It works on folders and on plain ISOs with the mount service, not on encrypted d
    (nothing copied; see below), or makes a decrypted backup with `makemkvcon backup --decrypt` when the source
    is encrypted. When the ISO can't be mounted the job stops and asks: **Unpack with 7-Zip** (the playlist's
    clips only, the size is in the question) or **Try mounting again**.
-3. **Demux**: DGDemux writes each stream of the playlist, the Dolby Vision enhancement layer included.
+3. **Demux**: DGDemux writes each stream of the playlist, the Dolby Vision enhancement layer included. Some
+   UHD discs keep the layer in a clip of its own (a sub path of the playlist), which DGDemux leaves out: ffmpeg
+   then copies it out of that clip. Before the demux, the job checks that the layer's clip really has its
+   stream, and stops at once if it does not (instead of after the whole demux).
 4. **Read streams**: MediaInfo reads every stream (codec, channels, Atmos, DTS:X, HDR format).
 5. **Subtitles**: every picture subtitle track (PGS) is kept in `/config/subtitles/job-<id>/` for the preview
    page (each caption's picture and time). For the profile's SRT languages, Tesseract reads the pictures, the

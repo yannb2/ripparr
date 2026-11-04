@@ -50,7 +50,8 @@ public static partial class DoviTool
         CancellationToken cancellationToken = default)
     {
         var rpu = Path.Combine(Path.GetTempPath(), $"ripparr-{Guid.NewGuid():N}.rpu");
-        var link = HasMatroskaExtension(path) ? null : LinkAsMatroska(path);
+        // dovi_tool picks its reader from the extension: raw HEVC as is, anything else read as Matroska.
+        var link = HasMatroskaExtension(path) || IsRawHevc(path) ? null : LinkAsMatroska(path);
         try
         {
             List<string> extract = ["extract-rpu"];
@@ -169,6 +170,10 @@ public static partial class DoviTool
     {
         return string.Equals(Path.GetExtension(path), ".mkv", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>A raw HEVC stream, such as a demuxed or merged video: dovi_tool reads these directly.</summary>
+    public static bool IsRawHevc(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".hevc" or ".h265" or ".265";
 
     /// <summary>A *.mkv symbolic link in the temp folder, or null when one can't be made.</summary>
     public static string? LinkAsMatroska(string path)
