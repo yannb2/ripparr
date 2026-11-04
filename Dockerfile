@@ -129,10 +129,12 @@ ARG SEVENZIP_VERSION
 # picture subtitles for the SRT tracks.
 # MKVToolNix from the project's own repo (Ubuntu's is v82 from 2024), key checked against the
 # fingerprint on mkvtoolnix.download/authenticity.html, as in Muxarr. libavcodec, libexpat and
-# libssl are what makemkvcon links to.
+# libssl are what makemkvcon links to. The Java runtime lets makemkvcon run a disc's BD-J code: it picks
+# the real playlist on fake-playlist discs and is needed for some BD+ and AACS Soft-KCD discs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates gnupg tzdata libexpat1 libavcodec60 \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa tesseract-ocr-ita \
+        default-jre-headless \
     && . /etc/os-release \
     && curl -fsSL https://mkvtoolnix.download/gpg-pub-moritzbunkus.gpg -o /usr/share/keyrings/mkvtoolnix.gpg \
     && gpg --show-keys --with-colons /usr/share/keyrings/mkvtoolnix.gpg | grep -q '^fpr:::::::::D9199745B0545F2E8197062B0F92290A445B9007:' \

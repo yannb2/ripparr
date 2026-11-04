@@ -18,6 +18,7 @@ public class ToolCatalogTests
         Assert.AreEqual("25.01", ToolCatalog.InstalledVersion(Tool("7zip"), "7-Zip (z) 25.01 (x64) : Copyright (c) 1999-2025 Igor Pavlov : 2025-08-03"));
         Assert.AreEqual("1.18.4", ToolCatalog.InstalledVersion(Tool("makemkv"), "MSG:1005,0,1,\"MakeMKV v1.18.4 linux(x64-release) started\""));
         Assert.AreEqual("1.0.0.78", ToolCatalog.InstalledVersion(Tool("dgdemux"), "DGDemux 1.0.0.78 by Donald A. Graft"));
+        Assert.AreEqual("21.0.8", ToolCatalog.InstalledVersion(Tool("java"), "openjdk version \"21.0.8\" 2025-07-15\nOpenJDK Runtime Environment (build 21.0.8+9-Ubuntu)"));
     }
 
     [TestMethod]

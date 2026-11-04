@@ -111,6 +111,13 @@ public static partial class ToolCatalog
         },
         new()
         {
+            Id = "java", Name = "Java runtime", Purpose = "Lets MakeMKV run a disc's BD-J menu code: it finds the real playlist on fake-playlist discs (Ask MakeMKV) and opens some BD+ discs.",
+            Command = _ => "java", VersionArguments = ["-version"],
+            VersionPattern = JavaVersion()
+            // Ubuntu's default-jre-headless: it moves with the base image, not with a pin.
+        },
+        new()
+        {
             Id = "7zip", Name = "7-Zip", Purpose = "Reads and unpacks ISO files (UDF), no mount needed.",
             Command = t => t.SevenZip,
             VersionPattern = SevenZipVersion(),
@@ -198,6 +205,9 @@ public static partial class ToolCatalog
 
     [GeneratedRegex(@"tesseract v?(\d+\.\d+\.\d+)")]
     private static partial Regex TesseractVersion();
+
+    [GeneratedRegex(@"version ""(\d+(?:\.\d+)*)""")]
+    private static partial Regex JavaVersion();
 
     [GeneratedRegex(@"7-Zip (?:\([az]\) )?(?:\[\d+\] )?(\d+\.\d+)")]
     private static partial Regex SevenZipVersion();
