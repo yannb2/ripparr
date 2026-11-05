@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using Ripparr.Media;
 using Ripparr.Options;
 
 namespace Ripparr.Disc;
@@ -85,6 +86,11 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
         return stream == null ? null : SourceFinder.FileIn(stream, clip + ".m2ts");
     }
 
+    /// <summary>True when the folder has what the job needs: the playlist, or the clip of a made one.</summary>
+    public static bool HasPlaylist(string folder, PlaylistInfo playlist) => playlist.FromClip != null
+        ? ClipPath(folder, playlist.FromClip) != null
+        : PlaylistPath(folder, playlist.Name) != null;
+
     /// <summary>The .mpls file of a playlist in a folder source.</summary>
     public static string? PlaylistPath(string folder, string playlist)
     {
@@ -112,7 +118,48 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
             }
         }
 
+        AddClipPlaylists(analysis, SourceFinder.DirIn(bdmv, "CLIPINF"));
         analysis.DiscTitle = ReadDiscTitle(bdmv);
+    }
+
+    /// <summary>Clips this big that no playlist plays get a playlist of their own.</summary>
+    public const long ClipPlaylistMinimumBytes = 1L * 1024 * 1024 * 1024;
+
+    /// <summary>
+    /// Some discs have no playlist for the film: their BD-J menu builds it at play time (The
+    /// Fabelmans UHD: 4 short playlists, the film one 82 GB clip none of them plays). Each big clip
+    /// no playlist plays gets a playlist made from its CLIPINF file, listed as "Clip 00294".
+    /// </summary>
+    internal static void AddClipPlaylists(DiscAnalysis analysis, string? clipInfo)
+    {
+        if (clipInfo == null)
+        {
+            return;
+        }
+
+        var played = analysis.Playlists
+            .SelectMany(p => p.Mpls.Clips.Concat(p.Mpls.SubPaths.SelectMany(s => s.Clips)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var (clip, size) in analysis.ClipSizes.OrderBy(c => c.Key, StringComparer.Ordinal))
+        {
+            if (size < ClipPlaylistMinimumBytes || played.Contains(clip) || SourceFinder.FileIn(clipInfo, clip + ".clpi") is not { } file)
+            {
+                continue;
+            }
+
+            try
+            {
+                var bytes = Clpi.Read(file).ToPlaylist(clip).Build();
+                analysis.Playlists.Add(new PlaylistInfo
+                {
+                    Name = PlaylistInfo.ClipPrefix + clip, Mpls = Mpls.Parse(bytes), FromClip = clip, MadePlaylist = bytes
+                });
+            }
+            catch (InvalidDataException e)
+            {
+                analysis.Notes.Add($"{clip}.m2ts ({Format.Size(size)}) is not in any playlist, and its {clip}.clpi could not be read: {e.Message}");
+            }
+        }
     }
 
     private async Task ReadIsoAsync(DiscAnalysis analysis, CancellationToken cancellationToken)
@@ -142,7 +189,7 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
         try
         {
             var result = await reader.ExtractAsync(analysis.Source.Path, temp,
-                ["BDMV/PLAYLIST/*", "BDMV/META/DL/*"], cancellationToken);
+                ["BDMV/PLAYLIST/*", "BDMV/CLIPINF/*", "BDMV/META/DL/*"], cancellationToken);
             if (!result.Success)
             {
                 analysis.Error = $"7-Zip could not unpack the playlists: {result.LastLine}";
@@ -151,6 +198,7 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
 
             var bdmv = SourceFinder.DirIn(temp, "BDMV");
             ReadPlaylists(analysis, bdmv == null ? null : SourceFinder.DirIn(bdmv, "PLAYLIST"));
+            AddClipPlaylists(analysis, bdmv == null ? null : SourceFinder.DirIn(bdmv, "CLIPINF"));
             analysis.DiscTitle = bdmv == null ? null : ReadDiscTitle(bdmv);
         }
         finally

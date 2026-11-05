@@ -81,7 +81,16 @@
     <div class="alert alert-secondary py-2 small">@note</div>
 }
 
-@if (_analysis.HidesFilm || _analysis.ManyPlaylists || _analysis.Playlists.Any(p => p.TooLittleData))
+@if (_analysis.Playlists.Where(p => p.FromClip != null).ToList() is { Count: > 0 } madeFromClips)
+{
+    <div class="alert alert-info py-2 small">
+        No playlist on this disc plays @string.Join(", ", madeFromClips.Select(p => $"{p.FromClip}.m2ts ({Format.Size(p.Size)})")):
+        the disc's menu builds that playlist when it plays. Ripparr made one for each from the clip's CLIPINF file, with all its
+        streams and languages, listed as "Clip". It has no chapters: those are in the playlist the menu builds.
+    </div>
+}
+
+@if (_analysis.NeedsFinding)
 {
     <div class="alert alert-warning py-2 small">
         <div class="mb-1">
@@ -92,6 +101,21 @@
                     orders: this disc hides the real one among fakes.
                 </span>
             }
+            @if (_analysis.FilmMissing)
+            {
+                <span>
+                    The playlist taken as the film holds @Format.Size(_analysis.MainFeature!.Size) of this disc's @Format.Size(_analysis.ClipBytes):
+                    the real film's playlist is missing or hidden (some discs build it at play time in their Java menu).
+                    Ask MakeMKV: with Java it plays the menu and names it.
+                </span>
+            }
+            @if (_analysis.Playlists.Any(p => p.LengthLooksFaked))
+            {
+                <span>
+                    @_analysis.Playlists.Count(p => p.LengthLooksFaked) playlist(s) hold far more data than their length allows:
+                    their times are faked, so they are listed even though they claim to be short.
+                </span>
+            }
             @if (_analysis.Playlists.Any(p => p.TooLittleData))
             {
                 <span>
@@ -100,7 +124,7 @@
                 </span>
             }
         </div>
-        @if (_analysis.HidesFilm || _analysis.ManyPlaylists)
+        @if (_analysis.NeedsFinding)
         {
             <div class="d-flex flex-wrap align-items-center gap-2">
                 <button class="btn btn-sm btn-light border" disabled="@_finding" @onclick="CheckJoins"
@@ -172,7 +196,7 @@
                 var streams = playlist.Mpls.Streams;
                 <tr class="sv-clickable-row @(_selected == playlist ? "table-active" : "")" @onclick="() => Select(playlist)">
                     <td><input type="radio" class="form-check-input" checked="@(_selected == playlist)"/></td>
-                    <td class="fw-semibold">@playlist.Name</td>
+                    <td class="fw-semibold">@playlist.Label</td>
                     <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
                     <td class="text-end">@playlist.Mpls.Chapters.Count</td>
                     <td class="text-end" title="@string.Join(", ", playlist.Mpls.Clips)">@playlist.Mpls.Clips.Count</td>
@@ -194,6 +218,14 @@
                         @if (playlist.TooLittleData)
                         {
                             <span class="badge text-bg-danger" title="@($"{playlist.BitsPerSecond / 1_000_000:0.0} Mbit/s: a film runs at 10 or more. It loops tiny clips.")">Too little data</span>
+                        }
+                        @if (playlist.FromClip != null)
+                        {
+                            <span class="badge text-bg-info" title="@($"No playlist on the disc plays {playlist.FromClip}.m2ts (the disc's menu builds it at play time). Ripparr made one from {playlist.FromClip}.clpi: all its streams, no chapters.")">No playlist</span>
+                        }
+                        @if (playlist.LengthLooksFaked)
+                        {
+                            <span class="badge text-bg-warning" title="@($"{Format.Size(playlist.Size)} in a playlist that claims {playlist.Duration:h\\:mm\\:ss}: more than any Blu-ray can play. Its times are faked.")">Faked length</span>
                         }
                         @if (playlist.Lookalike && !playlist.MainFeature)
                         {
@@ -235,7 +267,7 @@
 @if (!_tv && _selected != null && _plan != null)
 {
     <div class="card mb-3">
-        <div class="card-header fw-semibold">New job: playlist @_selected.Name</div>
+        <div class="card-header fw-semibold">New job: @(_selected.FromClip == null ? $"playlist {_selected.Name}" : $"clip {_selected.FromClip}")</div>
         <div class="card-body">
             <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-6">
@@ -337,7 +369,7 @@
                 @if (_probing)
                 {
                     <span class="spinner-border spinner-border-sm text-secondary"></span>
-                    <span class="text-body-secondary">Reading the streams of playlist @_selected.Name…</span>
+                    <span class="text-body-secondary">Reading the streams of @(_selected.FromClip == null ? $"playlist {_selected.Name}" : $"clip {_selected.FromClip}")…</span>
                 }
                 else if (_probe is { Error: { } probeError })
                 {

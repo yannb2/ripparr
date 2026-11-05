@@ -187,9 +187,13 @@ public sealed class PlaylistFinder(IOptions<RipparrOptions> options, JobStore st
         }
 
         analysis.Classify(TimeSpan.FromSeconds(_options.MinPlaylistSeconds));
-        return analysis.MakeMkvNote = (analysis.Find(pick) is { MainFeature: true }
-            ? $"MakeMKV calls playlist {pick} the main feature: it is now the main feature."
-            : $"MakeMKV calls playlist {pick} the main feature, but Ripparr hides it (short, a duplicate, or too little data).") + noJava;
+        var found = analysis.Find(pick);
+        var note = found == null
+            ? $"MakeMKV calls playlist {pick} the main feature, but the disc has no {pick}.mpls file: the disc's menu builds it at play time, so Ripparr cannot demux it yet."
+            : found.MainFeature || analysis.Find(found.DuplicateOf ?? "") is { MainFeature: true }
+                ? $"MakeMKV calls playlist {pick} the main feature: it is now the main feature."
+                : $"MakeMKV calls playlist {pick} the main feature, but Ripparr could not take it.";
+        return analysis.MakeMkvNote = note + noJava;
     }
 
     /// <summary>True when a java command is on the PATH, where makemkvcon looks for one.</summary>

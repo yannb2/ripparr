@@ -70,7 +70,12 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         // ---- Prepare ----
         context.Step(JobSteps.Prepare);
         var discFolder = await PrepareAsync(context, source, playlist, prepare);
-        var mplsPath = DiscAnalyzer.PlaylistPath(discFolder, playlist.Name)
+        if (playlist.MadePlaylist != null)
+        {
+            discFolder = WriteMadePlaylist(context, discFolder, playlist);
+        }
+
+        var mplsPath = DiscAnalyzer.PlaylistPath(discFolder, playlist.FileName)
                        ?? throw new JobFailedException($"Playlist {playlist.Name}.mpls is missing after the prepare step.");
         var firstClip = DiscAnalyzer.ClipPath(discFolder, playlist.Mpls.Clips[0]);
         if (firstClip != null && EncryptionCheck.Check(firstClip) == Encryption.Encrypted)
@@ -557,7 +562,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             var path = settings.ToContainer(hostPath);
             context.Save();
             var folder = SourceFinder.BdmvParent(path);
-            if (folder != null && DiscAnalyzer.PlaylistPath(folder, playlist.Name) != null)
+            if (folder != null && DiscAnalyzer.HasPlaylist(folder, playlist))
             {
                 context.Log($"Mounted read-only at {path}: reading the disc there, nothing is copied.");
                 return folder;
@@ -607,6 +612,47 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         context.Save();
     }
 
+    /// <summary>
+    /// A clip no playlist on the disc plays: writes the playlist Ripparr made for it into the work
+    /// folder, next to links to the disc's STREAM and CLIPINF folders (DGDemux finds the clips from
+    /// the playlist's place), and reads the disc through there. The links only point at the disc:
+    /// deleting the work folder removes them, never the disc's files.
+    /// </summary>
+    private static string WriteMadePlaylist(JobContext context, string discFolder, PlaylistInfo playlist)
+    {
+        var folder = Path.Combine(context.WorkFolder, "playlist");
+        if (Directory.Exists(folder))
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+
+        var bdmv = Path.Combine(folder, "BDMV");
+        var disc = SourceFinder.DirIn(discFolder, "BDMV")
+                   ?? throw new JobFailedException($"No BDMV folder in {discFolder}.");
+        Directory.CreateDirectory(Path.Combine(bdmv, "PLAYLIST"));
+        foreach (var name in new[] { "STREAM", "CLIPINF" })
+        {
+            if (SourceFinder.DirIn(disc, name) is { } target)
+            {
+                Directory.CreateSymbolicLink(Path.Combine(bdmv, name), target);
+            }
+        }
+
+        foreach (var name in new[] { "index.bdmv", "MovieObject.bdmv" })
+        {
+            if (SourceFinder.FileIn(disc, name) is { } target)
+            {
+                File.CreateSymbolicLink(Path.Combine(bdmv, name), target);
+            }
+        }
+
+        var mpls = Path.Combine(bdmv, "PLAYLIST", playlist.FileName + ".mpls");
+        File.WriteAllBytes(mpls, playlist.MadePlaylist!);
+        context.Log($"The disc has no playlist for clip {playlist.FromClip}: wrote one made from {playlist.FromClip}.clpi " +
+                    $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, no chapters) to {mpls}.");
+        return folder;
+    }
+
     private static async Task<string> UnpackAsync(JobContext context, DiscSource source, PlaylistInfo playlist)
     {
         var tools = context.Options.Tools;
@@ -622,7 +668,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                     context.Progress(p);
                 }
             }, Long);
-        if (result.Success && DiscAnalyzer.PlaylistPath(context.DiscFolder, playlist.Name) != null)
+        if (result.Success && DiscAnalyzer.HasPlaylist(context.DiscFolder, playlist))
         {
             return context.DiscFolder;
         }
@@ -745,6 +791,14 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         }
 
         var mpls = Path.Combine(disc, "BDMV", "PLAYLIST", playlist.Name + ".mpls");
+        if (playlist.MadePlaylist != null)
+        {
+            mpls = Path.Combine(context.WorkFolder, "playlist", "BDMV", "PLAYLIST", playlist.FileName + ".mpls");
+            context.Log($"The disc has no playlist for clip {playlist.FromClip}: the job writes one made from {playlist.FromClip}.clpi " +
+                        $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, no chapters) to {mpls}, " +
+                        "with links to the disc's STREAM and CLIPINF folders.");
+        }
+
         context.Log("$ " + new ProcessSpec(tools.DgDemux,
             DgDemuxCommand.Arguments(context.Job.Profile, context.Options.DgDemuxArguments, mpls, Path.Combine(context.DemuxFolder, playlist.Name),
                 DgDemuxCommand.DemuxedPids(context.Job.Profile, context.Job.Plan))).CommandLine);
