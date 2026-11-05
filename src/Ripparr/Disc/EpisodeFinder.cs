@@ -14,7 +14,7 @@ public static class EpisodeFinder
 
     public static List<PlaylistInfo> Find(DiscAnalysis analysis)
     {
-        var pool = analysis.Playlists.Where(p => p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Duration >= Minimum).ToList();
+        var pool = analysis.Playlists.Where(p => p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Duration >= Minimum).ToList();
         List<PlaylistInfo> best = [];
         foreach (var playlist in pool)
         {
@@ -86,6 +86,6 @@ public static class EpisodeFinder
 
         var longest = episodes.Max(p => p.Duration);
         return longest < TimeSpan.FromMinutes(75) && !analysis.Playlists.Any(p =>
-            p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && !episodes.Contains(p) && p.Duration > longest * 1.5);
+            p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && !episodes.Contains(p) && p.Duration > longest * 1.5);
     }
 }

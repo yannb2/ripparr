@@ -8,8 +8,11 @@ using Ripparr.Profiles;
 
 namespace Ripparr.Jobs;
 
-/// <summary>A file DGDemux wrote, with what mediainfo read from it.</summary>
-public sealed record DemuxedFile(string Path, StreamFacts Facts)
+/// <summary>
+/// A file DGDemux wrote, with what mediainfo read from it; or, with <see cref="TrackId"/>, one
+/// track of an MKV (a DVD title MakeMKV ripped), which mkvmerge takes from that file.
+/// </summary>
+public sealed record DemuxedFile(string Path, StreamFacts Facts, int? TrackId = null)
 {
     public StreamKind Kind => Facts.Kind;
 
@@ -265,7 +268,7 @@ public static partial class MuxBuilder
             // A 2160p SDR film gets [SDR], as the rename-only custom format does in Radarr; below 4K, nothing.
             ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? TrackNaming.SdrOnlyAt2160p("SDR", video.Resolution) : range,
             ["audio"] = audioWords,
-            ["source"] = job.Profile.Source,
+            ["source"] = SourceWord(job),
             ["episode"] = job.EpisodeCode,
             ["absolute"] = job.AbsoluteEpisode is { } absolute ? EpisodeNumbers.Absolute(absolute) : null,
             ["episodetitle"] = job.EpisodeTitle,
@@ -273,6 +276,10 @@ public static partial class MuxBuilder
             ["releasegroup"] = ReleaseGroupWord(GlobalTag.Find(job.Tags, GlobalTag.ReleaseGroup))
         };
     }
+
+    /// <summary>The SOURCE tag and the file name's source word: the profile's, or its DVD one for a DVD (DVD Remux).</summary>
+    public static string SourceWord(Job job) =>
+        job.Dvd && !string.IsNullOrWhiteSpace(job.Profile.DvdSource) ? job.Profile.DvdSource.Trim() : job.Profile.Source;
 
     /// <summary>The release group as one word for a file name: Radarr stops reading it at a space.</summary>
     public static string? ReleaseGroupWord(string? group) =>
@@ -321,7 +328,7 @@ public static partial class MuxBuilder
             ("ABSOLUTE_EPISODE", job.AbsoluteEpisode?.ToString(CultureInfo.InvariantCulture)),
             ("RELEASE_NAME", job.SourceName),
             ("SOURCE_RELEASE_GROUP", string.IsNullOrWhiteSpace(job.SourceReleaseGroup) ? null : job.SourceReleaseGroup.Trim()),
-            ("SOURCE", job.Profile.Source),
+            ("SOURCE", SourceWord(job)),
             ("VIDEO_CODEC", video?.VideoCodec),
             ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr : null),
             ("DV_PROFILE", video is { DolbyVision: true } ? video.DolbyVisionProfile : null),
@@ -381,37 +388,52 @@ public static partial class MuxBuilder
         foreach (var track in outputs)
         {
             var planned = track.Planned;
-            arguments.AddRange(["--language", $"0:{planned.Language}"]);
-            arguments.AddRange(["--track-name", $"0:{track.Name}"]);
-            arguments.AddRange(["--default-track-flag", $"0:{(planned.Default ? "yes" : "no")}"]);
+            var id = track.File.TrackId ?? 0;
+            // One track of an MKV: only that one, and none of the file's chapters, tags or
+            // attachments (the job writes its own); its flags are set both ways, the MKV has some.
+            var fromMkv = track.File.TrackId != null;
+            if (fromMkv)
+            {
+                arguments.AddRange(planned.Kind switch
+                {
+                    StreamKind.Video => ["--video-tracks", $"{id}", "--no-audio", "--no-subtitles"],
+                    StreamKind.Audio => ["--audio-tracks", $"{id}", "--no-video", "--no-subtitles"],
+                    _ => ["--subtitle-tracks", $"{id}", "--no-video", "--no-audio"]
+                });
+                arguments.AddRange(["--no-chapters", "--no-global-tags", "--no-track-tags", "--no-attachments", "--no-buttons"]);
+            }
+
+            arguments.AddRange(["--language", $"{id}:{planned.Language}"]);
+            arguments.AddRange(["--track-name", $"{id}:{track.Name}"]);
+            arguments.AddRange(["--default-track-flag", $"{id}:{(planned.Default ? "yes" : "no")}"]);
             if (planned.Kind == StreamKind.Subtitle)
             {
-                arguments.AddRange(["--forced-display-flag", $"0:{(planned.Forced ? "yes" : "no")}"]);
+                arguments.AddRange(["--forced-display-flag", $"{id}:{(planned.Forced ? "yes" : "no")}"]);
             }
 
-            if (planned.Commentary)
+            if (planned.Commentary || fromMkv)
             {
-                arguments.AddRange(["--commentary-flag", "0:yes"]);
+                arguments.AddRange(["--commentary-flag", $"{id}:{(planned.Commentary ? "yes" : "no")}"]);
             }
 
-            if (planned.HearingImpaired)
+            if (planned.HearingImpaired || fromMkv)
             {
-                arguments.AddRange(["--hearing-impaired-flag", "0:yes"]);
+                arguments.AddRange(["--hearing-impaired-flag", $"{id}:{(planned.HearingImpaired ? "yes" : "no")}"]);
             }
 
-            if (planned.VisualImpaired)
+            if (planned.VisualImpaired || fromMkv)
             {
-                arguments.AddRange(["--visual-impaired-flag", "0:yes"]);
+                arguments.AddRange(["--visual-impaired-flag", $"{id}:{(planned.VisualImpaired ? "yes" : "no")}"]);
             }
 
             if (planned.Kind == StreamKind.Video && frameRate is { } rate)
             {
-                arguments.AddRange(["--default-duration", $"0:{rate.Numerator}/{rate.Denominator}p"]);
+                arguments.AddRange(["--default-duration", $"{id}:{rate.Numerator}/{rate.Denominator}p"]);
             }
 
             if (track.File.DelayMs is { } delay)
             {
-                arguments.AddRange(["--sync", $"0:{delay}"]);
+                arguments.AddRange(["--sync", $"{id}:{delay}"]);
             }
 
             arguments.Add(planned.Kind == StreamKind.Video && videoPath != null ? videoPath : track.File.Path);
@@ -419,7 +441,8 @@ public static partial class MuxBuilder
 
         if (outputs.Count > 1)
         {
-            arguments.AddRange(["--track-order", string.Join(',', outputs.Select((_, i) => $"{i}:0"))]);
+            arguments.AddRange(["--track-order", string.Join(',', outputs.Select((o, i) =>
+                $"{i}:{(o.Planned.Kind == StreamKind.Video && videoPath != null ? 0 : o.File.TrackId ?? 0)}"))]);
         }
 
         return arguments;

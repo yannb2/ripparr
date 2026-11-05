@@ -117,6 +117,15 @@ public sealed class EpisodeRow
     public bool Watch { get; set; }
     public bool Tracks { get; set; }
 
+    /// <summary>A DVD title: the "split by chapters" panel is open.</summary>
+    public bool Split { get; set; }
+
+    /// <summary>How many episodes the title holds, as typed in the split panel.</summary>
+    public int? SplitEpisodes { get; set; }
+
+    /// <summary>The chapters the episodes start at, as typed ("1, 7, 13").</summary>
+    public string SplitStarts { get; set; } = "";
+
     /// <summary>The tracks, once opened: kept as edited (Reset goes back to the profile).</summary>
     public TrackPlan? Plan { get; set; }
 

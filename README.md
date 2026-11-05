@@ -1,7 +1,7 @@
 # Ripparr
 
-Turns a Blu-ray or UHD Blu-ray backup (an ISO file or a BDMV folder, on scratch or on a USB drive) into one
-finished MKV, named and tagged the way the library expects, ready for Radarr (or Sonarr, for TV discs) to import.
+Turns a Blu-ray, UHD Blu-ray or DVD backup (an ISO file, a BDMV folder or a VIDEO_TS folder, on scratch or on
+a USB drive) into one finished MKV, named and tagged the way the library expects, ready for Radarr (or Sonarr, for TV discs) to import.
 
 MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix builds the MKV, and MediaInfo
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
@@ -249,6 +249,34 @@ episode templates (`{episode}`, `{absolute}`, `{episodetitle}`). The tags add `T
 Episodes cut out of one big clip (common on TV discs) are told apart by their in and out times, and the "play
 all" playlist that plays the whole clip is flagged. The **Extras** card works on TV discs too: the extras go to
 the series folder, or to the season's folder (`Season 01/extras/`). Sonarr skips the same folder names.
+
+## DVDs
+
+DVD ISOs and VIDEO_TS folders show up on the Sources page with a **DVD** badge. Ripparr reads the disc's IFO
+files itself (from the ISO with 7-Zip, only the small IFO files): each **title** is listed like a Blu-ray
+playlist, with its length, chapters, cells (shared cells mark a "play all" or a duplicate, like shared clips),
+video, audio and subtitle streams, and the flags the disc sets (commentary, audio description, forced,
+closed captions). The disc title is the ISO's volume label (`LONG_SHOW_S01_D2`), and a label naming a
+season fills in the series and season on the TV episodes card.
+
+A job asks MakeMKV for the title (DGDemux reads Blu-rays only), matching MakeMKV's title to the DVD's by
+length and chapters, and rips it to `work/dvd-…-titleNN/` once: the episodes and extras cut from the same
+title share that rip, and it is deleted when the last job that needs it is done. Then the usual steps run on
+it: the track choices, names, flags and order from the profile and the Tracks table, the tags, the checks.
+DVD subtitles stay VobSub (pictures, like PGS), with no subtitle preview or OCR yet; Pictures, Watch and
+Listen are not offered for DVDs.
+
+**TV DVDs** come two ways. When each episode is its own title, the TV episodes card works as for a Blu-ray.
+When one long title plays all the episodes in a row (the episodes being its chapters), the card says so
+("Title 1 (1:06:56, 12 chapters) looks like 3 episodes") and **Split it into 3 episodes by chapters** cuts it:
+the **Split** button on the title's row sets how many episodes and which chapter each one starts at (**Even**
+picks the chapters nearest to even lengths; the chapter buttons show each chapter's length). Each part
+("Title 1, ch. 5-8") is then an episode row with its own number, title and Tracks; its job rips the whole
+title once and cuts the part out with mkvmerge, chapters kept.
+
+The source word in the file name is **`[DVD Remux]`** (the profile's "Source word for DVDs"), with a space:
+Radarr and Sonarr both read "DVD Remux" as a DVD source, but not "DVDRemux" or "DVD-Remux", which they take
+for an unknown or TV source. The resolution comes from the video (`480i`, `576i`).
 
 ## Add to Radarr / Sonarr
 

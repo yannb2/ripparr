@@ -7,13 +7,16 @@ public enum SourceKind
     /// <summary>A disc image (.iso).</summary>
     Iso,
 
-    /// <summary>A folder holding BDMV (a decrypted backup, or a copied disc).</summary>
+    /// <summary>A folder holding BDMV (a decrypted backup, or a copied disc), or VIDEO_TS (a DVD).</summary>
     Folder
 }
 
-/// <summary>Something a job can start from: an ISO file or a folder with a BDMV folder in it.</summary>
+/// <summary>Something a job can start from: an ISO file or a folder with a BDMV or VIDEO_TS folder in it.</summary>
 public sealed record DiscSource(string Path, SourceKind Kind, string Root, long Size, DateTime Modified)
 {
+    /// <summary>A DVD folder (VIDEO_TS). An ISO says what it holds only once read: see <see cref="DiscAnalysis.IsDvd"/>.</summary>
+    public bool Dvd { get; init; }
+
     /// <summary>The file or folder name, without .iso: usually the release name.</summary>
     public string Name => Kind == SourceKind.Iso
         ? System.IO.Path.GetFileNameWithoutExtension(Path)
@@ -23,7 +26,7 @@ public sealed record DiscSource(string Path, SourceKind Kind, string Root, long 
     public string RelativePath => System.IO.Path.GetRelativePath(Root, Path);
 }
 
-/// <summary>Finds ISO files and BDMV folders under the source roots.</summary>
+/// <summary>Finds ISO files, BDMV folders and DVD (VIDEO_TS) folders under the source roots.</summary>
 public static class SourceFinder
 {
     public const int MaxDepth = 5;
@@ -56,6 +59,22 @@ public static class SourceFinder
         var bdmv = DirIn(folder, "BDMV");
         return bdmv != null && FileIn(bdmv, "index.bdmv") != null ? folder : null;
     }
+
+    /// <summary>The folder that holds VIDEO_TS/VIDEO_TS.IFO (a DVD): itself, or its parent when it is the VIDEO_TS folder.</summary>
+    public static string? VideoTsParent(string folder)
+    {
+        if (string.Equals(System.IO.Path.GetFileName(folder.TrimEnd('/')), "VIDEO_TS", StringComparison.OrdinalIgnoreCase)
+            && FileIn(folder, "VIDEO_TS.IFO") != null)
+        {
+            return System.IO.Path.GetDirectoryName(folder.TrimEnd('/'));
+        }
+
+        var videoTs = DirIn(folder, "VIDEO_TS");
+        return videoTs != null && FileIn(videoTs, "VIDEO_TS.IFO") != null ? folder : null;
+    }
+
+    /// <summary>A disc folder, BDMV or VIDEO_TS, that holds this folder or is it.</summary>
+    public static string? DiscParent(string folder) => BdmvParent(folder) ?? VideoTsParent(folder);
 
     /// <summary>A child folder by name, ignoring case (discs copied from Windows may say "bdmv").</summary>
     public static string? DirIn(string folder, string name)
@@ -95,6 +114,13 @@ public static class SourceFinder
         if (parent != null)
         {
             found.Add(FolderSource(root, parent));
+            return;
+        }
+
+        var dvd = VideoTsParent(folder);
+        if (dvd != null)
+        {
+            found.Add(DvdSource(root, dvd));
             return;
         }
 
@@ -149,6 +175,22 @@ public static class SourceFinder
         }
 
         return new DiscSource(folder, SourceKind.Folder, root, size, modified);
+    }
+
+    private static DiscSource DvdSource(string root, string folder)
+    {
+        long size = 0;
+        var modified = Directory.GetLastWriteTimeUtc(folder);
+        foreach (var file in new DirectoryInfo(DirIn(folder, "VIDEO_TS")!).EnumerateFiles())
+        {
+            size += file.Length;
+            if (file.LastWriteTimeUtc > modified)
+            {
+                modified = file.LastWriteTimeUtc;
+            }
+        }
+
+        return new DiscSource(folder, SourceKind.Folder, root, size, modified) { Dvd = true };
     }
 
     private static string Normalize(string path) => System.IO.Path.GetFullPath(path).TrimEnd('/');

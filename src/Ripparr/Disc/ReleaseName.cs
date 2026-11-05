@@ -39,7 +39,8 @@ public static partial class ReleaseName
 
     /// <summary>
     /// Series and season from a TV disc's own title (BDMV/META): "Doctor Who - Season 1 - Disc 1" ->
-    /// (Doctor Who, 1); "Sherlock: Series 2" -> (Sherlock, 2). Null when it names no season.
+    /// (Doctor Who, 1); "Sherlock: Series 2" -> (Sherlock, 2); a DVD's volume label DOCTOR_WHO_S1_D1 ->
+    /// (Doctor Who, 1). Null when it names no season.
     /// </summary>
     public static (string Series, int Season)? Season(string? discTitle)
     {
@@ -51,7 +52,16 @@ public static partial class ReleaseName
         var match = SeasonRegex().Match(discTitle);
         if (!match.Success)
         {
-            return null;
+            // A DVD's volume label: DOCTOR_WHO_S1_D1, FRIENDS_SEASON_2_DISC_3, The.Show.S01D2.
+            var label = SeparatorRegex().Replace(discTitle, " ").Trim();
+            match = SeasonRegex().Match(label) is { Success: true } words ? words : ShortSeasonRegex().Match(label);
+            if (!match.Success)
+            {
+                return null;
+            }
+
+            var named = Tidy(match.Groups[1].Value.Trim(' ', '-', ':', ',', '–'));
+            return named.Length == 0 ? null : (named, int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture));
         }
 
         var series = match.Groups[1].Value.Trim(' ', '-', ':', ',', '–');
@@ -83,6 +93,9 @@ public static partial class ReleaseName
 
     [GeneratedRegex(@"^(.*?)[\s\-:,–]+(?:Season|Series|Saison|Staffel)\s*(\d{1,2})\b", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonRegex();
+
+    [GeneratedRegex(@"^(.+?)\s+S(\d{1,2})(?:\s*D(?:isc)?\s*\d{1,2})?$", RegexOptions.IgnoreCase)]
+    private static partial Regex ShortSeasonRegex();
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex SpacesRegex();

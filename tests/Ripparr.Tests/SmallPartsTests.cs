@@ -57,6 +57,12 @@ public class SmallPartsTests
         Assert.AreEqual(("Kaamelott", 3), ReleaseName.Season("Kaamelott Saison 3"));
         Assert.IsNull(ReleaseName.Season("The Fabelmans"));
         Assert.IsNull(ReleaseName.Season("Season 1"));
+        // DVD volume labels.
+        Assert.AreEqual(("Doctor Who", 1), ReleaseName.Season("DOCTOR_WHO_S1_D1"));
+        Assert.AreEqual(("Long Show", 1), ReleaseName.Season("LONG_SHOW_S01_D2"));
+        Assert.AreEqual(("Friends", 2), ReleaseName.Season("FRIENDS_SEASON_2_DISC_3"));
+        Assert.AreEqual(("The Wire", 3), ReleaseName.Season("The.Wire.S03D1"));
+        Assert.IsNull(ReleaseName.Season("STAR_WARS_EPISODE_4"));
         Assert.IsNull(ReleaseName.Season(null));
     }
 

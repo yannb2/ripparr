@@ -47,6 +47,12 @@ public sealed class Job
     public string SourceName { get; set; } = "";
     public string Playlist { get; set; } = "";
 
+    /// <summary>
+    /// The source is a DVD: <see cref="Playlist"/> is a title ("title03") or chapters of one
+    /// ("title01-c07-12"), MakeMKV rips it, and the file name and SOURCE tag take the profile's DVD word.
+    /// </summary>
+    public bool Dvd { get; set; }
+
     public string Title { get; set; } = "";
     public int? Year { get; set; }
     public string? Edition { get; set; }
@@ -197,6 +203,7 @@ public sealed class Job
             SourceKind = copy.SourceKind,
             SourceName = copy.SourceName,
             Playlist = copy.Playlist,
+            Dvd = copy.Dvd,
             Title = copy.Title,
             Year = copy.Year,
             Edition = copy.Edition,
