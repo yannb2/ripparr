@@ -1,0 +1,113 @@
+@* Add a film to Radarr or a series to Sonarr: root folder and quality profile, unmonitored, no search. *@
+@inject JobStore Store
+
+<div class="border rounded p-2 my-1 bg-body-tertiary small">
+    @if (_loading)
+    {
+        <span class="spinner-border spinner-border-sm me-1"></span><span>Asking @App for its root folders and quality profiles…</span>
+    }
+    else if (_error != null && _roots.Count == 0)
+    {
+        <div class="text-danger">@_error</div>
+    }
+    else
+    {
+        <div class="d-flex flex-wrap align-items-end gap-2">
+            <div>
+                <label class="form-label small mb-1">Root folder</label>
+                <select class="form-select form-select-sm" @bind="_root">
+                    @foreach (var root in _roots)
+                    {
+                        <option value="@root.Path">@root.Path@(root.FreeSpace is { } free ? $" ({Format.Size(free)} free)" : "")</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="form-label small mb-1">Quality profile</label>
+                <select class="form-select form-select-sm" @bind="_profile">
+                    @foreach (var profile in _profiles)
+                    {
+                        <option value="@profile.Id">@profile.Name</option>
+                    }
+                </select>
+            </div>
+            @if (AskAnime)
+            {
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" id="addAnime" @bind="_anime"/>
+                    <label class="form-check-label" for="addAnime" title="Sonarr's Anime series type: absolute numbers">Anime type</label>
+                </div>
+            }
+            <button class="btn btn-sm btn-primary" disabled="@(_adding || _root.Length == 0 || _profile == 0)" @onclick="Add">
+                @if (_adding)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                <i class="bi bi-plus-lg"></i> Add to @App
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Cancel">Cancel</button>
+        </div>
+        <div class="form-text">
+            Added unmonitored, with no search: @App only learns about it@(AskAnime ? " (and has its episode titles)" : "") and takes the manual import later.
+        </div>
+        @if (_error != null)
+        {
+            <div class="text-danger mt-1">@_error</div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>"Radarr" or "Sonarr".</summary>
+    [Parameter, EditorRequired] public string App { get; set; } = "";
+
+    [Parameter, EditorRequired] public Func<CancellationToken, Task<(List<RootFolder> Roots, List<QualityProfile> Profiles, string? Error)>> LoadOptions { get; set; } = null!;
+
+    /// <summary>Adds it with the root folder, quality profile and anime switch; the error, or null.</summary>
+    [Parameter, EditorRequired] public Func<string, int, bool, Task<string?>> AddIt { get; set; } = null!;
+
+    /// <summary>Genres say animation: the animated (or anime) root folder comes first.</summary>
+    [Parameter] public bool Animation { get; set; }
+
+    /// <summary>Japanese animation: the anime root folder (and Sonarr's Anime type).</summary>
+    [Parameter] public bool Anime { get; set; }
+
+    /// <summary>Sonarr: show the Anime type switch.</summary>
+    [Parameter] public bool AskAnime { get; set; }
+
+    [Parameter] public EventCallback Cancelled { get; set; }
+
+    private List<RootFolder> _roots = [];
+    private List<QualityProfile> _profiles = [];
+    private string _root = "";
+    private int _profile;
+    private bool _anime;
+    private bool _loading = true;
+    private bool _adding;
+    private string? _error;
+
+    private string ProfileKey => $"{App.ToLowerInvariant()}.add.profile";
+
+    protected override async Task OnInitializedAsync()
+    {
+        (_roots, _profiles, _error) = await LoadOptions(CancellationToken.None);
+        _root = ArrAdd.GuessRoot(_roots, Animation, Anime) ?? "";
+        _anime = Anime && _root.TrimEnd('/').EndsWith("/anime", StringComparison.OrdinalIgnoreCase);
+        // The profile picked last time, else the first.
+        _profile = int.TryParse(Store.Setting(ProfileKey), out var last) && _profiles.Any(p => p.Id == last)
+            ? last
+            : _profiles.FirstOrDefault()?.Id ?? 0;
+        _loading = false;
+    }
+
+    private async Task Add()
+    {
+        _adding = true;
+        _error = null;
+        Store.SetSetting(ProfileKey, _profile.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        _error = await AddIt(_root, _profile, _anime);
+        _adding = false;
+    }
+
+    private Task Cancel() => Cancelled.InvokeAsync();
+}

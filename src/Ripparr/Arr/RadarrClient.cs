@@ -1,10 +1,17 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Ripparr.Media;
 using Ripparr.Options;
 
 namespace Ripparr.Arr;
 
-public sealed record MovieMatch(string Title, int Year, int TmdbId, string? ImdbId, string? OriginalLanguage, string? LibraryPath);
+public sealed record MovieMatch(string Title, int Year, int TmdbId, string? ImdbId, string? OriginalLanguage, string? LibraryPath)
+{
+    /// <summary>TMDb's genres ("Animation"): pick the root folder when adding it to Radarr.</summary>
+    public IReadOnlyList<string> Genres { get; init; } = [];
+
+    public bool Animation => Genres.Contains("Animation");
+}
 
 /// <summary>Looks up a film in Radarr: the title, year, IDs and original language for names and tags.</summary>
 public sealed class RadarrClient(LiveSettings settings, ILogger<RadarrClient> logger)
@@ -42,6 +49,30 @@ public sealed class RadarrClient(LiveSettings settings, ILogger<RadarrClient> lo
         }
     }
 
+    public Task<(List<RootFolder> Roots, List<QualityProfile> Profiles, string? Error)> AddOptionsAsync(CancellationToken cancellationToken) =>
+        ArrAdd.OptionsAsync(Http, Radarr, "Radarr", cancellationToken);
+
+    /// <summary>Adds the film to Radarr, unmonitored and with no search: it takes the manual import later.</summary>
+    public async Task<(MovieMatch? Added, string? Error)> AddAsync(MovieMatch match, string rootFolder, int qualityProfile,
+        CancellationToken cancellationToken)
+    {
+        var (added, error) = await ArrAdd.AddAsync(Http, Radarr, "Radarr", $"movie/lookup?term=tmdb:{match.TmdbId}", "movie", item =>
+        {
+            item["qualityProfileId"] = qualityProfile;
+            item["rootFolderPath"] = rootFolder;
+            item["monitored"] = false;
+            item["minimumAvailability"] = "released";
+            item["addOptions"] = new JsonObject { ["searchForMovie"] = false, ["monitor"] = "none" };
+        }, cancellationToken);
+        if (added == null)
+        {
+            return (null, error);
+        }
+
+        logger.LogInformation("Added {Title} to Radarr in {Root}", match.Title, rootFolder);
+        return (Parse($"[{added.ToJsonString()}]").FirstOrDefault(), null);
+    }
+
     /// <summary>Reads Radarr's movie lookup answer. A film already in Radarr has an id and a path.</summary>
     public static List<MovieMatch> Parse(string json)
     {
@@ -70,7 +101,12 @@ public sealed class RadarrClient(LiveSettings settings, ILogger<RadarrClient> lo
                 language,
                 movie.TryGetProperty("path", out var path) && movie.TryGetProperty("id", out var movieId) && movieId.GetInt32() > 0
                     ? path.GetString()
-                    : null));
+                    : null)
+            {
+                Genres = movie.TryGetProperty("genres", out var genres) && genres.ValueKind == JsonValueKind.Array
+                    ? genres.EnumerateArray().Where(g => g.ValueKind == JsonValueKind.String).Select(g => g.GetString()!).ToList()
+                    : []
+            });
         }
 
         return list;

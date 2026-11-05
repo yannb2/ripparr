@@ -224,6 +224,15 @@ Episodes cut out of one big clip (common on TV discs) are told apart by their in
 all" playlist that plays the whole clip is flagged. The **Extras** card works on TV discs too: the extras go to
 the series folder, or to the season's folder (`Season 01/extras/`). Sonarr skips the same folder names.
 
+## Add to Radarr / Sonarr
+
+A film or series that Radarr or Sonarr does not have yet gets an **Add to Radarr** / **Add to Sonarr** button in
+the lookup list. Pick the root folder (the category folder that fits is chosen first: `anime` for Japanese
+animation, `animated` for other animation, else `live-action`) and the quality profile (the last one picked is
+remembered); Sonarr also gets the Anime series type switch. It is added **unmonitored, with no search**: the arr
+only learns about it, so Sonarr has the episode titles (Ripparr waits a few seconds for them) and both take the
+manual import of the finished MKV later.
+
 ## Queue and History
 
 The queue shows what is waiting, running, or needs a look (failed, interrupted, waiting for an answer). Every
