@@ -2,6 +2,8 @@
 @inject JobEvents Events
 @inject JobStore Store
 @inject IJSRuntime JS
+@inject DiscDrafts Drafts
+@inject NavigationManager Navigation
 
 <nav class="sv-sidebar @(_collapsed ? "collapsed" : "") @(MobileOpen ? "sv-mobile-open" : "")">
     <div class="sv-sidebar-header d-none d-md-flex">
@@ -19,6 +21,21 @@
                     <span>Sources</span>
                 </NavLink>
             </li>
+            @foreach (var (path, name) in _open)
+            {
+                <li class="nav-item d-flex align-items-center sv-open-disc" title="@path">
+                    <NavLink class="nav-link py-1 small flex-grow-1 text-truncate" href="@($"disc?Path={Uri.EscapeDataString(path)}")" Match="NavLinkMatch.All" @onclick="Close">
+                        <i class="bi bi-disc-fill" style="font-size: .8rem"></i>
+                        <span class="text-truncate">@name</span>
+                    </NavLink>
+                    @if (!_collapsed)
+                    {
+                        <button class="btn btn-link btn-sm text-secondary p-0 me-2" title="Take off this list (forgets what was typed on it)" @onclick="() => Forget(path)">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    }
+                </li>
+            }
             <li class="nav-item">
                 <NavLink class="nav-link" href="queue" @onclick="Close">
                     <i class="bi bi-list-task"></i>
@@ -92,10 +109,32 @@
     private int _active;
     private DateTime _lastCount = DateTime.MinValue;
 
+    private List<(string Path, string Name)> _open = [];
+
     protected override void OnInitialized()
     {
         Count();
+        _open = Drafts.Recent();
         Events.Changed += OnJobChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    // The discs being worked on: a disc page opened (or left) changes the list.
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+        InvokeAsync(() =>
+        {
+            _open = Drafts.Recent();
+            StateHasChanged();
+        });
+
+    private void Forget(string path)
+    {
+        Drafts.Forget(path);
+        _open = Drafts.Recent();
+        if (Navigation.Uri.Contains(Uri.EscapeDataString(path), StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo("");
+        }
     }
 
     private void Count()
@@ -138,5 +177,9 @@
         }
     }
 
-    public void Dispose() => Events.Changed -= OnJobChanged;
+    public void Dispose()
+    {
+        Events.Changed -= OnJobChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
 }

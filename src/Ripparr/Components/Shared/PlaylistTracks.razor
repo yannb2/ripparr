@@ -144,10 +144,7 @@
     {
         if (State.Plan != Plan)
         {
-            // A new plan (first open, or Reset): the flags as the profile set them are "the app's".
-            State.Plan = Plan;
-            State.FlaggedVersion = -1;
-            State.Auto = Plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle).ToDictionary(t => t.Pid, t => (t.HearingImpaired, t.Commentary));
+            SubtitleFlags.Reset(Plan, State);
         }
 
         // A read started earlier (or still running) for this playlist.
@@ -217,43 +214,11 @@
         }), null, 1000, 1000);
     }
 
-    /// <summary>
-    /// The caption counts on the subtitle tracks, and the SDH (when the profile detects SDH) and
-    /// commentary flags the read found, once per read; a flag changed by hand stays as you left it.
-    /// The same rules as the film's form.
-    /// </summary>
     private void ApplySubtitles()
     {
-        if (_subtitles is not { Running: false, Error: null })
+        if (_subtitles != null)
         {
-            return;
-        }
-
-        var flag = State.FlaggedVersion != _subtitles.GuessVersion;
-        var both = flag && State.FlaggedVersion >= 0 && _subtitles.FullText;
-        State.FlaggedVersion = _subtitles.GuessVersion;
-        foreach (var track in Plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle))
-        {
-            var auto = State.Auto.GetValueOrDefault(track.Pid, (Sdh: track.HearingImpaired, Commentary: track.Commentary));
-            var sdhByHand = track.HearingImpaired != auto.Sdh;
-            var commentaryByHand = track.Commentary != auto.Commentary;
-            if (_subtitles.Tracks.TryGetValue(track.Pid, out var read))
-            {
-                track.Details = _subtitles.Quick
-                    ? $"{read.Captions:N0} elements in the sample"
-                    : $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
-                if (flag && DetectSdh && (read.Sdh || both) && !sdhByHand)
-                {
-                    track.HearingImpaired = read.Sdh;
-                }
-
-                if (flag && (read.Commentary || both) && !commentaryByHand)
-                {
-                    track.Commentary = read.Commentary;
-                }
-            }
-
-            State.Auto[track.Pid] = (sdhByHand ? auto.Sdh : track.HearingImpaired, commentaryByHand ? auto.Commentary : track.Commentary);
+            SubtitleFlags.Apply(Plan, State, _subtitles, DetectSdh);
         }
     }
 

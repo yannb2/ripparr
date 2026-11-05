@@ -50,7 +50,7 @@
     </span>
 </div>
 <div class="small text-body-secondary mb-3">
-    <span class="sv-file-name">@_job.SourceName</span> · playlist @_job.Playlist · profile @_job.Profile.Name
+    <a class="sv-file-name" href="@($"disc?Path={Uri.EscapeDataString(_job.SourcePath)}")" title="Back to this disc's page">@_job.SourceName</a> · playlist @_job.Playlist · profile @_job.Profile.Name
     · queued @Format.LocalDate(_job.Created)@(_job.Elapsed is { } e ? $" · {Format.Duration(e)}" : "")
 </div>
 

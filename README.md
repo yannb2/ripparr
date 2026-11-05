@@ -214,7 +214,14 @@ tracks you don't want, change a language, a flag, a description or the order, Li
 **Reset to the profile** starts over. Episodes never opened get the profile's picks. The table has the film's
 subtitle tools too: **Check SDH and commentary** (a sample, seconds), **Preview subtitles** (the whole episode:
 exact and forced caption counts, previews, Side by side) and then **Read subtitles** (every caption through
-Tesseract); what they find ticks SDH (when the profile detects it) and Commentary the same way as for a film. The **Extras** card has the
+Tesseract); what they find ticks SDH (when the profile detects it) and Commentary the same way as for a film.
+**Check SDH and commentary on all ticked episodes** (next to Queue; the Extras card has the same for extras)
+runs the quick check on each ticked episode in turn and ticks the flags on each one's tracks.
+
+Everything typed and ticked on a disc's page (the film's form, the episodes card with its titles and tracks,
+the extras) stays while the app runs: the discs being worked on are listed under **Sources** in the sidebar
+(× takes one off the list and forgets it), and the disc name on the Queue, History and job pages leads back
+to its page. The **Extras** card has the
 same Tracks button on each row (with **Same for all extras**).
 
 Each episode is its own job and goes to `done/Series (Year)/Season 01/` (season 0 to `Specials`) as

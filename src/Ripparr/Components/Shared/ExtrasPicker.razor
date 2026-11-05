@@ -145,6 +145,8 @@
                         <i class="bi bi-play-fill"></i> Queue @SelectedCount extra@(SelectedCount == 1 ? "" : "s")
                     </button>
                     <button class="btn btn-outline-secondary btn-sm" disabled="@(SelectedCount == 0)" @onclick="() => Queue(true)">Dry run</button>
+                    <BulkSubtitleCheck Source="Source" Analysis="Analysis" DetectSdh="@(ExtrasProfile?.DetectSdh == true)" What="extras" Changed="StateHasChanged"
+                                       Items="() => Selected.Select(x => (x.Playlist, PlanFor(x.Playlist), x.Row.Subtitles)).ToList()"/>
                     @if (SelectedCount > 0)
                     {
                         <span class="small text-body-secondary">

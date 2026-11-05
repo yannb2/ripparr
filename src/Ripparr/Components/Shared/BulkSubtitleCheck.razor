@@ -1,0 +1,85 @@
+@* "Check SDH and commentary" on every ticked episode or extra at once: one quick read each, in turn,
+   each put on its playlist's plan as it ends. *@
+@implements IDisposable
+@inject SubtitleScanner Scanner
+
+@if (Items().Any(i => HasPgs(i.Playlist)))
+{
+    <span class="d-inline-flex flex-wrap align-items-center gap-2 small">
+        @if (_running.Count > 0)
+        {
+            <span class="spinner-border spinner-border-sm text-secondary"></span>
+            <span class="text-body-secondary">Checking subtitles: @_running.Count(r => !r.Scan.Running) of @_running.Count done…</span>
+        }
+        else
+        {
+            <button class="btn btn-sm btn-outline-secondary" @onclick="Start"
+                    title="Reads a sample of each ticked @(What)'s subtitles, one after the other, and ticks SDH and Commentary where the text says so (open Tracks to see)">
+                <i class="bi bi-search"></i> Check SDH and commentary on all ticked @What
+            </button>
+            @if (_note != null)
+            {
+                <span class="text-body-secondary">@_note</span>
+            }
+        }
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
+    [Parameter, EditorRequired] public DiscAnalysis Analysis { get; set; } = null!;
+
+    /// <summary>The ticked playlists with their plans (built from the profile if never opened) and read states.</summary>
+    [Parameter, EditorRequired] public Func<List<(PlaylistInfo Playlist, TrackPlan Plan, PlaylistTracksState State)>> Items { get; set; } = null!;
+
+    [Parameter] public bool DetectSdh { get; set; }
+
+    /// <summary>"episodes" or "extras".</summary>
+    [Parameter] public string What { get; set; } = "episodes";
+
+    /// <summary>Redraws the card when a read lands on a plan.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private List<(TrackPlan Plan, PlaylistTracksState State, SubtitleScan Scan)> _running = [];
+    private Timer? _timer;
+    private string? _note;
+
+    private static bool HasPgs(PlaylistInfo playlist) =>
+        playlist.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle && s.Coding == 0x90);
+
+    private void Start()
+    {
+        _note = null;
+        _running = Items().Where(i => HasPgs(i.Playlist))
+            .Select(i => (i.Plan, i.State, Scanner.Start(Source, Analysis, i.Playlist, quick: true)))
+            .ToList();
+        _timer?.Dispose();
+        _timer = new Timer(_ => InvokeAsync(Tick), null, 1000, 1000);
+    }
+
+    private async Task Tick()
+    {
+        if (_running.Any(r => r.Scan.Running))
+        {
+            StateHasChanged();
+            return;
+        }
+
+        _timer?.Dispose();
+        _timer = null;
+        foreach (var (plan, state, scan) in _running)
+        {
+            SubtitleFlags.Apply(plan, state, scan, DetectSdh);
+        }
+
+        var sdh = _running.Count(r => r.Scan.Error == null && r.Scan.Tracks.Values.Any(t => t.Sdh));
+        var commentary = _running.Count(r => r.Scan.Error == null && r.Scan.Tracks.Values.Any(t => t.Commentary));
+        var failed = _running.Count(r => r.Scan.Error != null);
+        _note = $"Checked {_running.Count - failed} {What}: SDH found in {sdh}{(DetectSdh ? "" : " (the profile does not tick SDH by itself)")}, commentary in {commentary}"
+                + (failed > 0 ? $"; {failed} could not be read" : "") + ".";
+        _running = [];
+        await Changed.InvokeAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
