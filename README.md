@@ -5,7 +5,7 @@ a USB drive) into one finished MKV, named and tagged the way the library expects
 
 MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix builds the MKV, and MediaInfo
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
-[Specarr](https://github.com/yannb2/Specarr), with the same look as the [Muxarr fork](https://github.com/yannb2/muxarr).
+[Specarr](https://github.com/yannb2/Specarr), with the same look as [Remuxarr](https://github.com/yannb2/remuxarr).
 
 The **Sources** page lists every ISO and BDMV folder it finds, newest first. A BDMV folder counts when it has
 `index.bdmv`, or only `BACKUP/index.bdmv`, or just a `PLAYLIST` folder with playlists (many released folders
