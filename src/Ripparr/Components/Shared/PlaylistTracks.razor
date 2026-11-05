@@ -25,7 +25,8 @@
         <div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>@_note</div>
     }
 
-    @if (Playlist.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle))
+    @* The subtitle checks read Blu-ray picture subtitles (PGS); a DVD's (VobSub) go in as they are. *@
+    @if (Playlist.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle && s.Coding == StreamCoding.Pgs))
     {
         <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
             @if (_subtitles is { Running: true } running)

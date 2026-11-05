@@ -41,7 +41,7 @@ public static class SourceSort
     {
         var ordered = column switch
         {
-            Kind => By(sources, s => KindLabel(s.Kind), descending, StringComparer.OrdinalIgnoreCase),
+            Kind => By(sources, KindLabel, descending, StringComparer.OrdinalIgnoreCase),
             Size => By(sources, s => s.Size, descending, Comparer<long>.Default),
             Changed => By(sources, s => s.Modified, descending, Comparer<DateTime>.Default),
             Where => By(sources, WhereText, descending, StringComparer.OrdinalIgnoreCase),
@@ -55,6 +55,9 @@ public static class SourceSort
         $"{source.Root}/{Path.GetDirectoryName(source.RelativePath)}";
 
     public static string KindLabel(SourceKind kind) => kind == SourceKind.Iso ? "ISO" : "BDMV";
+
+    /// <summary>ISO, BDMV or DVD (a VIDEO_TS folder), as the Kind column shows it.</summary>
+    public static string KindLabel(DiscSource source) => source.Kind == SourceKind.Folder && source.Dvd ? "DVD" : KindLabel(source.Kind);
 
     private static IOrderedEnumerable<DiscSource> By<T>(IEnumerable<DiscSource> sources, Func<DiscSource, T> key,
         bool descending, IComparer<T> comparer) =>

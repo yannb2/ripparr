@@ -170,7 +170,12 @@ public static class TrackPlanner
             Details = StreamCoding.Details(s, playlist.HasDolbyVisionEnhancementLayer),
             DiscLanguage = s.Language,
             Language = s.Language ?? "und",
-            DolbyVisionLayer = s.DolbyVisionEnhancementLayer
+            DolbyVisionLayer = s.DolbyVisionEnhancementLayer,
+            // What a DVD says about its streams (its IFO's code extension).
+            Commentary = s.Commentary,
+            VisualImpaired = s.VisuallyImpaired,
+            Forced = s.Forced,
+            HearingImpaired = s.HearingImpaired
         }).Where(t => t.Kind != StreamKind.Other).ToList();
 
         // Video: the first one, plus the Dolby Vision layer when the profile keeps it.
@@ -248,7 +253,7 @@ public static class TrackPlanner
         for (var i = 0; i < audio.Count; i++)
         {
             var track = audio[i];
-            if (track.Lossless || track.Layout is not ("2.0" or "1.0"))
+            if (track.Lossless || track.Commentary || track.VisualImpaired || track.Layout is not ("2.0" or "1.0"))
             {
                 continue;
             }

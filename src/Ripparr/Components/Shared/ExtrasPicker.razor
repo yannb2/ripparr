@@ -51,7 +51,7 @@
                             var streams = playlist.Mpls.Streams;
                             <tr class="@(row.Selected ? "table-active" : "")">
                                 <td><input type="checkbox" class="form-check-input" checked="@row.Selected" @onchange="e => row.Selected = e.Value is true"/></td>
-                                <td class="fw-semibold">@playlist.Name</td>
+                                <td class="fw-semibold text-nowrap">@playlist.Label</td>
                                 <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
                                 <td class="text-end text-nowrap">@Format.Size(playlist.Size)</td>
                                 <td class="text-nowrap">@string.Join(" ", streams.Where(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer).Take(1).Select(s => $"{StreamCoding.Resolution(s.Format)} {s.CodecName}"))</td>
@@ -83,11 +83,14 @@
                                            @oninput="e => TypeName(row, e.Value?.ToString())"/>
                                 </td>
                                 <td>
-                                    <button class="btn btn-sm btn-link p-0 text-nowrap" @onclick="() => row.Pictures = !row.Pictures"
-                                            title="Three pictures from the playlist, to tell the extras apart">
-                                        <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
-                                    </button>
-                                    <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Tracks = !row.Tracks"
+                                    @if (!Analysis.IsDvd)
+                                    {
+                                        <button class="btn btn-sm btn-link p-0 me-2 text-nowrap" @onclick="() => row.Pictures = !row.Pictures"
+                                                title="Three pictures from the playlist, to tell the extras apart">
+                                            <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
+                                        </button>
+                                    }
+                                    <button class="btn btn-sm btn-link p-0 text-nowrap" @onclick="() => row.Tracks = !row.Tracks"
                                             title="This extra's audio and subtitle tracks: untick what you don't want">
                                         <i class="bi @(row.Tracks ? "bi-music-note-list" : "bi-music-note")"></i> Tracks
                                     </button>
@@ -230,8 +233,10 @@
     /// <summary>Playlists that can be extras: not the film (or the episodes), not a menu or logo (under 10 s), not a fake that loops tiny clips.</summary>
     private IEnumerable<PlaylistInfo> Candidates => Free.Where(p => p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData);
 
+    // A DVD title cut into episodes is taken by them (and its parts are never extras).
     private IEnumerable<PlaylistInfo> Free => Analysis.Playlists
-        .Where(p => Taken != null ? !Taken.Contains(p.Name) : p != FilmPlaylist && !p.MainFeature)
+        .Where(p => p.PartOf == null)
+        .Where(p => Taken != null ? !Taken.Contains(p.Name) && !Taken.Any(t => DvdDisc.ParsePart(t)?.Title == p.Name) : p != FilmPlaylist && !p.MainFeature)
         .Where(p => p.Duration >= TimeSpan.FromSeconds(10))
         .OrderBy(p => p.Name, StringComparer.Ordinal);
 
@@ -302,6 +307,7 @@
                 SourceKind = film.SourceKind,
                 SourceName = film.SourceName,
                 Playlist = playlist.Name,
+                Dvd = Analysis.IsDvd,
                 Title = film.Title,
                 Year = film.Year,
                 TmdbId = film.TmdbId,

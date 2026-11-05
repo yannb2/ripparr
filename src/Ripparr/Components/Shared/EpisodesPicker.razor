@@ -134,7 +134,7 @@
         @if (SelectedPlaylists.Count >= 2)
         {
             <div class="small text-body-secondary mb-2">
-                <i class="bi bi-sort-numeric-down"></i> Numbered @OrderNote. Check with Watch (the start shows the title) and change a number if it is wrong.
+                <i class="bi bi-sort-numeric-down"></i> Numbered @OrderNote. @(Analysis.IsDvd ? "Check the order on the DVD's menu or in MakeMKV" : "Check with Watch (the start shows the title)") and change a number if it is wrong.
             </div>
         }
         @if (_resumeNote != null)
@@ -145,13 +145,25 @@
         {
             <div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>@_episodesNote</div>
         }
+        @if (LongTitle is { } longTitle && !_rows.Any(r => r.Value.Selected && DvdDisc.ParsePart(r.Key)?.Title == longTitle.Playlist.Name))
+        {
+            <div class="alert alert-info py-2 small d-flex flex-wrap align-items-center gap-2">
+                <span>
+                    <i class="bi bi-collection-play me-1"></i>@longTitle.Playlist.Label (@Format.Duration(longTitle.Playlist.Duration), @longTitle.Playlist.Mpls.Chapters.Count chapters)
+                    looks like @longTitle.Episodes episodes in a row, as many TV DVDs play them.
+                </span>
+                <button class="btn btn-sm btn-light border" @onclick="() => SplitEvenly(longTitle.Playlist, longTitle.Episodes)">
+                    <i class="bi bi-scissors"></i> Split it into @longTitle.Episodes episodes by chapters
+                </button>
+            </div>
+        }
 
         <div class="table-responsive">
             <table class="table table-sm small align-middle mb-2">
                 <thead>
                 <tr>
                     <th></th>
-                    <th>Playlist</th>
+                    <th>@(Analysis.IsDvd ? "Title" : "Playlist")</th>
                     <th>Length</th>
                     <th class="text-end">Chapters</th>
                     <th class="text-end">Size</th>
@@ -168,8 +180,8 @@
                     var known = number is { } n ? Known(n) : null;
                     <tr class="@(row.Selected ? "table-active" : "")">
                         <td><input type="checkbox" class="form-check-input" checked="@row.Selected" @onchange="e => row.Selected = e.Value is true"/></td>
-                        <td class="fw-semibold">
-                            @playlist.Name
+                        <td class="fw-semibold text-nowrap">
+                            @playlist.Label
                             @if (playlist.PlayAll)
                             {
                                 <span class="badge text-bg-warning ms-1">Play all</span>
@@ -205,20 +217,82 @@
                             }
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-link p-0 text-nowrap" @onclick="() => row.Pictures = !row.Pictures"
-                                    title="Three pictures from the playlist, to check the order">
-                                <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
-                            </button>
-                            <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Tracks = !row.Tracks"
+                            @if (!Analysis.IsDvd)
+                            {
+                                <button class="btn btn-sm btn-link p-0 me-2 text-nowrap" @onclick="() => row.Pictures = !row.Pictures"
+                                        title="Three pictures from the playlist, to check the order">
+                                    <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
+                                </button>
+                            }
+                            <button class="btn btn-sm btn-link p-0 text-nowrap" @onclick="() => row.Tracks = !row.Tracks"
                                     title="This episode's audio and subtitle tracks: untick what you don't want">
                                 <i class="bi @(row.Tracks ? "bi-music-note-list" : "bi-music-note")"></i> Tracks
                             </button>
-                            <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Watch = !row.Watch"
-                                    title="30 seconds of the playlist as a small video: start, middle or end">
-                                <i class="bi @(row.Watch ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
-                            </button>
+                            @if (!Analysis.IsDvd)
+                            {
+                                <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Watch = !row.Watch"
+                                        title="30 seconds of the playlist as a small video: start, middle or end">
+                                    <i class="bi @(row.Watch ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
+                                </button>
+                            }
+                            else if (playlist.PartOf == null && playlist.Mpls.Chapters.Count >= 2)
+                            {
+                                <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => OpenSplit(playlist)"
+                                        title="This title plays several episodes in a row: cut it into episodes at chapters">
+                                    <i class="bi bi-scissors"></i> Split
+                                </button>
+                            }
                         </td>
                     </tr>
+                    @if (row.Split && playlist.PartOf == null)
+                    {
+                        var starts = DvdDisc.ParseStarts(row.SplitStarts, playlist.Mpls.Chapters.Count);
+                        var lengths = DvdDisc.Lengths(playlist.Mpls.Chapters, playlist.Duration, starts);
+                        <tr>
+                            <td></td>
+                            <td colspan="7">
+                                <div class="border rounded p-2 bg-body-tertiary">
+                                    <div class="d-flex flex-wrap align-items-end gap-3 mb-2">
+                                        <div>
+                                            <label class="form-label small mb-1">Episodes in this title</label>
+                                            <div class="input-group input-group-sm" style="width: 11rem">
+                                                <input class="form-control" type="number" min="1" max="@playlist.Mpls.Chapters.Count" value="@row.SplitEpisodes"
+                                                       @onchange="e => SetSplitEpisodes(playlist, row, e)"/>
+                                                <button class="btn btn-outline-secondary" title="Spread them evenly: the chapters nearest to each even share of the length"
+                                                        @onclick="() => SetSplitEpisodes(playlist, row, null)">Even</button>
+                                            </div>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <label class="form-label small mb-1">Episodes start at chapters</label>
+                                            <input class="form-control form-control-sm" placeholder="1, 7, 13" @bind="row.SplitStarts" @bind:event="oninput"/>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-sm btn-primary" disabled="@(starts.Count < 2)" @onclick="() => ApplySplit(playlist, row)">
+                                                <i class="bi bi-scissors"></i> Make @starts.Count episodes
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="small text-body-secondary mb-1">
+                                        Parts: @string.Join(" · ", DvdDisc.Ranges(starts, playlist.Mpls.Chapters.Count).Select((r, i) =>
+                                            $"ch. {r.From}-{r.To} ({Format.Duration(lengths[i])})"))
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-1 small">
+                                        @for (var c = 0; c < playlist.Mpls.Chapters.Count; c++)
+                                        {
+                                            var chapter = c + 1;
+                                            var end = c + 1 < playlist.Mpls.Chapters.Count ? playlist.Mpls.Chapters[c + 1].Start : playlist.Duration;
+                                            var length = end - playlist.Mpls.Chapters[c].Start;
+                                            <button class="btn btn-sm py-0 @(starts.Contains(chapter) ? "btn-secondary" : "btn-outline-secondary")"
+                                                    title="@($"Chapter {chapter} starts at {Format.Duration(playlist.Mpls.Chapters[c].Start)} and runs {Format.Duration(length)}. Click: an episode starts here, or not.")"
+                                                    disabled="@(chapter == 1)" @onclick="() => ToggleStart(row, chapter, playlist.Mpls.Chapters.Count)">
+                                                @chapter <span class="opacity-75">@Format.Duration(length)</span>
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
                     @if (row.Tracks)
                     {
                         <tr>
@@ -275,7 +349,7 @@
                 <i class="bi bi-play-fill"></i> Queue @SelectedCount episode@(SelectedCount == 1 ? "" : "s")
             </button>
             <button class="btn btn-outline-secondary" disabled="@(SelectedCount == 0)" @onclick="() => Queue(true)">Dry run</button>
-            <span class="ms-auto align-self-center">
+            <span class="ms-auto align-self-center @(Analysis.IsDvd ? "d-none" : "")">
                 <BulkSubtitleCheck Source="Source" Analysis="Analysis" DetectSdh="Profile.DetectSdh" Changed="StateHasChanged"
                                    Items="() => SelectedPlaylists.Select(p => (p, PlanFor(p), Row(p).Subtitles)).ToList()"/>
             </span>
@@ -371,8 +445,101 @@
 
     /// <summary>The episodes found, or every playlist worth a look (not duplicates, a minute or more).</summary>
     private IEnumerable<PlaylistInfo> Shown => _showAll
-        ? Ordered(Analysis.Playlists.Where(p => p.DuplicateOf == null && (p.Duration >= TimeSpan.FromMinutes(1) || p.LengthLooksFaked)))
+        ? Ordered(Analysis.Playlists.Where(p => p.PartOf == null && p.DuplicateOf == null && (p.Duration >= TimeSpan.FromMinutes(1) || p.LengthLooksFaked))
+            .Concat(SelectedParts).Distinct())
         : Ordered(_found.Concat(_rows.Where(r => r.Value.Selected).Select(r => Analysis.Find(r.Key)).OfType<PlaylistInfo>()).Distinct());
+
+    // The ticked parts of DVD titles (episodes cut out of one long title).
+    private IEnumerable<PlaylistInfo> SelectedParts =>
+        _rows.Where(r => r.Value.Selected && DvdDisc.ParsePart(r.Key) != null).Select(r => Analysis.Find(r.Key)).OfType<PlaylistInfo>();
+
+    /// <summary>
+    /// A DVD with no episode titles of its own but one long title that splits evenly at its
+    /// chapters: the card offers to cut it into episodes.
+    /// </summary>
+    private (PlaylistInfo Playlist, int Episodes)? LongTitle
+    {
+        get
+        {
+            if (!Analysis.IsDvd || _found.Count >= 2 || Analysis.MainFeature is not { } main || main.Mpls.Chapters.Count < 2)
+            {
+                return null;
+            }
+
+            var episodes = DvdDisc.GuessEpisodes(main.Mpls.Chapters, main.Duration);
+            return episodes >= 2 ? (main, episodes) : null;
+        }
+    }
+
+    private void OpenSplit(PlaylistInfo playlist)
+    {
+        var row = Row(playlist);
+        row.Split = !row.Split;
+        if (row.Split && row.SplitStarts.Length == 0)
+        {
+            SetSplitEpisodes(playlist, row, null);
+        }
+    }
+
+    /// <summary>The episodes spread evenly over the chapters: the typed count, or Ripparr's guess.</summary>
+    private void SetSplitEpisodes(PlaylistInfo playlist, EpisodeRow row, ChangeEventArgs? e)
+    {
+        if (e != null)
+        {
+            row.SplitEpisodes = int.TryParse(e.Value?.ToString(), out var typed) ? Math.Clamp(typed, 1, playlist.Mpls.Chapters.Count) : null;
+        }
+
+        var count = row.SplitEpisodes ?? DvdDisc.GuessEpisodes(playlist.Mpls.Chapters, playlist.Duration);
+        row.SplitEpisodes = count;
+        row.SplitStarts = string.Join(", ", DvdDisc.EvenSplit(playlist.Mpls.Chapters, playlist.Duration, count));
+    }
+
+    private static void ToggleStart(EpisodeRow row, int chapter, int chapters)
+    {
+        var starts = DvdDisc.ParseStarts(row.SplitStarts, chapters);
+        if (!starts.Remove(chapter))
+        {
+            starts.Add(chapter);
+        }
+
+        starts = starts.Order().ToList();
+        row.SplitStarts = string.Join(", ", starts);
+        row.SplitEpisodes = starts.Count;
+    }
+
+    private void SplitEvenly(PlaylistInfo playlist, int episodes)
+    {
+        var row = Row(playlist);
+        row.SplitEpisodes = episodes;
+        row.SplitStarts = string.Join(", ", DvdDisc.EvenSplit(playlist.Mpls.Chapters, playlist.Duration, episodes));
+        ApplySplit(playlist, row);
+    }
+
+    /// <summary>The title's episodes become rows of their own, ticked; the whole title is unticked.</summary>
+    private void ApplySplit(PlaylistInfo playlist, EpisodeRow row)
+    {
+        var starts = DvdDisc.ParseStarts(row.SplitStarts, playlist.Mpls.Chapters.Count);
+        // Parts of an earlier split of this title go: the new ones replace them.
+        foreach (var old in _rows.Where(r => DvdDisc.ParsePart(r.Key)?.Title == playlist.Name).ToList())
+        {
+            old.Value.Selected = false;
+        }
+
+        foreach (var (from, to) in DvdDisc.Ranges(starts, playlist.Mpls.Chapters.Count))
+        {
+            if (Analysis.Find(DvdDisc.PartName(playlist.Name, from, to)) is { } part)
+            {
+                var partRow = Row(part);
+                partRow.Selected = true;
+                partRow.Number = null;
+                // Track choices made on the whole title go to its episodes.
+                row.Plan?.CopyChoicesTo(PlanFor(part));
+            }
+        }
+
+        row.Selected = false;
+        row.Split = false;
+    }
 
     // Disc order (a "play all" playlist, else clip numbers), so the episode numbers follow it.
     private IEnumerable<PlaylistInfo> Ordered(IEnumerable<PlaylistInfo> playlists) =>
@@ -611,6 +778,7 @@
                 SourceKind = series.SourceKind,
                 SourceName = series.SourceName,
                 Playlist = playlist.Name,
+                Dvd = Analysis.IsDvd,
                 Title = series.Title,
                 Year = series.Year,
                 TvdbId = series.TvdbId,

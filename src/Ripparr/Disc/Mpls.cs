@@ -41,6 +41,18 @@ public sealed record PlaylistStream
     /// </summary>
     public int? SubPath { get; init; }
 
+    /// <summary>DVD only: the disc marks the stream as director's comments (audio or subtitles).</summary>
+    public bool Commentary { get; init; }
+
+    /// <summary>DVD only: audio for the visually impaired (an audio description).</summary>
+    public bool VisuallyImpaired { get; init; }
+
+    /// <summary>DVD only: forced subtitles.</summary>
+    public bool Forced { get; init; }
+
+    /// <summary>DVD only: captions (subtitles for the deaf and hard of hearing).</summary>
+    public bool HearingImpaired { get; init; }
+
     public string CodecName => StreamCoding.Name(Coding);
 }
 

@@ -30,7 +30,7 @@
 }
 
 <p class="text-body-secondary small">
-    ISO files and folders with a BDMV folder in
+    ISO files and folders with a BDMV or VIDEO_TS (DVD) folder in
     @foreach (var (root, i) in Options.Value.Sources.Select((r, i) => (r, i)))
     {
         @(i > 0 ? ", " : "")<code>@root.Path</code><span class="@(Directory.Exists(root.Path) ? "" : "text-warning")">@(Directory.Exists(root.Path) ? "" : " (not mounted)")</span>
@@ -44,7 +44,7 @@
 }
 else if (_sources.Count == 0)
 {
-    <div class="alert alert-secondary">No ISO files or BDMV folders found.</div>
+    <div class="alert alert-secondary">No ISO files, BDMV or VIDEO_TS folders found.</div>
 }
 else
 {
@@ -69,6 +69,10 @@ else
                             @if (source.Kind == SourceKind.Iso)
                             {
                                 <span class="badge text-bg-secondary">ISO</span>
+                            }
+                            else if (source.Dvd)
+                            {
+                                <span class="badge text-bg-warning">DVD</span>
                             }
                             else
                             {

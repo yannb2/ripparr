@@ -44,8 +44,16 @@ public sealed class RipProfile : IJsonOnDeserialized
     public string Name { get; set; } = "New profile";
     public string Description { get; set; } = "";
 
-    /// <summary>The SOURCE tag and the last bracket of the file name (BDRemux, DVDRemux).</summary>
+    /// <summary>The SOURCE tag and the last bracket of the file name (BDRemux) for a Blu-ray.</summary>
     public string Source { get; set; } = "BDRemux";
+
+    /// <summary>
+    /// What <see cref="Source"/> is for a DVD. "DVD Remux": Radarr and Sonarr both read the
+    /// word DVD in it (quality DVD), as they do not in DVDRemux or DVD-Remux.
+    /// </summary>
+    public string DvdSource { get; set; } = DefaultDvdSource;
+
+    public const string DefaultDvdSource = "DVD Remux";
 
     // ---- DGDemux ----
 

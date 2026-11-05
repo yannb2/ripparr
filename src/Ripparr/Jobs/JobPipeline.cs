@@ -54,6 +54,20 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                         (job.Plan.MergeDolbyVisionLayer ? "." : "; left out on this job."));
         }
 
+        if (analysis.IsDvd)
+        {
+            // A DVD: MakeMKV rips the title (it reads CSS discs too), mkvmerge cuts the episode
+            // out of it when the job is a part of a title, then the same steps as a Blu-ray.
+            var dvd = await DvdSteps.RipAsync(context, source, analysis, playlist);
+            if (dvd == null)
+            {
+                return; // a dry run
+            }
+
+            await BuildAsync(context, dvd.Value.Playlist, dvd.Value.Outputs, null, null);
+            return;
+        }
+
         var prepare = PrepareMode(source, analysis, context.Options.IsoMount.Enabled && !job.UnpackIso);
         context.Log($"Encryption: {analysis.Encryption}. Prepare: {Describe(prepare)}.");
         job.StepWeights = JobProgress.Weights(prepare, job.Plan.MergeDolbyVisionLayer,
@@ -176,6 +190,24 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                                          string.Join(", ", missing.Select(t => $"{t.Kind} {t.Language} {t.Codec}")));
         }
 
+        var frameRate = playlist.Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
+            ? StreamCoding.FrameRate(v.Rate)
+            : null;
+        await BuildAsync(context, playlist, outputs, mapping, frameRate);
+    }
+
+    /// <summary>
+    /// From the tracks to the finished file: subtitles (preview, OCR), the Dolby Vision merge,
+    /// the names, mkvmerge, the checks, the move to the done folder.
+    /// </summary>
+    /// <param name="mapping">The demuxed files (for the Dolby Vision layer); null for a DVD.</param>
+    /// <param name="frameRate">For raw video streams, which do not always carry it; null when the input is an MKV.</param>
+    private static async Task BuildAsync(JobContext context, PlaylistInfo playlist, List<OutputTrack> outputs, StreamMapping? mapping,
+        (int Numerator, int Denominator)? frameRate)
+    {
+        var job = context.Job;
+        var tools = context.Options.Tools;
+
         // ---- Subtitles ----
         context.Step(JobSteps.Subtitles);
         outputs = await SubtitleStep.RunAsync(context, outputs);
@@ -193,7 +225,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             {
                 context.Log("The video already carries its enhancement layer (BL+EL+RPU): nothing to merge.");
             }
-            else if (mapping.EnhancementLayer == null || video == null)
+            else if (mapping?.EnhancementLayer == null || video == null)
             {
                 throw new JobFailedException("The plan keeps the Dolby Vision layer but neither DGDemux nor ffmpeg could write the enhancement layer. " +
                                              "Untick the layer on the job to keep only the HDR10 base.");
@@ -248,8 +280,8 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                                      o.Planned.Commentary ? "commentary" : "",
                                      o.Planned.HearingImpaired ? "SDH" : "", o.Planned.VisualImpaired ? "AD" : "" }.Where(w => w != "")),
             o.File.Facts.Details,
-            FileSize(o.File.Path, o.File.Facts),
-            o.File.Facts.BitRateFor(FileSize(o.File.Path, o.File.Facts)),
+            FileSize(o.File),
+            o.File.Facts.BitRateFor(FileSize(o.File)),
             o.File.Facts.BitRateMaximum,
             o.File.FileName)).ToList();
         foreach (var output in outputs)
@@ -284,9 +316,6 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             }
         }
 
-        var frameRate = playlist.Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
-            ? StreamCoding.FrameRate(v.Rate)
-            : null;
         var mkvmerge = MuxBuilder.MkvmergeArguments(outPath, title, outputs, chaptersPath, tagsPath, frameRate, videoPath);
         var muxResult = await context.RunAsync(new ProcessSpec(tools.MkvMerge, mkvmerge), Long, line =>
         {
@@ -336,6 +365,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         if (context.Options.CleanWorkFolder)
         {
             TryDeleteFolder(context, context.WorkFolder);
+            DvdSteps.CleanUp(context);
         }
     }
 
@@ -856,8 +886,15 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
     /// <summary>Splits the DGDemux argument setting on spaces and fills {input} and {output}.</summary>
     /// <summary>The stream's size on disk; mediainfo's figure when the file is gone.</summary>
-    private static long FileSize(string path, StreamFacts facts)
+    private static long FileSize(DemuxedFile file)
     {
+        if (file.TrackId != null)
+        {
+            // One track of an MKV: the file is all of them.
+            return file.Facts.StreamSize;
+        }
+
+        var (path, facts) = (file.Path, file.Facts);
         try
         {
             return new FileInfo(path).Length;

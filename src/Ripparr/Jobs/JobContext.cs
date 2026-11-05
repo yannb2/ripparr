@@ -11,6 +11,7 @@ public sealed class JobContext(Job job, RipparrOptions options, JobStore store, 
 
     public Job Job { get; } = job;
     public RipparrOptions Options { get; } = options;
+    public JobStore Store { get; } = store;
     public CancellationToken CancellationToken { get; } = cancellationToken;
 
     public string WorkFolder => Path.Combine(Options.WorkFolder, $"job-{Job.Id}");
@@ -59,7 +60,7 @@ public sealed class JobContext(Job job, RipparrOptions options, JobStore store, 
     public void Save()
     {
         _lastSave = DateTime.UtcNow;
-        store.Update(Job);
+        Store.Update(Job);
         events.Raise(Job.Id);
     }
 

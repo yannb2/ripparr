@@ -11,11 +11,17 @@ public enum StreamKind
 /// <summary>The stream coding types of a Blu-ray playlist (the STN table), in words.</summary>
 public static class StreamCoding
 {
+    /// <summary>Not a Blu-ray coding type: Ripparr's own mark for a DVD's picture subtitles (VobSub).</summary>
+    public const byte VobSub = 0xF0;
+
+    /// <summary>The Blu-ray coding type of picture subtitles (PGS).</summary>
+    public const byte Pgs = 0x90;
+
     public static StreamKind Kind(byte coding) => coding switch
     {
         0x01 or 0x02 or 0x1B or 0xEA or 0x24 => StreamKind.Video,
         0x03 or 0x04 or 0x80 or 0x81 or 0x82 or 0x83 or 0x84 or 0x85 or 0x86 or 0xA1 or 0xA2 => StreamKind.Audio,
-        0x90 or 0x92 => StreamKind.Subtitle,
+        0x90 or 0x92 or VobSub => StreamKind.Subtitle,
         _ => StreamKind.Other
     };
 
@@ -39,6 +45,7 @@ public static class StreamCoding
         0x90 => "PGS",
         0x91 => "IG",
         0x92 => "Text",
+        VobSub => "VobSub",
         _ => $"0x{coding:X2}"
     };
 
