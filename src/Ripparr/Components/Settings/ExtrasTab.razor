@@ -1,0 +1,111 @@
+@inject LiveSettings Settings
+@inject Toasts Toasts
+
+<p class="text-body-secondary">
+    Finished extras wait in the done folder (Title (Year)/featurettes/...): Radarr's and Sonarr's manual import leave them there.
+    The <a href="extras">Extras</a> page copies them into the film's or series' folder in the library. Ripparr needs the library
+    mounted read-write at the same paths as Radarr, Sonarr and Jellyfin.
+</p>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="border rounded p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-folder2-open text-primary"></i>
+                <h5 class="mb-0">Library</h5>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="lib-movies">Movies</label>
+                <input id="lib-movies" class="form-control" placeholder="/movies" @bind="_options.MoviesFolder"/>
+                <small class="form-text text-muted">With its category folders: /movies/live-action/Heat (1995).</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="lib-tv">TV</label>
+                <input id="lib-tv" class="form-control" placeholder="/tv" @bind="_options.TvFolder"/>
+            </div>
+            @foreach (var root in _options.Roots)
+            {
+                <div class="small @(Writable(root.Path) ? "text-success" : "text-danger")">
+                    <i class="bi @(Writable(root.Path) ? "bi-check-circle" : "bi-x-circle") me-1"></i>@root.Path:
+                    @(Writable(root.Path) ? "mounted read-write" : Directory.Exists(root.Path) ? "read-only here: mount it without :ro" : "not mounted")
+                </div>
+            }
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="border rounded p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-box-arrow-in-right text-primary"></i>
+                <h5 class="mb-0">Copying</h5>
+            </div>
+            <Switch Id="extras-auto" Label="Copy extras on their own" @bind-Value="_options.AutoCopy"
+                    Help="Once the film or series is in Radarr or Sonarr (or its folder is found by name), checked after each extra job and every 30 minutes. Off: only the Extras page's buttons copy."/>
+            <Switch Id="extras-verify" Label="Read each copy back and compare it" @bind-Value="_options.Verify"
+                    Help="Twice the reading, but a bad copy never gets its name."/>
+            <Switch Id="extras-remove" Label="Delete the done copy once it is in the library" @bind-Value="_options.RemoveDoneCopy"
+                    Help="Off: it stays in the done folder until you clean it up."/>
+            <Switch Id="extras-jellyfin" Label="Tell Jellyfin about the new extras" @bind-Value="_options.TellJellyfin"
+                    Help="Uses the Jellyfin URL and key of the Notifications tab; only the new files are looked at, no full scan."/>
+        </div>
+    </div>
+</div>
+
+<StickyBar>
+    <button class="btn btn-primary" @onclick="Save"><i class="bi bi-check-lg me-2"></i>Save</button>
+    @if (Settings.Saved(LiveSettings.ExtrasKey))
+    {
+        <button class="btn btn-light border" @onclick="Reset" title="Forget what was saved here: the environment variables apply again">
+            <i class="bi bi-arrow-counterclockwise me-2"></i>Use environment variables
+        </button>
+    }
+</StickyBar>
+
+@code {
+    private ExtrasOptions _options = new();
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(Settings.Extras, JobStore.Json);
+        _options = System.Text.Json.JsonSerializer.Deserialize<ExtrasOptions>(json, JobStore.Json) ?? new ExtrasOptions();
+    }
+
+    /// <summary>Can a file be made in the folder? Tried with a dot file that is removed at once.</summary>
+    private static bool Writable(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            return false;
+        }
+
+        var probe = Path.Combine(folder, $".ripparr-write-test-{Environment.ProcessId}");
+        try
+        {
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private void Save()
+    {
+        _options.MoviesFolder = Clean(_options.MoviesFolder, "/movies");
+        _options.TvFolder = Clean(_options.TvFolder, "/tv");
+        Settings.Save(LiveSettings.ExtrasKey, _options);
+        Toasts.Success("Extras settings saved.");
+    }
+
+    private static string Clean(string path, string fallback) => path.Trim().TrimEnd('/') is { Length: > 0 } p ? p : fallback;
+
+    private void Reset()
+    {
+        Settings.Reset(LiveSettings.ExtrasKey);
+        Load();
+        Toasts.Show("Extras settings use the environment variables again.", "info");
+    }
+}

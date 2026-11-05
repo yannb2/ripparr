@@ -48,6 +48,8 @@ builder.Services.AddSingleton<PlaylistFinder>();
 builder.Services.AddSingleton<JobPipeline>();
 builder.Services.AddSingleton<RadarrClient>();
 builder.Services.AddSingleton<SonarrClient>();
+builder.Services.AddSingleton<ExtrasLibrary>();
+builder.Services.AddHostedService(services => services.GetRequiredService<ExtrasLibrary>());
 builder.Services.AddSingleton<JobRunner>();
 builder.Services.AddHostedService(services => services.GetRequiredService<JobRunner>());
 builder.Services.AddSingleton<ToolStatusService>();

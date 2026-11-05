@@ -74,6 +74,9 @@ public class RipparrOptions
     /// <summary>ntfy and Jellyfin when a job ends. The Settings page can change them.</summary>
     public NotificationOptions Notifications { get; set; } = new();
 
+    /// <summary>Copying finished extras into the library's film and series folders. The Settings page can change them.</summary>
+    public ExtrasOptions Extras { get; set; } = new();
+
     public static readonly SourceRoot[] DefaultSources =
     [
         new() { Name = "Scratch", Path = "/downloads" },
@@ -238,4 +241,32 @@ public class NotificationOptions
 
     [System.Text.Json.Serialization.JsonIgnore]
     public bool JellyfinConfigured => !string.IsNullOrWhiteSpace(JellyfinUrl) && !string.IsNullOrWhiteSpace(JellyfinApiKey);
+}
+
+/// <summary>
+/// Where the library is (as Radarr, Sonarr and Jellyfin see it) and how finished extras get there:
+/// Title (Year)/featurettes/ next to the imported film or series.
+/// </summary>
+public class ExtrasOptions
+{
+    /// <summary>The movie library root, with its category folders (live-action, anime...).</summary>
+    public string MoviesFolder { get; set; } = "/movies";
+
+    /// <summary>The TV library root.</summary>
+    public string TvFolder { get; set; } = "/tv";
+
+    /// <summary>Copy each extra on its own once its film or series is in the library. Off: the Extras page's button.</summary>
+    public bool AutoCopy { get; set; }
+
+    /// <summary>Read each copy back and compare it with the done file before giving it its name.</summary>
+    public bool Verify { get; set; } = true;
+
+    /// <summary>Delete the file in the done folder once it is in the library. Off: it stays until cleaned up.</summary>
+    public bool RemoveDoneCopy { get; set; }
+
+    /// <summary>Tell Jellyfin about the new files (the URL and key on the Notifications tab), so they show without a scan.</summary>
+    public bool TellJellyfin { get; set; } = true;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<Arrkit.Library.LibraryRoot> Roots => [new(MoviesFolder, false), new(TvFolder, true)];
 }

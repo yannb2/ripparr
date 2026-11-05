@@ -183,7 +183,23 @@ The extras use the **Extras** profile (original language and English audio, Engl
 OCR) unless another is picked. An extra is named after what was typed (`Making Of.mkv`, MKV title
 `Making Of`; empty gives `Featurette 2`) and goes to `done/Title (Year)/<type>/`. The types are the folder
 names that both Jellyfin and Radarr leave alone: `featurettes`, `behind the scenes`, `deleted scenes`,
-`interviews`, `scenes`, `shorts`, `trailers` and `extras`. Move the type folder next to the film in the library.
+`interviews`, `scenes`, `shorts`, `trailers`, `other` and `extras` (`clips` is left out: Radarr and Sonarr would
+take a clip for the film).
+
+### Into the library
+
+Radarr's and Sonarr's manual import leave the extras in the done folder. The **Extras** page (sidebar) lists the
+finished extras by film or series, finds the folder in the library (Radarr or Sonarr by TMDb/TVDB ID, else
+`Title (Year)` on disk, or pick it by hand) and shows where each one goes: `Heat (1995)/featurettes/Making Of.mkv`,
+or `Season 01/behind the scenes/...` for a season's extra. **Copy to library** writes each file under a hidden
+`.Name.mkv.copying` name, reads it back and compares it, then renames it. Nothing is overwritten: a file with the
+same name and size counts as already there, a different one makes the new file `Name (2).mkv`. The copy is
+arrkit's (`Arrkit.Library`), shared with Scratcharr.
+
+**Settings > Extras**: the library folders (`/movies`, `/tv`, which must be mounted read-write), **Copy extras on
+their own** (once the film or series is imported; checked after each extra job and every 30 minutes; off by
+default), read back and compare (on), delete the done copy afterwards (off), and tell Jellyfin about the new files
+(on, with the Jellyfin URL and key of the Notifications tab).
 
 ## TV discs
 
@@ -348,6 +364,8 @@ the queue, the current job and its progress for a Homepage tile.
 | `Ripparr__Sonarr__Url` / `__ApiKey` | not set: series, IDs and episode titles are typed by hand |
 | `Ripparr__Notifications__NtfyUrl` / `__NtfyToken` | not set: no messages (Settings > Notifications can set them) |
 | `Ripparr__Notifications__JellyfinUrl` / `__JellyfinApiKey` / `__RefreshJellyfin` | not set / `false` |
+| `Ripparr__Extras__MoviesFolder` / `__TvFolder` | `/movies` / `/tv` (mount them read-write to copy extras) |
+| `Ripparr__Extras__AutoCopy` / `__Verify` / `__RemoveDoneCopy` / `__TellJellyfin` | `false` / `true` / `false` / `true` (Settings > Extras can set them) |
 | `Ripparr__IsoMount__Enabled` | `true` (`false`: always unpack ISOs with 7-Zip) |
 | `Ripparr__IsoMount__Socket` | `/run/ripparr-mount/mount.sock` |
 | `Ripparr__IsoMount__Folder` | `/mnt/pc/iso-mounts` (where the service mounts; left out of the sources) |

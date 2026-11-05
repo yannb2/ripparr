@@ -29,6 +29,8 @@ services:
       - /config/ripparr:/config
       # Scratch: ISO files and BDMV folders anywhere under it, work and done folders too.
       - /downloads:/downloads
+      - /movies:/movies      # the library, read-write: the Extras page copies extras into the film folders
+      - /tv:/tv
       # USB drives mounted on the VM under /mnt/usb show up as a second source.
       # rslave: a drive plugged in after the container started still appears.
       - /mnt/usb:/usb:ro,rslave
