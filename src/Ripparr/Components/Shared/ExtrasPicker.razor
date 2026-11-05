@@ -183,8 +183,8 @@
         }
     }
 
-    /// <summary>Playlists that can be extras: not the film (or the episodes), not a menu or logo (under 10 s).</summary>
-    private IEnumerable<PlaylistInfo> Candidates => Free.Where(p => p.DuplicateOf == null && !p.PlayAll);
+    /// <summary>Playlists that can be extras: not the film (or the episodes), not a menu or logo (under 10 s), not a fake that loops tiny clips.</summary>
+    private IEnumerable<PlaylistInfo> Candidates => Free.Where(p => p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData);
 
     private IEnumerable<PlaylistInfo> Free => Analysis.Playlists
         .Where(p => Taken != null ? !Taken.Contains(p.Name) : p != FilmPlaylist && !p.MainFeature)

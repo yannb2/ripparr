@@ -1,0 +1,26 @@
+@* 30 seconds of a playlist as a small video: the start (titles), the middle or the end (credits). *@
+<div class="d-flex flex-wrap align-items-start gap-3 py-1">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Where to watch">
+        @foreach (var (percent, label) in Points)
+        {
+            <button type="button" class="btn @(_percent == percent ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _percent = percent">@label</button>
+        }
+    </div>
+    <video src="@Url" controls autoplay preload="auto" class="rounded border bg-black" style="width: 480px; max-width: 100%; aspect-ratio: 16 / 9"
+           onerror="this.replaceWith(Object.assign(document.createElement('span'), {className: 'small text-body-secondary align-self-center', textContent: 'No preview (an ISO needs the mount service, or ffmpeg could not read it)'}))"></video>
+    <div class="small text-body-secondary align-self-center" style="max-width: 18rem">
+        30 seconds from @Points.First(p => p.Percent == _percent).Label.ToLowerInvariant() of the playlist, made with ffmpeg the first time
+        (a few seconds). HDR looks flat here; the rip is untouched.
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string SourcePath { get; set; } = "";
+    [Parameter, EditorRequired] public string Playlist { get; set; } = "";
+
+    private static readonly (int Percent, string Label)[] Points = [(2, "Start"), (50, "Middle"), (95, "End")];
+    private int _percent = 2;
+
+    private string Url =>
+        $"api/discs/watch/{_percent}.mp4?path={Uri.EscapeDataString(SourcePath)}&playlist={Uri.EscapeDataString(Playlist)}";
+}

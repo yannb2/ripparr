@@ -188,6 +188,16 @@ public sealed class DiscAnalysis
             }
         }
 
+        // The same episode with a second of something tiny before or after it (a logo, a blank):
+        // Doctor Who discs list each episode twice like this. The plain one stays.
+        foreach (var playlist in ordered.Where(p => p.DuplicateOf == null))
+        {
+            if (ordered.FirstOrDefault(o => o != playlist && o.DuplicateOf == null && PlusATinyClip(playlist, o)) is { } plain)
+            {
+                playlist.DuplicateOf = plain.Name;
+            }
+        }
+
         // Only a flag for the extras list: a film can be clips that also play on their own.
         MarkPlayAll(ordered.Where(p => p.DuplicateOf == null).ToList());
 
@@ -335,6 +345,37 @@ public sealed class DiscAnalysis
             }
 
             if (match)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Longest a clip added to a playlist may run for the two to count as the same.</summary>
+    public static readonly TimeSpan TinyClip = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// <paramref name="longer"/> plays all of <paramref name="plain"/>'s items, in order and from the
+    /// same points, plus items of <see cref="TinyClip"/> or less in all.
+    /// </summary>
+    private static bool PlusATinyClip(PlaylistInfo longer, PlaylistInfo plain)
+    {
+        var big = longer.Mpls.Items;
+        var small = plain.Mpls.Items;
+        if (big.Count <= small.Count || small.Count == 0 || longer.Mpls.Streams.Count != plain.Mpls.Streams.Count
+            || longer.Duration - plain.Duration > TinyClip || longer.Duration < plain.Duration)
+        {
+            return false;
+        }
+
+        for (var start = 0; start + small.Count <= big.Count; start++)
+        {
+            if (small.Select((item, i) => (item, other: big[start + i])).All(x =>
+                    string.Equals(x.item.Clip, x.other.Clip, StringComparison.OrdinalIgnoreCase)
+                    && Math.Abs((long)x.item.InTime - x.other.InTime) < Mpls.ClockRate
+                    && Math.Abs((long)x.item.OutTime - x.other.OutTime) < Mpls.ClockRate))
             {
                 return true;
             }

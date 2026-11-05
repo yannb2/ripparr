@@ -111,6 +111,12 @@
                 <label class="form-check-label small" for="episodesAll">Show all playlists</label>
             </div>
         </div>
+        @if (SelectedPlaylists.Count >= 2)
+        {
+            <div class="small text-body-secondary mb-2">
+                <i class="bi bi-sort-numeric-down"></i> Numbered @OrderNote. Check with Watch (the start shows the title) and change a number if it is wrong.
+            </div>
+        }
         @if (_resumeNote != null)
         {
             <div class="small text-body-secondary mb-2"><i class="bi bi-bookmark me-1"></i>@_resumeNote</div>
@@ -178,8 +184,19 @@
                                     title="Three pictures from the playlist, to check the order">
                                 <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
                             </button>
+                            <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Watch = !row.Watch"
+                                    title="30 seconds of the playlist as a small video: start, middle or end">
+                                <i class="bi @(row.Watch ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
+                            </button>
                         </td>
                     </tr>
+                    @if (row.Watch)
+                    {
+                        <tr>
+                            <td></td>
+                            <td colspan="7"><WatchPanel SourcePath="@Source.Path" Playlist="@playlist.Name"/></td>
+                        </tr>
+                    }
                     @if (row.Pictures)
                     {
                         <tr>
@@ -239,6 +256,8 @@
         public int? Number { get; set; }
         public string Title { get; set; } = "";
         public bool Pictures { get; set; }
+
+        public bool Watch { get; set; }
     }
 
     private readonly Dictionary<string, EpisodeRow> _rows = new();
@@ -293,14 +312,26 @@
             _title = guess.Title;
             _year = guess.Year;
             _search = InitialSearch.Length > 0 ? InitialSearch : guess.Title;
+            // The disc's own title is better than a label like DOCTOR_WHO_DISC_01_ECCLESTON_01.
+            if (ReleaseName.Season(Analysis.DiscTitle) is var (series, season))
+            {
+                _title = series;
+                _search = series;
+                _season = season;
+            }
         }
     }
 
     /// <summary>The episodes found, or every playlist worth a look (not duplicates, a minute or more).</summary>
     private IEnumerable<PlaylistInfo> Shown => _showAll
-        ? Analysis.Playlists.Where(p => p.DuplicateOf == null && p.Duration >= TimeSpan.FromMinutes(1)).OrderBy(p => p.Name, StringComparer.Ordinal)
-        : _found.Concat(_rows.Where(r => r.Value.Selected).Select(r => Analysis.Find(r.Key)).OfType<PlaylistInfo>()).Distinct()
-            .OrderBy(p => p.Name, StringComparer.Ordinal);
+        ? Ordered(Analysis.Playlists.Where(p => p.DuplicateOf == null && (p.Duration >= TimeSpan.FromMinutes(1) || p.LengthLooksFaked)))
+        : Ordered(_found.Concat(_rows.Where(r => r.Value.Selected).Select(r => Analysis.Find(r.Key)).OfType<PlaylistInfo>()).Distinct());
+
+    // Disc order (a "play all" playlist, else clip numbers), so the episode numbers follow it.
+    private IEnumerable<PlaylistInfo> Ordered(IEnumerable<PlaylistInfo> playlists) =>
+        EpisodeFinder.InDiscOrder(Analysis, playlists.ToList()).Episodes;
+
+    private string OrderNote => EpisodeFinder.InDiscOrder(Analysis, SelectedPlaylists).How;
 
     private EpisodeRow Row(PlaylistInfo playlist)
     {

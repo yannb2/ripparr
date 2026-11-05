@@ -90,11 +90,12 @@
     </div>
 }
 
-@if (_analysis.NeedsFinding)
+@* On a TV disc the fakes are left out of the episodes already: nothing to find. *@
+@if (_analysis.NeedsFinding && !_tv)
 {
     <div class="alert alert-warning py-2 small">
         <div class="mb-1">
-            @if (_analysis.HidesFilm || _analysis.ManyPlaylists)
+            @if (_analysis.Playlists.Count(p => p.Lookalike) is var lookalikes && lookalikes > 0 && (_analysis.HidesFilm || _analysis.ManyPlaylists))
             {
                 <span>
                     @_analysis.Playlists.Count(p => p.Lookalike) playlists have nearly the film's length and use its clips in other
@@ -256,8 +257,19 @@
                         {
                             <span class="badge text-bg-secondary">Short</span>
                         }
+                        <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-nowrap align-baseline" @onclick:stopPropagation="true"
+                                @onclick="() => ToggleWatch(playlist)" title="30 seconds of the playlist as a small video: start, middle or end">
+                            <i class="bi @(_watching.Contains(playlist.Name) ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
+                        </button>
                     </td>
                 </tr>
+                @if (_watching.Contains(playlist.Name))
+                {
+                    <tr>
+                        <td></td>
+                        <td colspan="8"><WatchPanel SourcePath="@_source.Path" Playlist="@playlist.Name"/></td>
+                    </tr>
+                }
             }
             </tbody>
         </table>
@@ -524,6 +536,15 @@
         $"api/discs/listen/{track.Pid}.m4a?path={Uri.EscapeDataString(_source!.Path)}&playlist={Uri.EscapeDataString(_selected!.Name)}";
     private TrackPlan? _plan;
     private bool _showAll;
+    private readonly HashSet<string> _watching = [];
+
+    private void ToggleWatch(PlaylistInfo playlist)
+    {
+        if (!_watching.Remove(playlist.Name))
+        {
+            _watching.Add(playlist.Name);
+        }
+    }
     private bool _tv;
     private bool _tvGuess;
     private int _episodeCount;
