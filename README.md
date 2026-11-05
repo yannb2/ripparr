@@ -192,8 +192,18 @@ beside them), the disc page switches to **TV episodes**; the switch at the top c
 series up in **Sonarr**: the title, year, TVDB, TMDb and IMDb IDs, the original language and, for Sonarr's
 Anime series type, absolute numbers. Set the season and the first episode on the disc: the ticked playlists are
 numbered from it in disc order (any number can be typed over), and get their titles from Sonarr (or typed ones).
-**Pictures** show three frames of each playlist to check the order. Ripparr remembers where the last disc of a
-series stopped, so the next disc starts at the next episode.
+Disc order is the order of the disc's "play all" playlist when it has one, else the order of the episodes' clips
+(playlist numbers are often out of order); a line above the list says which was used. When the disc's own title
+names a season ("Doctor Who - Season 1 - Disc 1"), the series and season are filled in from it.
+**Pictures** show three frames of each playlist to check the order, and **Watch** plays 30 seconds from its
+start, middle or end (made with ffmpeg the first time, 640 px wide; a Watch button is on every row of the
+Playlists list too). Ripparr remembers where the last disc of a series stopped, so the next disc starts at the
+next episode.
+
+Some discs hide their episodes among fakes: Doctor Who's list a dozen "four hour" playlists that loop tiny clips
+(left out as **Too little data**, also from the extras), and every episode twice, once with a second-long clip
+after it (counted as a duplicate of the plain one). Their menus pick playlists from a register at play time, so
+Ripparr cannot read the order from them; check it with Watch.
 
 Each episode is its own job and goes to `done/Series (Year)/Season 01/` (season 0 to `Specials`) as
 `Series S01E05 [1080p][AVC][TrueHD-5.1][BDRemux] - Episode Title.mkv`, with ` (005)` after `S01E05` for

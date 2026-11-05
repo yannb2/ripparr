@@ -87,10 +87,10 @@ public class DiscAnalysisTests
     {
         // A "play all" of the whole clip, three 22-minute episodes cut out of it, an extra and a menu.
         var disc = Disc(
-            Playlist("00001", Cut("00001", 0, 3960)),
-            Playlist("00002", Cut("00001", 0, 1320)),
-            Playlist("00003", Cut("00001", 1320, 2640)),
-            Playlist("00004", Cut("00001", 2640, 3960)),
+            Playlist("00001", Cut("00055", 0, 3960)),
+            Playlist("00002", Cut("00055", 0, 1320)),
+            Playlist("00003", Cut("00055", 1320, 2640)),
+            Playlist("00004", Cut("00055", 2640, 3960)),
             Playlist("00005", MplsBuilder.Feature(("00002", 240))),
             Playlist("00006", MplsBuilder.Feature(("00003", 15))));
         disc.Classify(TimeSpan.FromMinutes(2));
@@ -113,5 +113,64 @@ public class DiscAnalysisTests
 
         Assert.HasCount(3, EpisodeFinder.Find(disc));
         Assert.IsFalse(EpisodeFinder.LooksLikeTv(disc), "the film is much longer than the 'episodes'");
+    }
+
+    [TestMethod]
+    public void ReadsADoctorWhoStyleDisc()
+    {
+        // Five episodes, each also listed with a second-long clip after it, and a "four hour"
+        // playlist that loops tiny clips. Playlist numbers are out of order; the clips are not.
+        var sizes = new Dictionary<string, long> { ["00099"] = 2_000_000, ["00500"] = 300_000, ["00501"] = 300_000 };
+        var playlists = new List<PlaylistInfo>();
+        var episodes = new[] { ("00153", "00030"), ("00152", "00031"), ("00118", "00010"), ("00117", "00011"), ("00154", "00032") };
+        var extra = 157;
+        foreach (var (name, clip) in episodes)
+        {
+            sizes[clip] = 8_500_000_000;
+            playlists.Add(Playlist(name, MplsBuilder.Feature((clip, 2800))));
+            playlists.Add(Playlist($"{extra++:00000}", MplsBuilder.Feature((clip, 2800), ("00099", 1))));
+        }
+
+        playlists.Add(Playlist("00167", MplsBuilder.Feature(("00500", 7500), ("00501", 7500))));
+        var disc = new DiscAnalysis
+        {
+            Source = new DiscSource("/x.iso", SourceKind.Iso, "/", 0, DateTime.UtcNow),
+            Playlists = playlists,
+            ClipSizes = sizes
+        };
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        Assert.AreEqual("00153", disc.Find("00157")!.DuplicateOf, "the episode plus a tiny clip repeats the plain one");
+        Assert.IsTrue(disc.Find("00167")!.TooLittleData);
+        CollectionAssert.AreEqual(new[] { "00118", "00117", "00153", "00152", "00154" },
+            EpisodeFinder.Find(disc).Select(p => p.Name).ToArray(), "in clip order, fakes and repeats left out");
+        Assert.IsTrue(EpisodeFinder.LooksLikeTv(disc), "the fake four-hour playlist is not a film");
+        StringAssert.Contains(EpisodeFinder.InDiscOrder(disc, EpisodeFinder.Find(disc)).How, "playlist numbers are out of order");
+    }
+
+    [TestMethod]
+    public void AnEpisodeWithALongerClipAddedIsNotARepeat()
+    {
+        var disc = Disc(
+            Playlist("00800", MplsBuilder.Feature(("00055", 2800))),
+            Playlist("00801", MplsBuilder.Feature(("00055", 2800), ("00057", 60))));
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        Assert.IsNull(disc.Find("00801")!.DuplicateOf);
+    }
+
+    [TestMethod]
+    public void OrdersEpisodesLikeThePlayAll()
+    {
+        var disc = Disc(
+            Playlist("00010", MplsBuilder.Feature(("00004", 1300))),
+            Playlist("00011", MplsBuilder.Feature(("00002", 1320))),
+            Playlist("00012", MplsBuilder.Feature(("00003", 1310))),
+            Playlist("00020", MplsBuilder.Feature(("00003", 1310), ("00004", 1300), ("00002", 1320))));
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        var (order, how) = EpisodeFinder.InDiscOrder(disc, EpisodeFinder.Find(disc));
+        CollectionAssert.AreEqual(new[] { "00012", "00010", "00011" }, order.Select(p => p.Name).ToArray());
+        StringAssert.Contains(how, "00020");
     }
 }

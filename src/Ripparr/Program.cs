@@ -139,6 +139,26 @@ app.MapGet("/api/discs/listen/{pid:int}.m4a",
         var (file, error) = await thumbnails.SampleAsync(source, analysis, found, pid);
         return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "audio/mp4", enableRangeProcessing: true);
     });
+// 30 seconds of a playlist as a small video, to tell which episode (or fake) it is: only discs inside the sources.
+app.MapGet("/api/discs/watch/{percent:int}.mp4",
+    async (int percent, string path, string playlist, DiscAnalyzer analyzer, Thumbnails thumbnails) =>
+    {
+        var source = Thumbnails.PreviewPercents.Contains(percent) && analyzer.InSources(path) ? analyzer.Describe(path) : null;
+        if (source == null)
+        {
+            return Results.NotFound();
+        }
+
+        var analysis = await analyzer.AnalyseAsync(source, CancellationToken.None);
+        var found = analysis.Find(playlist);
+        if (found == null)
+        {
+            return Results.NotFound();
+        }
+
+        var (file, error) = await thumbnails.PreviewAsync(source, analysis, found, percent);
+        return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "video/mp4", enableRangeProcessing: true);
+    });
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

@@ -37,6 +37,27 @@ public static partial class ReleaseName
         return NotGroups.Contains(group) || group.All(char.IsDigit) ? null : group;
     }
 
+    /// <summary>
+    /// Series and season from a TV disc's own title (BDMV/META): "Doctor Who - Season 1 - Disc 1" ->
+    /// (Doctor Who, 1); "Sherlock: Series 2" -> (Sherlock, 2). Null when it names no season.
+    /// </summary>
+    public static (string Series, int Season)? Season(string? discTitle)
+    {
+        if (string.IsNullOrWhiteSpace(discTitle))
+        {
+            return null;
+        }
+
+        var match = SeasonRegex().Match(discTitle);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var series = match.Groups[1].Value.Trim(' ', '-', ':', ',', '–');
+        return series.Length == 0 ? null : (series, int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture));
+    }
+
     // What follows a dash at the end of a name without being a group: Blu-ray, WEB-DL, BD-Rip, DTS-HD, DTS-X...
     private static readonly HashSet<string> NotGroups = new(StringComparer.OrdinalIgnoreCase)
         { "ray", "dl", "rip", "hd", "ma", "x", "es", "hr", "remux", "complete" };
@@ -59,6 +80,9 @@ public static partial class ReleaseName
 
     [GeneratedRegex(@"-([A-Za-z0-9][A-Za-z0-9_]{0,23})$")]
     private static partial Regex GroupRegex();
+
+    [GeneratedRegex(@"^(.*?)[\s\-:,–]+(?:Season|Series|Saison|Staffel)\s*(\d{1,2})\b", RegexOptions.IgnoreCase)]
+    private static partial Regex SeasonRegex();
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex SpacesRegex();

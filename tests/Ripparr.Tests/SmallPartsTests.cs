@@ -50,6 +50,17 @@ public class SmallPartsTests
     }
 
     [TestMethod]
+    public void ReadsSeriesAndSeasonFromTheDiscTitle()
+    {
+        Assert.AreEqual(("Doctor Who", 1), ReleaseName.Season("Doctor Who - Season 1 - Disc 1"));
+        Assert.AreEqual(("Sherlock", 2), ReleaseName.Season("Sherlock: Series 2"));
+        Assert.AreEqual(("Kaamelott", 3), ReleaseName.Season("Kaamelott Saison 3"));
+        Assert.IsNull(ReleaseName.Season("The Fabelmans"));
+        Assert.IsNull(ReleaseName.Season("Season 1"));
+        Assert.IsNull(ReleaseName.Season(null));
+    }
+
+    [TestMethod]
     public void LanguageHelpers()
     {
         Assert.IsTrue(Languages.Same("fre", "fra"));

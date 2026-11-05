@@ -79,22 +79,53 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store,
 
     public const double SamplePosition = 0.4;
 
+    /// <summary>How long a Watch preview runs.</summary>
+    public const int PreviewSeconds = 30;
+
+    /// <summary>Where a Watch preview may start, in percent of the playlist: the start (titles), the middle, the end (credits).</summary>
+    public static readonly int[] PreviewPercents = [2, 50, 95];
+
     private readonly ConcurrentDictionary<string, Lazy<Task<string?>>> _samples = new();
 
     /// <summary>
     /// 20 seconds of one audio track as AAC (.m4a), to hear whether it is a commentary or an audio
     /// description. From a folder, or an ISO the mount service mounts: ffmpeg has to seek.
     /// </summary>
-    public async Task<(string? File, string? Error)> SampleAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int pid)
+    public Task<(string? File, string? Error)> SampleAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int pid) =>
+        CutAsync(source, analysis, playlist, SamplePosition, $"listen-{pid.ToString(CultureInfo.InvariantCulture)}.m4a",
+            (path, seconds, temp) =>
+            [
+                "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", seconds,
+                "-i", path, "-map", $"0:i:{pid.ToString(CultureInfo.InvariantCulture)}", "-t", SampleSeconds.ToString(CultureInfo.InvariantCulture),
+                "-vn", "-sn", "-ac", "2", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-f", "mp4", "-y", temp
+            ]);
+
+    /// <summary>
+    /// 30 seconds of a playlist as a small H.264 video with its first audio track, to see which
+    /// episode (or extra, or fake) it is. HDR is shown as it is (colours look flat): enough to tell
+    /// one episode from another.
+    /// </summary>
+    public Task<(string? File, string? Error)> PreviewAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int percent) =>
+        CutAsync(source, analysis, playlist, percent / 100.0, $"watch-{percent.ToString(CultureInfo.InvariantCulture)}.mp4",
+            (path, seconds, temp) =>
+            [
+                "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", seconds,
+                "-i", path, "-map", "0:v:0", "-map", "0:a:0?", "-t", PreviewSeconds.ToString(CultureInfo.InvariantCulture),
+                "-sn", "-vf", "scale=640:-2,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+                "-ac", "2", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-f", "mp4", "-y", temp
+            ]);
+
+    private async Task<(string? File, string? Error)> CutAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist,
+        double fraction, string name, Func<string, string, string, string[]> arguments)
     {
         var key = Key(source, playlist.Name);
-        var file = Path.Combine(options.Value.ThumbnailFolder, key, $"listen-{pid.ToString(CultureInfo.InvariantCulture)}.m4a");
+        var file = Path.Combine(options.Value.ThumbnailFolder, key, name);
         if (File.Exists(file))
         {
             return (file, null);
         }
 
-        var work = _samples.GetOrAdd(file, _ => new Lazy<Task<string?>>(() => MakeSampleAsync(source, analysis, playlist, pid, file)));
+        var work = _samples.GetOrAdd(file, _ => new Lazy<Task<string?>>(() => MakeCutAsync(source, analysis, playlist, fraction, file, arguments)));
         string? error;
         try
         {
@@ -108,25 +139,22 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store,
         return File.Exists(file) ? (file, null) : (null, error ?? "No sample.");
     }
 
-    private async Task<string?> MakeSampleAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int pid, string file)
+    private async Task<string?> MakeCutAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, double fraction, string file,
+        Func<string, string, string, string[]> arguments)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         async Task<string?> Cut(string disc)
         {
-            var (clip, seconds) = Locate(playlist.Mpls, SamplePosition, ClipStarts(analysis));
+            var (clip, seconds) = Locate(playlist.Mpls, fraction, ClipStarts(analysis));
             var path = DiscAnalyzer.ClipPath(disc, clip);
             if (path == null)
             {
                 return $"Clip {clip}.m2ts is missing.";
             }
 
-            var temp = file + ".part.m4a";
+            var temp = file + ".part" + Path.GetExtension(file);
             var result = await Tools.ProcessRunner.RunAsync(options.Value.Tools.FFmpeg,
-            [
-                "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", seconds.ToString("0.###", CultureInfo.InvariantCulture),
-                "-i", path, "-map", $"0:i:{pid.ToString(CultureInfo.InvariantCulture)}", "-t", SampleSeconds.ToString(CultureInfo.InvariantCulture),
-                "-vn", "-sn", "-ac", "2", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-f", "mp4", "-y", temp
-            ], TimeSpan.FromMinutes(2));
+                arguments(path, seconds.ToString("0.###", CultureInfo.InvariantCulture), temp), TimeSpan.FromMinutes(3));
             if (result.ExitCode != 0 || !File.Exists(temp))
             {
                 File.Delete(temp);
@@ -148,11 +176,11 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store,
                 store.List(50, [Jobs.JobStatus.Running]).FirstOrDefault(j => j.SourcePath == source.Path && j.MountedAt != null)?.MountedAt,
                 () => store.List(50, [Jobs.JobStatus.Running]).Any(j => j.SourcePath == source.Path),
                 async disc => new Tuple<string?>(await Cut(disc)));
-            return mounted == null ? "Listening to a track of an ISO needs the mount service." : mounted.Item1;
+            return mounted == null ? "Playing part of an ISO needs the mount service." : mounted.Item1;
         }
         catch (Exception e) when (e is IOException or Win32Exception or InvalidOperationException)
         {
-            logger.LogWarning(e, "Sample of PID {Pid} in playlist {Playlist} failed", pid, playlist.Name);
+            logger.LogWarning(e, "Sample {File} of playlist {Playlist} failed", Path.GetFileName(file), playlist.Name);
             return e.Message;
         }
     }
