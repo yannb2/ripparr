@@ -154,7 +154,7 @@ public class MuxBuilderTests
         var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
         var job = new Job { Title = "Film", Year = 2020, Profile = profile };
 
-        Assert.AreEqual("Film (2020) [2160p][HEVC][HDR10][TrueHD Atmos-7.1][BDRemux]",
+        Assert.AreEqual("Film (2020) [2160p][HEVC][HDR10][TrueHD Atmos-7.1][BD Remux]",
             Naming.Apply(profile.FileNameTemplate, MuxBuilder.NameValues(job, outputs)));
     }
 
@@ -181,7 +181,7 @@ public class MuxBuilderTests
         var outputs = MuxBuilder.Outputs(plan, MuxBuilder.Map(Film, Files()), profile);
         var job = new Job { Title = "Film", Year = 2020, Profile = profile, Tags = [new GlobalTag { Name = "release group", Value = " YANNRIP " }] };
 
-        Assert.AreEqual("Film (2020) [2160p][HEVC][HDR10][TrueHD Atmos-7.1][BDRemux]-YANNRIP",
+        Assert.AreEqual("Film (2020) [2160p][HEVC][HDR10][TrueHD Atmos-7.1][BD Remux]-YANNRIP",
             Naming.Apply(profile.FileNameTemplate, MuxBuilder.NameValues(job, outputs)));
 
         job.Tags[0].Value = "Yann Rip";
@@ -311,11 +311,23 @@ public class MuxBuilderTests
         var profile = new RipProfile();
         var job = new Job { Title = "Heat", Year = 1995, Profile = profile };
         var values = new Dictionary<string, string?>(MuxBuilder.NameValues(job, [])) { ["resolution"] = "2160p", ["videocodec"] = "HEVC" };
-        Assert.AreEqual("Heat (1995) [2160p][HEVC][BDRemux]", Naming.Apply(profile.FileNameTemplate, values));
+        Assert.AreEqual("Heat (1995) [2160p][HEVC][BD Remux]", Naming.Apply(profile.FileNameTemplate, values));
 
         job.Country = "GBR";
         values = new Dictionary<string, string?>(MuxBuilder.NameValues(job, [])) { ["resolution"] = "2160p", ["videocodec"] = "HEVC" };
-        Assert.AreEqual("Heat (1995) [2160p][HEVC][BDRemux][GBR]", Naming.Apply(profile.FileNameTemplate, values));
+        Assert.AreEqual("Heat (1995) [2160p][HEVC][BD Remux][GBR]", Naming.Apply(profile.FileNameTemplate, values));
+    }
+
+    [TestMethod]
+    public void TheFileNameSaysBdRemuxWithASpaceForSonarr()
+    {
+        Assert.AreEqual("BD Remux", MuxBuilder.SourceInName("BDRemux"));
+        Assert.AreEqual("DVDRemux", MuxBuilder.SourceInName("DVDRemux"));
+        Assert.IsNull(MuxBuilder.SourceInName(null));
+
+        // The SOURCE tag keeps the profile's word
+        var job = new Job { Title = "Heat", Year = 1995, Playlist = "00800" };
+        StringAssert.Contains(MuxBuilder.TagsXml(job, []), "<Name>SOURCE</Name><String>BDRemux</String>");
     }
 
     [TestMethod]

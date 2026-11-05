@@ -444,14 +444,14 @@
     private string Example(string template) => Naming.Apply(template, new Dictionary<string, string?>
     {
         ["title"] = "Blade Runner", ["year"] = "1982", ["edition"] = "Final Cut", ["resolution"] = "2160p",
-        ["videocodec"] = "HEVC", ["hdr"] = "DV HDR10", ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux", ["country"] = null,
+        ["videocodec"] = "HEVC", ["hdr"] = "DV HDR10", ["audio"] = "TrueHD Atmos-7.1", ["source"] = MuxBuilder.SourceInName(_profile?.Source ?? "BDRemux"), ["country"] = null,
         ["releasegroup"] = ExampleGroup
     });
 
     private string Episode(string template) => Naming.Apply(template, new Dictionary<string, string?>
     {
         ["title"] = "Frieren - Beyond Journey's End", ["year"] = "2023", ["resolution"] = "1080p", ["videocodec"] = "AVC",
-        ["hdr"] = null, ["audio"] = "TrueHD-2.0", ["source"] = "BDRemux", ["country"] = null, ["episode"] = "S01E05", ["absolute"] = "005",
+        ["hdr"] = null, ["audio"] = "TrueHD-2.0", ["source"] = MuxBuilder.SourceInName(_profile?.Source ?? "BDRemux"), ["country"] = null, ["episode"] = "S01E05", ["absolute"] = "005",
         ["episodetitle"] = "Phantoms of the Dead", ["releasegroup"] = ExampleGroup
     });
 

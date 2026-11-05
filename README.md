@@ -328,10 +328,13 @@ named as a plain track (`English - SRT`). It works for languages outside the SRT
 marked SDH and not read is checked on a sample of 120 captions first, and read in full only when it is SDH.
 
 The default file name follows Radarr's Standard Movie Format in this library:
-`Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BDRemux].mkv`.
+`Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BD Remux].mkv`.
+The source is written `BD Remux` with a space (since 0.4.33): Sonarr reads `[BDRemux]` as HDTV-1080p, while
+`[BD Remux]` is Bluray Remux in Sonarr and Radarr alike. Their rename on import writes the library's `[BDRemux]`
+again (a rename-only custom format that follows the quality), and the `SOURCE` tag stays `BDRemux`.
 "SDR" is only written for 2160p video (`[SDR]` in the file name, `{range}` in the video track name): below 4K
 every disc is SDR, so the HDR bracket is left out, the same rule as tag_release and Radarr's SDR format.
-When the job has a RELEASE_GROUP tag, `{-releasegroup}` adds it at the end (`...[BDRemux]-YANNRIP.mkv`, spaces
+When the job has a RELEASE_GROUP tag, `{-releasegroup}` adds it at the end (`...[BD Remux]-YBRIP.mkv`, spaces
 become dots). That is where Radarr and Sonarr read the release group on import, so a custom format can match
 your own rips. Profiles saved before 0.4.12 get `{-releasegroup}` added once, and removing it keeps it out.
 

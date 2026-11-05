@@ -265,7 +265,7 @@ public static partial class MuxBuilder
             // A 2160p SDR film gets [SDR], as the rename-only custom format does in Radarr; below 4K, nothing.
             ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? TrackNaming.SdrOnlyAt2160p("SDR", video.Resolution) : range,
             ["audio"] = audioWords,
-            ["source"] = job.Profile.Source,
+            ["source"] = SourceInName(job.Profile.Source),
             ["country"] = string.IsNullOrWhiteSpace(job.Country) ? null : job.Country.Trim().ToUpperInvariant(),
             ["episode"] = job.EpisodeCode,
             ["absolute"] = job.AbsoluteEpisode is { } absolute ? EpisodeNumbers.Absolute(absolute) : null,
@@ -274,6 +274,15 @@ public static partial class MuxBuilder
             ["releasegroup"] = ReleaseGroupWord(GlobalTag.Find(job.Tags, GlobalTag.ReleaseGroup))
         };
     }
+
+    /// <summary>
+    /// The source as the file name writes it: "BD Remux" for BDRemux. Sonarr reads "[BDRemux]" as HDTV
+    /// (its remux pattern wants a space, dot or underscore before the word, and "BD" alone is its Blu-ray
+    /// source); "[BD Remux]" is Bluray Remux in Sonarr and Radarr alike. Their rename on import writes
+    /// the library's [BDRemux] again, from the quality. The SOURCE tag keeps the profile's word.
+    /// </summary>
+    public static string? SourceInName(string? source) =>
+        string.Equals(source?.Trim(), "BDRemux", StringComparison.OrdinalIgnoreCase) ? "BD Remux" : source;
 
     /// <summary>The release group as one word for a file name: Radarr stops reading it at a space.</summary>
     public static string? ReleaseGroupWord(string? group) =>

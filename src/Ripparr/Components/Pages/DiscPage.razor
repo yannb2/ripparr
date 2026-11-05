@@ -1096,7 +1096,7 @@
             // SDR only for 2160p; a 1080p disc gets no HDR bracket.
             ["hdr"] = dv ? "DV HDR10" : uhd ? "HDR10" : null,
             ["audio"] = audio == null ? null : audio.Layout is "Multi" or "2.0 + Multi" ? audio.Codec : $"{audio.Codec}-{audio.Layout}",
-            ["source"] = Profile.Source,
+            ["source"] = MuxBuilder.SourceInName(Profile.Source),
             ["country"] = Job.CountryCode(_country),
             ["releasegroup"] = MuxBuilder.ReleaseGroupWord(GlobalTag.Find(_tags, GlobalTag.ReleaseGroup))
         };

@@ -316,7 +316,7 @@ public class SmallPartsTests
         values["resolution"] = "1080p";
 
         Assert.AreEqual("/done/Test Show (2019)/Season 01", Ripparr.Jobs.JobPipeline.DoneFolder("/done", job, values));
-        Assert.AreEqual("Test Show S01E05 (005) [1080p][BDRemux] - Chapter 5 - The Bridge.mkv", Ripparr.Jobs.JobPipeline.FileName(job, values));
+        Assert.AreEqual("Test Show S01E05 (005) [1080p][BD Remux] - Chapter 5 - The Bridge.mkv", Ripparr.Jobs.JobPipeline.FileName(job, values));
         Assert.AreEqual("Test Show S01E05 - Chapter 5: The Bridge", Ripparr.Jobs.JobPipeline.MkvTitle(job, values));
         Assert.AreEqual("Test Show (2019) · S01E05 - Chapter 5: The Bridge", job.DisplayTitle);
 
@@ -330,7 +330,7 @@ public class SmallPartsTests
         job.Season = 0;
         values = Ripparr.Jobs.MuxBuilder.NameValues(job, []);
         Assert.AreEqual("/done/Test Show (2019)/Specials", Ripparr.Jobs.JobPipeline.DoneFolder("/done", job, values));
-        StringAssert.StartsWith(Ripparr.Jobs.JobPipeline.FileName(job, values), "Test Show S00E05 [BDRemux]");
+        StringAssert.StartsWith(Ripparr.Jobs.JobPipeline.FileName(job, values), "Test Show S00E05 [BD Remux]");
 
         // A TV extra put with its season.
         var extra = new Ripparr.Jobs.Job { Title = "Test Show", Year = 2019, TvdbId = 12345, Season = 1, ExtraType = "extras", ExtraName = "Creditless Opening" };
