@@ -155,7 +155,7 @@ public sealed class RipProfile : IJsonOnDeserialized
     // ---- Output ----
 
     /// <summary>
-    /// Tokens: {title} {year} {edition} {resolution} {videocodec} {hdr} {audio} {source} {releasegroup}.
+    /// Tokens: {title} {year} {edition} {resolution} {videocodec} {hdr} {audio} {source} {country} {releasegroup}.
     /// Text inside the braces is kept only when the token has a value: "{ - edition}".
     /// </summary>
     public string FileNameTemplate { get; set; } = DefaultFileName;
@@ -165,13 +165,19 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// RELEASE_GROUP tag, so Radarr reads the release group from the name on import.
     /// </summary>
     public const string DefaultFileName =
-        "{title} ({year}){ - edition} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{-releasegroup}";
+        "{title} ({year}){ - edition} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{[country]}{-releasegroup}";
 
     /// <summary>What the file name placeholders end with since 0.4.12: the job's RELEASE_GROUP tag.</summary>
     public const string ReleaseGroupToken = "{-releasegroup}";
 
     /// <summary>Set once {-releasegroup} was added to a profile saved before it existed, so removing it sticks.</summary>
     public bool ReleaseGroupTokenAdded { get; set; }
+
+    /// <summary>What the file names get after [{source}] since 0.4.33: the disc's country, [GBR], only when one is set.</summary>
+    public const string CountryToken = "{[country]}";
+
+    /// <summary>Set once {[country]} was added to a profile saved before it existed, so removing it sticks.</summary>
+    public bool CountryTokenAdded { get; set; }
 
     /// <summary>The MKV title. Same tokens.</summary>
     public string TitleTemplate { get; set; } = "{title} ({year}){ - edition}";
@@ -183,7 +189,7 @@ public sealed class RipProfile : IJsonOnDeserialized
     public string EpisodeFileNameTemplate { get; set; } = DefaultEpisodeFileName;
 
     public const string DefaultEpisodeFileName =
-        "{title} {episode}{ (absolute)} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{ - episodetitle}{-releasegroup}";
+        "{title} {episode}{ (absolute)} [{resolution}][{videocodec}][{hdr}][{audio}][{source}]{[country]}{ - episodetitle}{-releasegroup}";
 
     /// <summary>A TV episode's MKV title.</summary>
     public string EpisodeTitleTemplate { get; set; } = DefaultEpisodeTitle;
@@ -260,11 +266,30 @@ public sealed class RipProfile : IJsonOnDeserialized
         }
     }
 
+    /// <summary>Profiles saved before 0.4.33 get {[country]} right after [{source}] in both file names, once.</summary>
+    private void AddCountryToken()
+    {
+        if (CountryTokenAdded)
+        {
+            return;
+        }
+
+        CountryTokenAdded = true;
+        static string Add(string template) =>
+            template.Contains("country", StringComparison.OrdinalIgnoreCase) || !template.Contains("[{source}]", StringComparison.OrdinalIgnoreCase)
+                ? template
+                : template.Replace("[{source}]", "[{source}]" + CountryToken, StringComparison.OrdinalIgnoreCase);
+
+        FileNameTemplate = Add(FileNameTemplate);
+        EpisodeFileNameTemplate = Add(EpisodeFileNameTemplate);
+    }
+
     void IJsonOnDeserialized.OnDeserialized()
     {
         ReplaceTrackName();
         CodecNames.MoveToMuxarrLabels(AudioCodecNames);
         AddReleaseGroupToken();
+        AddCountryToken();
         if (CommentaryNameTemplate == null && ForcedSubtitleNameTemplate == null && SrtNameTemplate == null && ForcedSrtNameTemplate == null)
         {
             return;

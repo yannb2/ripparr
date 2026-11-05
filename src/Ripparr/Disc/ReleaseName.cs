@@ -38,6 +38,28 @@ public static partial class ReleaseName
     }
 
     /// <summary>
+    /// The country code in a full-disc release name, as ISO 3166 three letters: "Heat.1995.GBR.UHD.BluRay..." -> GBR.
+    /// UK and GER are read as GBR and DEU. Null when the name has none (most do not).
+    /// </summary>
+    public static string? Country(string name)
+    {
+        var text = SeparatorRegex().Replace(name.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name, " ");
+        foreach (Match word in CountryRegex().Matches(text))
+        {
+            var code = word.Value.ToUpperInvariant();
+            return CountryAliases.TryGetValue(code, out var real) ? real : code;
+        }
+
+        return null;
+    }
+
+    /// <summary>The country codes Ripparr knows, for the Country box (the same list as the rename-only custom formats).</summary>
+    public static readonly string[] Countries =
+        ["USA", "GBR", "DEU", "FRA", "ITA", "ESP", "NLD", "SWE", "NOR", "DNK", "FIN", "POL", "CZE", "AUS", "CAN", "JPN", "KOR", "HKG", "TWN", "CHN"];
+
+    private static readonly Dictionary<string, string> CountryAliases = new(StringComparer.OrdinalIgnoreCase) { ["UK"] = "GBR", ["GER"] = "DEU" };
+
+    /// <summary>
     /// Series and season from a TV disc's own title (BDMV/META): "Doctor Who - Season 1 - Disc 1" ->
     /// (Doctor Who, 1); "Sherlock: Series 2" -> (Sherlock, 2). Null when it names no season.
     /// </summary>
@@ -71,6 +93,10 @@ public static partial class ReleaseName
 
     [GeneratedRegex(@"[._]+")]
     private static partial Regex SeparatorRegex();
+
+    // Upper case only: "ita" or "can" in a title is a word, not a country.
+    [GeneratedRegex(@"(?<![A-Za-z0-9])(USA|GBR|UK|GER|DEU|FRA|ITA|ESP|NLD|SWE|NOR|DNK|FIN|POL|CZE|AUS|CAN|JPN|KOR|HKG|TWN|CHN)(?![A-Za-z0-9])")]
+    private static partial Regex CountryRegex();
 
     [GeneratedRegex(@"[\s(\[]((?:19|20)\d{2})(?=[\s)\]]|$)")]
     private static partial Regex YearRegex();

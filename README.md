@@ -126,11 +126,21 @@ its kind. The job page shows the same flags as icons, and folds its Checks card 
    chapters from the playlist (named as the profile says; the Chapters card on the job form renames any of them,
    written as UTF-8), the frame rate from the playlist and the global tags. The **Release label** box
    on the job form (Criterion, Arrow, Kino Lorber...) is who put out the disc, not the cut (that is the
-   edition); it is written as the standard Matroska tag `DISTRIBUTED_BY`, which tag_release keeps on later
-   retags and edition_tags.py shows in Jellyfin as a `Release: Criterion` tag.
-   The **Source group** box is who released the ISO (FraMeSToR...): it is read from the ISO's name (the part
-   after the last dash of a release name) and written as `SOURCE_RELEASE_GROUP`, kept apart from your own
-   `RELEASE_GROUP`. It stays empty for a disc label or a name of your own; clear it for your own rips.
+   edition); it is written as the standard Matroska tag `LABEL` ("the imprint on the disc"; `DISTRIBUTED_BY`
+   before 0.4.33), which tag_release keeps on later retags and edition_tags.py shows in Jellyfin as a
+   `Release: Criterion` tag.
+   The **Source group** box says where the disc came from: who released the ISO (FraMeSToR...), read from
+   the ISO's name (the part after the last dash of a release name), or `Own disc` for your own rips (the
+   box starts on it when the name has no group; empty counts as `Own disc`). It is written as
+   `SOURCE_RELEASE_GROUP`, kept apart from your own `RELEASE_GROUP` (the same group for every rip).
+   TV discs have the same box on the episodes card.
+   The **Country** box is only for the rare film whose releases differ by country (a better GBR or DEU
+   disc): three letters as full-disc release names write them, read from the ISO name when it has one.
+   It is written as `DISC_COUNTRY` and as `[GBR]` right after the source in the file name
+   (`{[country]}`, added once to profiles saved before 0.4.33; nothing is written when the box is empty).
+   Radarr and Sonarr keep the bracket on rename through rename-only custom formats (homelab
+   `create_rename_cfs.py`). The disc's own title (BDMV/META) is written as `DISC_TITLE`.
+   `HDR_FORMAT` is spelled HDR10+ and `DV_PROFILE` "7 FEL" / "7 MEL", as tag_release.py writes them on import.
 8. **Verify**: tracks (count and order), languages, duration and chapters against the plan (track names, flags and the MKV title only warn); HDR format; for Dolby Vision, the RPU
    frame count against the video.
 9. **Finish**: moves the file to `done/Title (Year)/`.

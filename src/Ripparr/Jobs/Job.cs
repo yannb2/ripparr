@@ -52,16 +52,39 @@ public sealed class Job
     public string? Edition { get; set; }
 
     /// <summary>
-    /// Who put out the disc (Criterion, Arrow...), written as the standard Matroska tag DISTRIBUTED_BY.
+    /// Who put out the disc (Criterion, Arrow...), written as the standard Matroska tag LABEL ("the
+    /// imprint on the disc"; DISTRIBUTED_BY before 0.4.33).
     /// Not the cut: that is <see cref="Edition"/>. Jellyfin shows it as a "Release: ..." tag (edition_tags.py).
     /// </summary>
     public string? ReleaseLabel { get; set; }
 
     /// <summary>
-    /// Who released the ISO this was remuxed from (FraMeSToR...), written as SOURCE_RELEASE_GROUP. Filled from the
-    /// ISO's name; empty for your own rips. Not RELEASE_GROUP: that is who made this remux.
+    /// Where the disc came from, written as SOURCE_RELEASE_GROUP: who released the ISO (FraMeSToR...), read from
+    /// the ISO's name, or <see cref="OwnDisc"/> for your own rips. Not RELEASE_GROUP: that is who made this remux.
     /// </summary>
     public string? SourceReleaseGroup { get; set; }
+
+    /// <summary>The SOURCE_RELEASE_GROUP of a rip from your own disc.</summary>
+    public const string OwnDisc = "Own disc";
+
+    /// <summary>The Source group box's value as the job keeps it: empty means your own disc.</summary>
+    public static string SourceGroupOrOwnDisc(string? typed) => string.IsNullOrWhiteSpace(typed) ? OwnDisc : typed.Trim();
+
+    /// <summary>
+    /// The disc's country, ISO 3166 three letters as full-disc release names spell it (GBR, DEU, USA...),
+    /// for when two releases of a film differ only by country. Written as DISC_COUNTRY and as [GBR] after
+    /// the source in the file name; empty for most discs.
+    /// </summary>
+    public string? Country { get; set; }
+
+    /// <summary>A typed country as the job keeps it: upper case, null when empty.</summary>
+    public static string? CountryCode(string? typed) => string.IsNullOrWhiteSpace(typed) ? null : typed.Trim().ToUpperInvariant();
+
+    /// <summary>The title the disc gives itself (BDMV/META/DL/bdmt_eng.xml), written as DISC_TITLE.</summary>
+    public string? DiscTitle { get; set; }
+
+    /// <summary>The Dolby Vision profile and layer dovi_tool read after the merge ("7 FEL"), written as DV_PROFILE.</summary>
+    public string? DolbyVisionProfile { get; set; }
     public int? TmdbId { get; set; }
     public string? ImdbId { get; set; }
 
@@ -202,6 +225,8 @@ public sealed class Job
             Edition = copy.Edition,
             ReleaseLabel = copy.ReleaseLabel,
             SourceReleaseGroup = copy.SourceReleaseGroup,
+            DiscTitle = copy.DiscTitle,
+            Country = copy.Country,
             TmdbId = copy.TmdbId,
             ImdbId = copy.ImdbId,
             OriginalLanguage = copy.OriginalLanguage,

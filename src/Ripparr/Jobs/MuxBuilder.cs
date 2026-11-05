@@ -266,6 +266,7 @@ public static partial class MuxBuilder
             ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? TrackNaming.SdrOnlyAt2160p("SDR", video.Resolution) : range,
             ["audio"] = audioWords,
             ["source"] = job.Profile.Source,
+            ["country"] = string.IsNullOrWhiteSpace(job.Country) ? null : job.Country.Trim().ToUpperInvariant(),
             ["episode"] = job.EpisodeCode,
             ["absolute"] = job.AbsoluteEpisode is { } absolute ? EpisodeNumbers.Absolute(absolute) : null,
             ["episodetitle"] = job.EpisodeTitle,
@@ -321,12 +322,15 @@ public static partial class MuxBuilder
             ("ABSOLUTE_EPISODE", job.AbsoluteEpisode?.ToString(CultureInfo.InvariantCulture)),
             ("RELEASE_NAME", job.SourceName),
             ("SOURCE_RELEASE_GROUP", string.IsNullOrWhiteSpace(job.SourceReleaseGroup) ? null : job.SourceReleaseGroup.Trim()),
+            ("DISC_TITLE", string.IsNullOrWhiteSpace(job.DiscTitle) ? null : job.DiscTitle.Trim()),
+            ("DISC_COUNTRY", string.IsNullOrWhiteSpace(job.Country) ? null : job.Country.Trim().ToUpperInvariant()),
             ("SOURCE", job.Profile.Source),
             ("VIDEO_CODEC", video?.VideoCodec),
-            ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr : null),
-            ("DV_PROFILE", video is { DolbyVision: true } ? video.DolbyVisionProfile : null),
+            // Spelled as tag_release.py does on import (HDR10+, "7 FEL"), so the values stay the same; the file name keeps Radarr's HDR10Plus.
+            ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr.Replace("HDR10Plus", "HDR10+") : null),
+            ("DV_PROFILE", video is { DolbyVision: true } ? job.DolbyVisionProfile ?? video.DolbyVisionProfile : null),
             ("EDITION", string.IsNullOrWhiteSpace(job.Edition) ? null : job.Edition),
-            ("DISTRIBUTED_BY", string.IsNullOrWhiteSpace(job.ReleaseLabel) ? null : job.ReleaseLabel.Trim()),
+            ("LABEL", string.IsNullOrWhiteSpace(job.ReleaseLabel) ? null : job.ReleaseLabel.Trim()),
             ("ORIGINAL_LANGUAGE", job.OriginalLanguage),
             ("RIPPED_WITH", $"Ripparr {AppInfo.Version}, playlist {job.Playlist}")
         };

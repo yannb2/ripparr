@@ -168,7 +168,7 @@ public class MuxBuilderTests
         var values = new Dictionary<string, string?>
         {
             ["title"] = "Film", ["year"] = "2001", ["edition"] = null, ["resolution"] = "1080p", ["videocodec"] = "AVC",
-            ["hdr"] = TrackNaming.SdrOnlyAt2160p("SDR", "1080p"), ["audio"] = "DTS-HD MA-5.1", ["source"] = "BDRemux", ["releasegroup"] = null
+            ["hdr"] = TrackNaming.SdrOnlyAt2160p("SDR", "1080p"), ["audio"] = "DTS-HD MA-5.1", ["source"] = "BDRemux", ["country"] = null, ["releasegroup"] = null
         };
         Assert.AreEqual("Film (2001) [1080p][AVC][DTS-HD MA-5.1][BDRemux]", Naming.Apply(new RipProfile().FileNameTemplate, values));
     }
@@ -199,10 +199,10 @@ public class MuxBuilderTests
         const string old = "{\"FileNameTemplate\":\"{title} ({year}) [{source}]\",\"EpisodeFileNameTemplate\":\"{title} {episode}\"}";
         var profile = System.Text.Json.JsonSerializer.Deserialize<RipProfile>(old, JobStore.Json)!;
 
-        Assert.AreEqual("{title} ({year}) [{source}]{-releasegroup}", profile.FileNameTemplate);
+        Assert.AreEqual("{title} ({year}) [{source}]{[country]}{-releasegroup}", profile.FileNameTemplate);
         Assert.AreEqual("{title} {episode}{-releasegroup}", profile.EpisodeFileNameTemplate);
 
-        // Taken out again by hand: it stays out.
+        // Taken out again by hand: both stay out.
         profile.FileNameTemplate = "{title} ({year}) [{source}]";
         var copy = System.Text.Json.JsonSerializer.Deserialize<RipProfile>(System.Text.Json.JsonSerializer.Serialize(profile, JobStore.Json), JobStore.Json)!;
         Assert.AreEqual("{title} ({year}) [{source}]", copy.FileNameTemplate);
@@ -247,17 +247,18 @@ public class MuxBuilderTests
     public void TagsXmlWritesTheReleaseLabel()
     {
         var job = new Job { Title = "Heat", Year = 1995, SourceName = "HEAT", Playlist = "00800", ReleaseLabel = " Criterion " };
-        StringAssert.Contains(MuxBuilder.TagsXml(job, []), "<Name>DISTRIBUTED_BY</Name><String>Criterion</String>");
+        StringAssert.Contains(MuxBuilder.TagsXml(job, []), "<Name>LABEL</Name><String>Criterion</String>");
+        Assert.DoesNotContain("DISTRIBUTED_BY", MuxBuilder.TagsXml(job, []));
 
         job.ReleaseLabel = null;
-        Assert.DoesNotContain("DISTRIBUTED_BY", MuxBuilder.TagsXml(job, []));
+        Assert.DoesNotContain("<Name>LABEL</Name>", MuxBuilder.TagsXml(job, []));
 
         // A profile tag of the same name still wins, like for the other automatic tags
         job.ReleaseLabel = "Arrow";
-        job.Tags = [new GlobalTag { Name = "distributed by", Value = "Arrow Video" }];
+        job.Tags = [new GlobalTag { Name = "label", Value = "Arrow Video" }];
         var xml = MuxBuilder.TagsXml(job, []);
-        StringAssert.Contains(xml, "<Name>DISTRIBUTED_BY</Name><String>Arrow Video</String>");
-        Assert.HasCount(1, System.Text.RegularExpressions.Regex.Matches(xml, "<Name>DISTRIBUTED_BY</Name>"));
+        StringAssert.Contains(xml, "<Name>LABEL</Name><String>Arrow Video</String>");
+        Assert.HasCount(1, System.Text.RegularExpressions.Regex.Matches(xml, "<Name>LABEL</Name>"));
     }
 
     [TestMethod]
@@ -269,6 +270,63 @@ public class MuxBuilderTests
 
         job.SourceReleaseGroup = " ";
         Assert.DoesNotContain("SOURCE_RELEASE_GROUP", MuxBuilder.TagsXml(job, []));
+    }
+
+    [TestMethod]
+    public void TagsXmlWritesWhereTheDiscCameFrom()
+    {
+        var job = new Job { Title = "Heat", Year = 1995, SourceName = "HEAT_UHD", Playlist = "00800",
+            SourceReleaseGroup = Job.SourceGroupOrOwnDisc(" "), DiscTitle = " Heat ", Country = Job.CountryCode(" gbr ") };
+        var xml = MuxBuilder.TagsXml(job, []);
+        StringAssert.Contains(xml, "<Name>SOURCE_RELEASE_GROUP</Name><String>Own disc</String>");
+        StringAssert.Contains(xml, "<Name>DISC_TITLE</Name><String>Heat</String>");
+        StringAssert.Contains(xml, "<Name>DISC_COUNTRY</Name><String>GBR</String>");
+        Assert.AreEqual("FraMeSToR", Job.SourceGroupOrOwnDisc(" FraMeSToR "));
+
+        job.DiscTitle = null;
+        job.Country = Job.CountryCode("");
+        xml = MuxBuilder.TagsXml(job, []);
+        Assert.DoesNotContain("DISC_TITLE", xml);
+        Assert.DoesNotContain("DISC_COUNTRY", xml);
+    }
+
+    [TestMethod]
+    public void TagsXmlSpellsHdrAndDolbyVisionAsTagReleaseDoes()
+    {
+        static OutputTrack Video(StreamFacts facts) => new(new PlannedTrack { Kind = StreamKind.Video }, new DemuxedFile("v.hevc", facts), "");
+        var job = new Job { Title = "Film", Year = 2020, Playlist = "00800" };
+
+        var plus = Video(new StreamFacts { Kind = StreamKind.Video, HdrFormat = "SMPTE ST 2094 App 4", HdrCompatibility = "HDR10+ Profile A / HDR10" });
+        StringAssert.Contains(MuxBuilder.TagsXml(job, [plus]), "<Name>HDR_FORMAT</Name><String>HDR10+</String>");
+
+        var dv = Video(new StreamFacts { Kind = StreamKind.Video, HdrFormat = "Dolby Vision / SMPTE ST 2086", HdrCompatibility = "HDR10", HdrProfile = "dvhe.07.06" });
+        StringAssert.Contains(MuxBuilder.TagsXml(job, [dv]), "<Name>DV_PROFILE</Name><String>7</String>", "MediaInfo's profile until dovi_tool read the layer");
+        job.DolbyVisionProfile = "7 FEL";
+        StringAssert.Contains(MuxBuilder.TagsXml(job, [dv]), "<Name>DV_PROFILE</Name><String>7 FEL</String>");
+    }
+
+    [TestMethod]
+    public void TheCountryGoesAfterTheSourceOnlyWhenSet()
+    {
+        var profile = new RipProfile();
+        var job = new Job { Title = "Heat", Year = 1995, Profile = profile };
+        var values = new Dictionary<string, string?>(MuxBuilder.NameValues(job, [])) { ["resolution"] = "2160p", ["videocodec"] = "HEVC" };
+        Assert.AreEqual("Heat (1995) [2160p][HEVC][BDRemux]", Naming.Apply(profile.FileNameTemplate, values));
+
+        job.Country = "GBR";
+        values = new Dictionary<string, string?>(MuxBuilder.NameValues(job, [])) { ["resolution"] = "2160p", ["videocodec"] = "HEVC" };
+        Assert.AreEqual("Heat (1995) [2160p][HEVC][BDRemux][GBR]", Naming.Apply(profile.FileNameTemplate, values));
+    }
+
+    [TestMethod]
+    public void CountryComesFromAFullDiscName()
+    {
+        Assert.AreEqual("GBR", Ripparr.Disc.ReleaseName.Country("Heat.1995.GBR.UHD.BluRay.2160p.HEVC.TrueHD-GROUP"));
+        Assert.AreEqual("DEU", Ripparr.Disc.ReleaseName.Country("Heat 1995 GER UHD Blu-ray 2160p"));
+        Assert.AreEqual("GBR", Ripparr.Disc.ReleaseName.Country("Heat.1995.UK.COMPLETE.BLURAY-GROUP.iso"));
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Country("Heat.1995.2160p.UHD.BluRay.HEVC.TrueHD-FraMeSToR"));
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Country("Yes.We.Can.2010.1080p.BluRay"), "lower case is a word");
+        Assert.IsNull(Ripparr.Disc.ReleaseName.Country("HEAT_UHD"));
     }
 
     [TestMethod]
