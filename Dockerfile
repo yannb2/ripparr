@@ -11,7 +11,7 @@ ARG SEVENZIP_VERSION=26.05
 # MakeMKV built from its own source (versions older than the newest move to /download/old/) on the same Ubuntu as the final image, command line only (no Qt).
 # makemkv-bin holds the closed part (makemkvcon); building it means accepting its EULA,
 # which is why the image is for your own use and the package stays private.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS makemkv
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-resolute AS makemkv
 ARG MAKEMKV_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential pkg-config curl ca-certificates \
@@ -104,7 +104,7 @@ RUN set -eux; \
     install -m 0755 /tmp/7z/7zz /out/7zz; \
     /out/7zz | head -n 3
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-resolute AS build
 WORKDIR /src
 COPY global.json ./
 COPY src/Ripparr/Ripparr.csproj src/Ripparr/
@@ -116,7 +116,7 @@ COPY src/ src/
 COPY arrkit/src/ arrkit/src/
 RUN dotnet publish src/Ripparr/Ripparr.csproj -c Release -o /app --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-resolute
 ARG MAKEMKV_VERSION
 ARG DGDEMUX_VERSION
 ARG MKVTOOLNIX_VERSION
@@ -128,13 +128,14 @@ ARG SEVENZIP_VERSION
 # Tesseract (Ubuntu's package, with English, French, German, Spanish and Italian) reads the
 # picture subtitles for the SRT tracks.
 # MKVToolNix from the project's own repo (Ubuntu's is v82 from 2024), key checked against the
-# fingerprint on mkvtoolnix.download/authenticity.html, as in Muxarr. libavcodec, libexpat and
-# libssl are what makemkvcon links to. The Java runtime lets makemkvcon run a disc's BD-J code: it picks
+# fingerprint on mkvtoolnix.download/authenticity.html, as in Muxarr. libavcodec (the package
+# libavcodec-dev depends on, so it follows the Ubuntu release), libexpat and libssl are what makemkvcon links to. The Java runtime lets makemkvcon run a disc's BD-J code: it picks
 # the real playlist on fake-playlist discs and is needed for some BD+ and AACS Soft-KCD discs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl ca-certificates gnupg tzdata libexpat1 libavcodec60 \
+        curl ca-certificates gnupg tzdata libexpat1 \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa tesseract-ocr-ita \
         default-jre-headless \
+    && apt-get install -y --no-install-recommends "$(apt-cache depends libavcodec-dev | grep -om1 'libavcodec[0-9][0-9]*')" \
     && . /etc/os-release \
     && curl -fsSL https://mkvtoolnix.download/gpg-pub-moritzbunkus.gpg -o /usr/share/keyrings/mkvtoolnix.gpg \
     && gpg --show-keys --with-colons /usr/share/keyrings/mkvtoolnix.gpg | grep -q '^fpr:::::::::D9199745B0545F2E8197062B0F92290A445B9007:' \
