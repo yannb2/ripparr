@@ -1,5 +1,6 @@
 using Ripparr.Disc;
 using Ripparr.Profiles;
+using Ripparr.Tools;
 
 namespace Ripparr.Tests;
 
@@ -177,5 +178,23 @@ public class DvdTests
         Assert.IsTrue(plan.Tracks.Single(t => t.Pid == 0x20).Forced);
         Assert.IsTrue(plan.Tracks.Single(t => t.Pid == 0x21).HearingImpaired);
         Assert.AreEqual("VobSub", plan.Tracks.Single(t => t.Pid == 0x21).Codec);
+    }
+
+    [TestMethod]
+    public void MatchesMakeMkvTitlesAFewSecondsOff()
+    {
+        var wanted = new DvdTitle { Number = 1, Chapters = Enumerable.Range(0, 6).Select(i => TimeSpan.FromMinutes(i * 12)).ToList(), Cells = [new DvdCell(new TimeSpan(1, 15, 48), 0, 1)] };
+        var other = new DvdTitle { Number = 2, Chapters = [TimeSpan.Zero], Cells = [new DvdCell(TimeSpan.FromMinutes(3), 2, 3)] };
+        var all = new[] { wanted, other };
+
+        // Record of Lodoss War: the IFO says 1:15:48, MakeMKV lists 1:15:46.
+        var makeMkv = new[] { new MakeMkv.Title(0, new TimeSpan(1, 15, 46), 6, null, null, 0) };
+        Assert.AreEqual(0, MakeMkv.DvdTitle(makeMkv, wanted, all)?.Id);
+
+        // The original title number wins when the length is close.
+        var numbered = new[] { new MakeMkv.Title(0, new TimeSpan(1, 15, 30), 6, 2, null, 0), new MakeMkv.Title(1, new TimeSpan(1, 15, 10), 6, 1, null, 0) };
+        Assert.AreEqual(1, MakeMkv.DvdTitle(numbered, wanted, all)?.Id);
+
+        Assert.IsNull(MakeMkv.DvdTitle([new MakeMkv.Title(0, TimeSpan.FromMinutes(60), 6, null, null, 0)], wanted, all));
     }
 }
