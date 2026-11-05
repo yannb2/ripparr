@@ -197,4 +197,19 @@ public class DvdTests
 
         Assert.IsNull(MakeMkv.DvdTitle([new MakeMkv.Title(0, TimeSpan.FromMinutes(60), 6, null, null, 0)], wanted, all));
     }
+
+    [TestMethod]
+    public void PartsKeepTheirCellsWhenTheRipsChaptersAreALittleOff()
+    {
+        // MakeMKV's rip can start chapter 1 at 0.067 s and the others a second or two off the
+        // IFO's cells: the part must still hold the same cells (Record of Lodoss War).
+        var title = Analysis().Find("title01")!;
+        var shifted = title.Mpls.Chapters.Select((c, i) => new ChapterMark(c.Start + TimeSpan.FromMilliseconds(i == 0 ? 67 : 1800))).ToList();
+        var ripped = title.WithMpls(new Mpls { Version = title.Mpls.Version, Items = title.Mpls.Items, Streams = title.Mpls.Streams, Chapters = shifted });
+
+        var first = DvdDisc.Part(ripped, 1, 4)!;
+        Assert.HasCount(4, first.Mpls.Items);
+        Assert.AreEqual(40.0, first.Duration.TotalSeconds, 0.1);
+        Assert.HasCount(2, DvdDisc.Part(ripped, 5, 6)!.Mpls.Items);
+    }
 }

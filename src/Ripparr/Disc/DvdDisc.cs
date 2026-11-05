@@ -136,8 +136,10 @@ public static partial class DvdDisc
         foreach (var item in title.Mpls.Items)
         {
             var length = TimeSpan.FromSeconds(item.Duration45k / (double)Mpls.ClockRate);
-            // Chapters start on cells: a cell is in the part when it starts inside it.
-            if (at >= start - TimeSpan.FromMilliseconds(50) && at < end - TimeSpan.FromMilliseconds(50))
+            // Chapters start on cells: a cell is in the part when its middle is. The chapters
+            // can be a little off the cells' starts (a rip's first chapter at 0.067 s).
+            var middle = at + length / 2;
+            if (middle >= start && middle < end)
             {
                 items.Add(item);
             }
