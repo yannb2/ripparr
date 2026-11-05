@@ -194,7 +194,10 @@ Anime series type, absolute numbers. Set the season and the first episode on the
 numbered from it in disc order (any number can be typed over), and get their titles from Sonarr (or typed ones).
 Disc order is the order of the disc's "play all" playlist when it has one, else the order of the episodes' clips
 (playlist numbers are often out of order); a line above the list says which was used. When the disc's own title
-names a season ("Doctor Who - Season 1 - Disc 1"), the series and season are filled in from it.
+names a season ("Doctor Who - Season 1 - Disc 1"), the series and season are filled in from it. The series is
+looked up in Sonarr as soon as the disc opens: when only one series of that name is in Sonarr it is picked
+straight away (the other matches stay listed to change it), and each episode's title box shows Sonarr's title
+for its number ("from Sonarr"; typing another one replaces it).
 **Pictures** show three frames of each playlist to check the order, and **Watch** plays 30 seconds from its
 start, middle or end (made with ffmpeg the first time, 640 px wide; a Watch button is on every row of the
 Playlists list too). Ripparr remembers where the last disc of a series stopped, so the next disc starts at the

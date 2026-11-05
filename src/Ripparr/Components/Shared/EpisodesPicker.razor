@@ -44,6 +44,11 @@
             <div class="alert alert-warning py-2 small">@_searchError</div>
         }
 
+        @if (_picked != null)
+        {
+            <div class="small text-body-secondary mb-2"><i class="bi bi-check2-circle me-1"></i>@_picked</div>
+        }
+
         @if (_matches.Count > 0)
         {
             <div class="list-group list-group-flush mb-3 small">
@@ -171,8 +176,13 @@
                         <td>
                             @if (row.Selected)
                             {
-                                <input class="form-control form-control-sm" placeholder="@(known?.Title ?? "episode title")" value="@row.Title"
-                                       @onchange="e => SetTitle(row, e)"/>
+                                <input class="form-control form-control-sm" placeholder="episode title"
+                                       value="@(row.Title.Length > 0 ? row.Title : known?.Title)"
+                                       @onchange="e => SetTitle(row, e, known)"/>
+                                @if (row.Title.Length == 0 && known?.Title is { Length: > 0 })
+                                {
+                                    <div class="text-body-secondary">from Sonarr</div>
+                                }
                                 @if (_anime && known?.Absolute is { } absolute)
                                 {
                                     <div class="text-body-secondary">absolute @EpisodeNumbers.Absolute(absolute)</div>
@@ -267,6 +277,8 @@
     private string _profileId = "";
 
     private string _search = "";
+    private DiscAnalysis? _lookedUp;
+    private string? _picked;
     private bool _searching;
     private string? _searchError;
     private List<SeriesMatch> _matches = [];
@@ -373,6 +385,32 @@
     private string PictureUrl(PlaylistInfo playlist, int index) =>
         $"api/discs/pictures/{index}.jpg?path={Uri.EscapeDataString(Source.Path)}&playlist={Uri.EscapeDataString(playlist.Name)}";
 
+    /// <summary>
+    /// Looks the guessed series up in Sonarr when the disc opens, so the episode titles fill in by
+    /// themselves: picked straight away when only one series of that name is in the library (the
+    /// matches stay listed to change it), else the matches wait for a click.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_lookedUp == Analysis || !Sonarr.Configured || _search.Trim().Length == 0 || _tvdb != null)
+        {
+            return;
+        }
+
+        _lookedUp = Analysis;
+        await Search();
+        var mine = _matches.Where(m => m.SonarrId != null && string.Equals(m.Title, _search.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        if (mine.Count == 1)
+        {
+            var others = _matches.Where(m => m != mine[0]).ToList();
+            await Pick(mine[0]);
+            _picked = $"Picked {mine[0].Title} ({mine[0].Year}), the only series of that name in Sonarr: pick another below if it is wrong.";
+            _matches = others;
+        }
+
+        StateHasChanged();
+    }
+
     private async Task SearchOnEnter(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
@@ -383,6 +421,7 @@
 
     private async Task Search()
     {
+        _picked = null;
         _searching = true;
         _searchError = null;
         (_matches, _searchError) = await Sonarr.SearchAsync(_search, CancellationToken.None);
@@ -396,6 +435,7 @@
 
     private async Task Pick(SeriesMatch match)
     {
+        _picked = null;
         _title = match.Title;
         _year = match.Year;
         _tvdb = match.TvdbId;
@@ -434,7 +474,12 @@
         }
     }
 
-    private static void SetTitle(EpisodeRow row, ChangeEventArgs e) => row.Title = e.Value?.ToString() ?? "";
+    // Sonarr's title stays "from Sonarr" (it follows a changed number) until another one is typed.
+    private static void SetTitle(EpisodeRow row, ChangeEventArgs e, EpisodeInfo? known)
+    {
+        var typed = e.Value?.ToString()?.Trim() ?? "";
+        row.Title = typed == known?.Title ? "" : typed;
+    }
 
     private void ChangeProfile(ChangeEventArgs e) => _profileId = e.Value?.ToString() ?? _profileId;
 
