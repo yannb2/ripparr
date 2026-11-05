@@ -376,7 +376,7 @@
                     <input class="form-control form-control-sm" placeholder="@(_selected.PossibleCut ? "another cut?" : "")" @bind="_edition" @bind:event="oninput"/>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small mb-1" title="Who put out the disc, such as Criterion or Arrow (not the cut: that is the edition). Written as the MKV tag DISTRIBUTED_BY.">Release label</label>
+                    <label class="form-label small mb-1" title="Who put out the disc, such as Criterion or Arrow (not the cut: that is the edition). Written as the MKV tag LABEL.">Release label</label>
                     <input class="form-control form-control-sm" list="release-labels" placeholder="Criterion, Arrow..." @bind="_label" @bind:event="oninput"/>
                     <datalist id="release-labels">
                         @foreach (var label in ReleaseLabels)
@@ -386,9 +386,20 @@
                     </datalist>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small mb-1" title="Who released the ISO (FraMeSToR...), read from its name. Written as the MKV tag SOURCE_RELEASE_GROUP. Leave it empty for your own rips; your own group is the RELEASE_GROUP tag.">Source group</label>
-                    <input class="form-control form-control-sm" placeholder="from the ISO name" @bind="_sourceGroup" @bind:event="oninput"/>
+                    <label class="form-label small mb-1" title="Where the disc came from: who released the ISO (FraMeSToR...), read from its name, or Own disc. Written as the MKV tag SOURCE_RELEASE_GROUP; empty counts as Own disc. Your own group is the RELEASE_GROUP tag.">Source group</label>
+                    <input class="form-control form-control-sm" list="source-groups" placeholder="@Job.OwnDisc" @bind="_sourceGroup" @bind:event="oninput"/>
+                    <datalist id="source-groups"><option value="@Job.OwnDisc"></option></datalist>
                 </div>
+                <div class="col-md-1">
+                    <label class="form-label small mb-1" title="Only when two releases of the film differ by country (a better GBR or DEU disc): three letters, such as GBR. Written as the MKV tag DISC_COUNTRY and as [GBR] after the source in the file name. Read from the ISO name when it has one.">Country</label>
+                    <input class="form-control form-control-sm" list="countries" maxlength="3" placeholder="GBR..." @bind="_country" @bind:event="oninput"/>
+                </div>
+                <datalist id="countries">
+                    @foreach (var country in ReleaseName.Countries)
+                    {
+                        <option value="@country"></option>
+                    }
+                </datalist>
                 <div class="col-md-1">
                     <label class="form-label small mb-1">TMDb ID</label>
                     <input class="form-control form-control-sm" type="number" @bind="_tmdb"/>
@@ -525,7 +536,7 @@
                     <div class="small fw-semibold mb-1"><i class="bi bi-tags me-1"></i>Global tags</div>
                     <GlobalTagEditor Tags="_tags" Placeholder="empty = not written" Changed="StateHasChanged"/>
                     <div class="form-text">
-                        From the profile, for this disc. TMDB, IMDB, SOURCE, RELEASE_NAME, SOURCE_RELEASE_GROUP, EDITION, DISTRIBUTED_BY (the release label), HDR_FORMAT and the other automatic tags
+                        From the profile, for this disc. TMDB, IMDB, SOURCE, RELEASE_NAME, SOURCE_RELEASE_GROUP, DISC_TITLE, EDITION, LABEL (the release label), HDR_FORMAT and the other automatic tags
                         are written too; a tag here with the same name replaces the automatic one.
                     </div>
                 </div>
@@ -597,6 +608,7 @@
     private string? _edition;
     private string? _label;
     private string? _sourceGroup;
+    private string? _country;
 
     /// <summary>Boutique labels offered in the Release label box (any other name can be typed).</summary>
     private static readonly string[] ReleaseLabels =
@@ -635,6 +647,7 @@
             _edition = _draft.Edition;
             _label = _draft.Label;
             _sourceGroup = _draft.SourceGroup;
+            _country = _draft.Country;
             _tmdb = _draft.Tmdb;
             _imdb = _draft.Imdb;
             _original = _draft.Original;
@@ -656,7 +669,8 @@
         _year = guess.Year;
         _edition = null;
         _label = null;
-        _sourceGroup = ReleaseName.Group(_source.Name);
+        _sourceGroup = ReleaseName.Group(_source.Name) ?? Job.OwnDisc;
+        _country = ReleaseName.Country(_source.Name);
         _tmdb = null;
         _imdb = null;
         _original = null;
@@ -684,6 +698,7 @@
         _draft.Edition = _edition;
         _draft.Label = _label;
         _draft.SourceGroup = _sourceGroup;
+        _draft.Country = _country;
         _draft.Tmdb = _tmdb;
         _draft.Imdb = _imdb;
         _draft.Original = _original;
@@ -1102,7 +1117,8 @@
             // SDR only for 2160p; a 1080p disc gets no HDR bracket.
             ["hdr"] = dv ? "DV HDR10" : uhd ? "HDR10" : null,
             ["audio"] = audio == null ? null : audio.Layout is "Multi" or "2.0 + Multi" ? audio.Codec : $"{audio.Codec}-{audio.Layout}",
-            ["source"] = _analysis?.IsDvd == true ? Profile.DvdSource : Profile.Source,
+            ["source"] = MuxBuilder.SourceInName(_analysis?.IsDvd == true ? Profile.DvdSource : Profile.Source),
+            ["country"] = Job.CountryCode(_country),
             ["releasegroup"] = MuxBuilder.ReleaseGroupWord(GlobalTag.Find(_tags, GlobalTag.ReleaseGroup))
         };
     }
@@ -1135,7 +1151,9 @@
             Year = _year,
             Edition = string.IsNullOrWhiteSpace(_edition) ? null : _edition.Trim(),
             ReleaseLabel = string.IsNullOrWhiteSpace(_label) ? null : _label.Trim(),
-            SourceReleaseGroup = string.IsNullOrWhiteSpace(_sourceGroup) ? null : _sourceGroup.Trim(),
+            SourceReleaseGroup = Job.SourceGroupOrOwnDisc(_sourceGroup),
+            DiscTitle = _analysis?.DiscTitle,
+            Country = Job.CountryCode(_country),
             TmdbId = _tmdb,
             ImdbId = string.IsNullOrWhiteSpace(_imdb) ? null : _imdb.Trim(),
             OriginalLanguage = _original,

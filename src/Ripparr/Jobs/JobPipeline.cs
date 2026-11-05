@@ -258,6 +258,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
             {
                 var name = MuxBuilder.TrackName(video.Planned, video.File.Facts, job.Profile, job.OriginalLanguage, dv.Profile ?? "7", dv.Layer);
                 outputs[outputs.IndexOf(video)] = video with { Name = name };
+                job.DolbyVisionProfile = $"{dv.Profile ?? "7"} {dv.Layer}".Trim();
                 context.Log($"Dolby Vision profile {dv.Profile} {dv.Layer}: the video track is \"{name}\".");
             }
             else
