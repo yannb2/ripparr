@@ -164,7 +164,7 @@
 
 @if (_tv)
 {
-    <EpisodesPicker Source="_source" Analysis="_analysis" Profiles="_profiles" InitialSearch="@ReleaseName.Guess(_source.Name).Title"/>
+    <EpisodesPicker Source="_source" Analysis="_analysis" Profiles="_profiles" InitialSearch="@ReleaseName.Guess(_source.Name).Title" CanListen="CanListen"/>
 }
 
 <div class="card mb-3">
@@ -515,7 +515,7 @@
 
 @if (!_tv && _selected != null && _plan != null)
 {
-    <ExtrasPicker Source="_source" Analysis="_analysis" Profiles="_profiles" FilmPlaylist="_selected" FilmJob="FilmJob" State="_draft!.Extras"/>
+    <ExtrasPicker Source="_source" Analysis="_analysis" Profiles="_profiles" FilmPlaylist="_selected" FilmJob="FilmJob" State="_draft!.Extras" CanListen="CanListen"/>
 }
 
 @code {

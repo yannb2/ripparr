@@ -194,12 +194,26 @@
                                     title="Three pictures from the playlist, to check the order">
                                 <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
                             </button>
+                            <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Tracks = !row.Tracks"
+                                    title="This episode's audio and subtitle tracks: untick what you don't want">
+                                <i class="bi @(row.Tracks ? "bi-music-note-list" : "bi-music-note")"></i> Tracks
+                            </button>
                             <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Watch = !row.Watch"
                                     title="30 seconds of the playlist as a small video: start, middle or end">
                                 <i class="bi @(row.Watch ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
                             </button>
                         </td>
                     </tr>
+                    @if (row.Tracks)
+                    {
+                        <tr>
+                            <td></td>
+                            <td colspan="7">
+                                <PlaylistTracks Source="Source" Playlist="playlist" Plan="PlanFor(playlist)" CanListen="CanListen"
+                                                CopyToOthers="plan => CopyToOthers(playlist, plan)" Reset="() => row.Plan = null" Changed="StateHasChanged"/>
+                            </td>
+                        </tr>
+                    }
                     @if (row.Watch)
                     {
                         <tr>
@@ -250,7 +264,7 @@
     </div>
 </div>
 
-<ExtrasPicker Source="Source" Analysis="Analysis" Profiles="Profiles" Taken="Taken" Season="_season" Tv="true" FilmJob="SeriesJob"/>
+<ExtrasPicker Source="Source" Analysis="Analysis" Profiles="Profiles" Taken="Taken" Season="_season" Tv="true" FilmJob="SeriesJob" CanListen="CanListen"/>
 
 @code {
     [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
@@ -260,6 +274,9 @@
     /// <summary>What to look up first: the series name guessed from the disc's name.</summary>
     [Parameter] public string InitialSearch { get; set; } = "";
 
+    /// <summary>ffmpeg can cut a sample: Listen buttons on the episodes' audio tracks.</summary>
+    [Parameter] public bool CanListen { get; set; }
+
     private sealed class EpisodeRow
     {
         public bool Selected { get; set; }
@@ -268,6 +285,11 @@
         public bool Pictures { get; set; }
 
         public bool Watch { get; set; }
+
+        public bool Tracks { get; set; }
+
+        /// <summary>The tracks, once opened: kept as edited (Reset goes back to the profile).</summary>
+        public TrackPlan? Plan { get; set; }
     }
 
     private readonly Dictionary<string, EpisodeRow> _rows = new();
@@ -474,6 +496,29 @@
         }
     }
 
+    /// <summary>The episode's tracks as the form stands: the edited plan, or a fresh one from the profile.</summary>
+    private TrackPlan PlanFor(PlaylistInfo playlist) =>
+        Row(playlist).Plan ??= TrackPlanner.Build(playlist.Mpls, Profile, _original);
+
+    /// <summary>"Same for all episodes": the other ticked episodes take this one's choices, track by track.</summary>
+    private (int Copied, int Skipped) CopyToOthers(PlaylistInfo from, TrackPlan plan)
+    {
+        var (copied, skipped) = (0, 0);
+        foreach (var other in SelectedPlaylists.Where(p => p != from))
+        {
+            if (plan.CopyChoicesTo(PlanFor(other)))
+            {
+                copied++;
+            }
+            else
+            {
+                skipped++;
+            }
+        }
+
+        return (copied, skipped);
+    }
+
     // Sonarr's title stays "from Sonarr" (it follows a changed number) until another one is typed.
     private static void SetTitle(EpisodeRow row, ChangeEventArgs e, EpisodeInfo? known)
     {
@@ -538,7 +583,7 @@
                 AbsoluteEpisode = _anime ? known?.Absolute : null,
                 EpisodeTitle = row.Title.Trim() is { Length: > 0 } typed ? typed : known?.Title is { Length: > 0 } title ? title : null,
                 Profile = series.Profile,
-                Plan = TrackPlanner.Build(playlist.Mpls, series.Profile, series.OriginalLanguage),
+                Plan = row.Plan ?? TrackPlanner.Build(playlist.Mpls, series.Profile, series.OriginalLanguage),
                 Tags = series.Tags.Select(t => t.Copy()).ToList(),
                 DryRun = dryRun
             });

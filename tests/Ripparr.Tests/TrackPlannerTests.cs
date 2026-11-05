@@ -104,4 +104,23 @@ public class TrackPlannerTests
         var video = plan.Tracks.First(t => t.Kind == StreamKind.Video);
         Assert.IsFalse(plan.MoveTo(audio[0], video), "not across kinds");
     }
+
+    [TestMethod]
+    public void CopiesOneEpisodesChoicesToAnother()
+    {
+        var first = TrackPlanner.Build(Film, new RipProfile(), "eng");
+        var second = TrackPlanner.Build(Film, new RipProfile(), "eng");
+        var french = first.Tracks.First(t => t.Kind == StreamKind.Audio && t.Pid == 0x1102);
+        french.Keep = false;
+        var spanish = first.Tracks.First(t => t.Kind == StreamKind.Subtitle && t.Pid == 0x1202);
+        spanish.Keep = true;
+        spanish.Name = "Latin";
+        first.MoveTo(first.Tracks.First(t => t.Pid == 0x1103), first.Tracks.First(t => t.Kind == StreamKind.Audio));
+
+        Assert.IsTrue(first.CopyChoicesTo(second));
+        Assert.IsFalse(second.Tracks.First(t => t.Pid == 0x1102).Keep);
+        Assert.AreEqual("Latin", second.Tracks.First(t => t.Pid == 0x1202).Name);
+        CollectionAssert.AreEqual(first.Tracks.Select(t => t.Pid).ToArray(), second.Tracks.Select(t => t.Pid).ToArray(), "same order");
+        Assert.IsFalse(first.CopyChoicesTo(new TrackPlan()), "nothing in common");
+    }
 }

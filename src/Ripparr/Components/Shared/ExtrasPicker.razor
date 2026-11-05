@@ -87,8 +87,22 @@
                                             title="Three pictures from the playlist, to tell the extras apart">
                                         <i class="bi @(row.Pictures ? "bi-images" : "bi-image")"></i> Pictures
                                     </button>
+                                    <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Tracks = !row.Tracks"
+                                            title="This extra's audio and subtitle tracks: untick what you don't want">
+                                        <i class="bi @(row.Tracks ? "bi-music-note-list" : "bi-music-note")"></i> Tracks
+                                    </button>
                                 </td>
                             </tr>
+                            @if (row.Tracks)
+                            {
+                                <tr>
+                                    <td></td>
+                                    <td colspan="8">
+                                        <PlaylistTracks Source="Source" Playlist="playlist" Plan="PlanFor(playlist)" CanListen="CanListen" Others="extras"
+                                                        CopyToOthers="plan => CopyToOthers(playlist, plan)" Reset="() => row.Plan = null" Changed="StateHasChanged"/>
+                                    </td>
+                                </tr>
+                            }
                             @if (row.Pictures)
                             {
                                 <tr>
@@ -170,7 +184,35 @@
     /// <summary>The card's picks and names: the disc page keeps them while you go to another page.</summary>
     [Parameter] public ExtrasPickerState State { get; set; } = new();
 
+    /// <summary>ffmpeg can cut a sample: Listen buttons on the extras' audio tracks.</summary>
+    [Parameter] public bool CanListen { get; set; }
+
     private int? SeasonFor => State.InSeason ? Season : null;
+
+    private RipProfile? ExtrasProfile => Profiles.FirstOrDefault(p => p.Id == State.ProfileId) ?? Film?.Profile;
+
+    /// <summary>The extra's tracks as the card stands: the edited plan, or a fresh one from the extras profile.</summary>
+    private TrackPlan PlanFor(PlaylistInfo playlist) =>
+        Row(playlist).Plan ??= TrackPlanner.Build(playlist.Mpls, ExtrasProfile ?? new RipProfile(), Film?.OriginalLanguage);
+
+    /// <summary>"Same for all extras": the other ticked extras take this one's choices, track by track.</summary>
+    private (int Copied, int Skipped) CopyToOthers(PlaylistInfo from, TrackPlan plan)
+    {
+        var (copied, skipped) = (0, 0);
+        foreach (var (other, _) in Selected.Where(x => x.Playlist != from).ToList())
+        {
+            if (plan.CopyChoicesTo(PlanFor(other)))
+            {
+                copied++;
+            }
+            else
+            {
+                skipped++;
+            }
+        }
+
+        return (copied, skipped);
+    }
     private string? _error;
 
     private Job? Film => FilmJob().Job;
@@ -244,7 +286,7 @@
         var jobs = new List<Job>();
         foreach (var (playlist, row) in Selected.ToList())
         {
-            var plan = TrackPlanner.Build(playlist.Mpls, profile, film.OriginalLanguage);
+            var plan = row.Plan ?? TrackPlanner.Build(playlist.Mpls, profile, film.OriginalLanguage);
             if (!plan.Kept.Any(t => t.Kind == StreamKind.Video))
             {
                 _error = $"Playlist {playlist.Name} has no video track to keep.";
