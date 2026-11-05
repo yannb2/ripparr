@@ -76,6 +76,7 @@ else
                             @if (job.OutputPath != null)
                             {
                                 <span title="@job.OutputPath">@System.IO.Path.GetFileName(job.OutputPath)</span>
+                                <OpenInSpecarr Url="@Options.Value.SpecarrUrl" Path="@job.OutputPath" Compact="true"/>
                             }
                             else if (job.Error != null)
                             {
