@@ -671,7 +671,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         foreach (var name in new[] { "index.bdmv", "MovieObject.bdmv" })
         {
-            if (SourceFinder.FileIn(disc, name) is { } target)
+            if (SourceFinder.BdmvFile(disc, name) is { } target)
             {
                 File.CreateSymbolicLink(Path.Combine(bdmv, name), target);
             }

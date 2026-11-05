@@ -47,17 +47,44 @@ public static class SourceFinder
         return found.OrderByDescending(s => s.Modified).ToList();
     }
 
-    /// <summary>The folder that holds BDMV/index.bdmv for a folder source: itself, or itself when it is the BDMV folder's parent.</summary>
+    /// <summary>
+    /// The folder that holds a BDMV folder for a folder source: itself, or its parent when it is the
+    /// BDMV folder. Many released folders keep index.bdmv only in BDMV/BACKUP, or not at all: a
+    /// BDMV folder counts when it has index.bdmv, BACKUP/index.bdmv or a PLAYLIST folder with playlists.
+    /// </summary>
     public static string? BdmvParent(string folder)
     {
         if (string.Equals(System.IO.Path.GetFileName(folder.TrimEnd('/')), "BDMV", StringComparison.OrdinalIgnoreCase)
-            && FileIn(folder, "index.bdmv") != null)
+            && IsBdmv(folder))
         {
             return System.IO.Path.GetDirectoryName(folder.TrimEnd('/'));
         }
 
         var bdmv = DirIn(folder, "BDMV");
-        return bdmv != null && FileIn(bdmv, "index.bdmv") != null ? folder : null;
+        return bdmv != null && IsBdmv(bdmv) ? folder : null;
+    }
+
+    /// <summary>A Blu-ray's BDMV folder: index.bdmv there or in BACKUP, or a PLAYLIST folder with .mpls files.</summary>
+    public static bool IsBdmv(string bdmv) =>
+        FileIn(bdmv, "index.bdmv") != null
+        || (DirIn(bdmv, "BACKUP") is { } backup && FileIn(backup, "index.bdmv") != null)
+        || (DirIn(bdmv, "PLAYLIST") is { } playlists && HasPlaylists(playlists));
+
+    /// <summary>A disc file in BDMV, or its copy in BDMV/BACKUP when the release left the first one out.</summary>
+    public static string? BdmvFile(string bdmv, string name) =>
+        FileIn(bdmv, name) ?? (DirIn(bdmv, "BACKUP") is { } backup ? FileIn(backup, name) : null);
+
+    private static bool HasPlaylists(string folder)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(folder)
+                .Any(f => string.Equals(System.IO.Path.GetExtension(f), ".mpls", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>The folder that holds VIDEO_TS/VIDEO_TS.IFO (a DVD): itself, or its parent when it is the VIDEO_TS folder.</summary>
