@@ -54,18 +54,33 @@
             <div class="list-group list-group-flush mb-3 small">
                 @foreach (var match in _matches.Take(8))
                 {
-                    <button class="list-group-item list-group-item-action" @onclick="() => Pick(match)">
-                        <span class="fw-semibold">@match.Title (@match.Year)</span>
-                        <span class="text-body-secondary ms-2">TVDB @match.TvdbId · @Languages.Name(match.OriginalLanguage)</span>
-                        @if (match.Anime)
+                    <div class="list-group-item list-group-item-action d-flex align-items-center gap-2">
+                        <button class="btn btn-link p-0 text-reset text-decoration-none text-start flex-grow-1 small" @onclick="() => Pick(match)">
+                            <span class="fw-semibold">@match.Title (@match.Year)</span>
+                            <span class="text-body-secondary ms-2">TVDB @match.TvdbId · @Languages.Name(match.OriginalLanguage)</span>
+                            @if (match.Anime)
+                            {
+                                <span class="badge text-bg-info ms-2">Anime numbers</span>
+                            }
+                            @if (match.SonarrId != null)
+                            {
+                                <span class="badge text-bg-success ms-2">In Sonarr</span>
+                            }
+                        </button>
+                        @if (match.SonarrId == null)
                         {
-                            <span class="badge text-bg-info ms-2">Anime numbers</span>
+                            <button class="btn btn-sm btn-outline-secondary py-0 text-nowrap" @onclick="() => _adding = _adding == match ? null : match"
+                                    title="Adds the series to Sonarr (unmonitored, no search) for its episode titles and the manual import">
+                                <i class="bi bi-plus-lg"></i> Add to Sonarr
+                            </button>
                         }
-                        @if (match.SonarrId != null)
-                        {
-                            <span class="badge text-bg-success ms-2">In Sonarr</span>
-                        }
-                    </button>
+                    </div>
+                    @if (_adding == match)
+                    {
+                        <ArrAddForm App="Sonarr" LoadOptions="Sonarr.AddOptionsAsync" AddIt="(root, profile, anime) => AddToSonarr(match, root, profile, anime)"
+                                    Animation="match.Animation" Anime="@(match.Anime || (match.Animation && match.OriginalLanguage == "jpn"))" AskAnime="true"
+                                    Cancelled="() => _adding = null"/>
+                    }
                 }
             </div>
         }
@@ -453,6 +468,32 @@
         }
 
         _searching = false;
+    }
+
+    private SeriesMatch? _adding;
+
+    /// <summary>Adds the series to Sonarr, then picks it: its episode titles come once Sonarr's refresh ends.</summary>
+    private async Task<string?> AddToSonarr(SeriesMatch match, string root, int profile, bool anime)
+    {
+        var (added, error) = await Sonarr.AddAsync(match, root, profile, anime, CancellationToken.None);
+        if (added == null)
+        {
+            return error;
+        }
+
+        _adding = null;
+        await Pick(added);
+        StateHasChanged(); // the form is a child: its click does not redraw this card
+        // Sonarr fills the episodes in the background: wait for them a little.
+        for (var i = 0; i < 10 && _episodes.Count == 0 && added.SonarrId is { } id; i++)
+        {
+            await Task.Delay(2000);
+            (_episodes, _) = await Sonarr.EpisodesAsync(id, CancellationToken.None);
+        }
+
+        _episodesNote = _episodes.Count == 0 ? "Added to Sonarr; it has no episodes yet. Search again in a minute." : $"Added to Sonarr in {root}.";
+        StateHasChanged();
+        return null;
     }
 
     private async Task Pick(SeriesMatch match)

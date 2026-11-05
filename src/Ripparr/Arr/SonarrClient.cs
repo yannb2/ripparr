@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Ripparr.Media;
 using Ripparr.Options;
 
@@ -6,7 +7,13 @@ namespace Ripparr.Arr;
 
 /// <summary>A series from Sonarr's lookup. <see cref="SonarrId"/> is set when the series is in Sonarr (it then has episodes).</summary>
 public sealed record SeriesMatch(string Title, int Year, int TvdbId, int? TmdbId, string? ImdbId, string? OriginalLanguage,
-    bool Anime, int? SonarrId, string? LibraryPath, IReadOnlyList<int> Seasons);
+    bool Anime, int? SonarrId, string? LibraryPath, IReadOnlyList<int> Seasons)
+{
+    /// <summary>TVDB's genres ("Animation", "Anime"): pick the root folder when adding it to Sonarr.</summary>
+    public IReadOnlyList<string> Genres { get; init; } = [];
+
+    public bool Animation => Genres.Any(g => g is "Animation" or "Anime");
+}
 
 /// <summary>One episode of a series in Sonarr.</summary>
 public sealed record EpisodeInfo(int Season, int Episode, int? Absolute, string Title);
@@ -29,6 +36,39 @@ public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> lo
     {
         var (json, error) = await GetAsync($"episode?seriesId={seriesId}", cancellationToken);
         return json == null ? ([], error) : (ParseEpisodes(json), null);
+    }
+
+    public Task<(List<RootFolder> Roots, List<QualityProfile> Profiles, string? Error)> AddOptionsAsync(CancellationToken cancellationToken) =>
+        ArrAdd.OptionsAsync(Http, Sonarr, "Sonarr", cancellationToken);
+
+    /// <summary>
+    /// Adds the series to Sonarr, unmonitored and with no search: Sonarr then has its episode
+    /// titles (once its refresh ends, a few seconds) and takes the manual import later.
+    /// </summary>
+    public async Task<(SeriesMatch? Added, string? Error)> AddAsync(SeriesMatch match, string rootFolder, int qualityProfile, bool anime,
+        CancellationToken cancellationToken)
+    {
+        var (added, error) = await ArrAdd.AddAsync(Http, Sonarr, "Sonarr", $"series/lookup?term=tvdb:{match.TvdbId}", "series", item =>
+        {
+            item["qualityProfileId"] = qualityProfile;
+            item["rootFolderPath"] = rootFolder;
+            item["monitored"] = false;
+            item["seasonFolder"] = true;
+            item["seriesType"] = anime ? "anime" : "standard";
+            item["addOptions"] = new JsonObject
+            {
+                ["monitor"] = "none",
+                ["searchForMissingEpisodes"] = false,
+                ["searchForCutoffUnmetEpisodes"] = false
+            };
+        }, cancellationToken);
+        if (added == null)
+        {
+            return (null, error);
+        }
+
+        logger.LogInformation("Added {Title} to Sonarr in {Root}", match.Title, rootFolder);
+        return (ParseSeries($"[{added.ToJsonString()}]").FirstOrDefault(), null);
     }
 
     private async Task<(string? Json, string? Error)> GetAsync(string path, CancellationToken cancellationToken)
@@ -94,7 +134,7 @@ public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> lo
                 string.Equals(Text(series, "seriesType"), "anime", StringComparison.OrdinalIgnoreCase),
                 id,
                 id != null ? Text(series, "path") : null,
-                seasons));
+                seasons) { Genres = Strings(series, "genres") });
         }
 
         return list;
@@ -110,6 +150,11 @@ public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> lo
             .OrderBy(e => e.Season).ThenBy(e => e.Episode)
             .ToList();
     }
+
+    private static List<string> Strings(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Where(v => v.ValueKind == JsonValueKind.String).Select(v => v.GetString()!).ToList()
+            : [];
 
     private static int? Int(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number) ? number : null;
