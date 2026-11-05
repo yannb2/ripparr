@@ -31,6 +31,16 @@ film among fakes, and the disc page then says so and offers two checks, the ones
   fake-playlist disc are BD-J (Java) programs, so the image has a Java runtime (`default-jre-headless`,
   on the Tools page); MakeMKV also needs it for some BD+ and AACS Soft-KCD discs
   ([makemkv.com/bdjava](https://makemkv.com/bdjava)). Without it the answer says so.
+- **No playlist for the film.** Some discs have no playlist for the film at all: their BD-J menu builds
+  it at play time. The Fabelmans UHD has 4 short playlists, and the film is one 82 GB clip
+  (`00294.m2ts`) that none of them plays. Every clip over 1 GB that no playlist plays gets a playlist
+  made from its `CLIPINF` file (length, every stream and its language), listed as **Clip 00294** with
+  a "No playlist" badge. The job writes that playlist into its work folder, next to links to the
+  disc's `STREAM` and `CLIPINF` folders, and rips it like any other. It has no chapters: they are in
+  the playlist the menu builds. When the playlist taken as the film holds less than a quarter of a big
+  disc, the page says so and offers both checks.
+- **Faked length.** A playlist that claims a few seconds but holds gigabytes (over 200 Mbit/s, more
+  than any Blu-ray plays) has faked times: it is not hidden as short, and it beats every length.
 
 ## Before the job: the quick read
 

@@ -8,6 +8,23 @@ public sealed class PlaylistInfo
 
     public required Mpls Mpls { get; init; }
 
+    /// <summary>
+    /// Set when the disc has no playlist for this clip and Ripparr made one from its CLIPINF file
+    /// (the film on discs whose BD-J menu builds the playlist at play time). Name is then "clip00294".
+    /// </summary>
+    public string? FromClip { get; init; }
+
+    /// <summary>The .mpls Ripparr made for <see cref="FromClip"/>; the job writes it into its work folder.</summary>
+    public byte[]? MadePlaylist { get; init; }
+
+    /// <summary>How the page names it: the playlist number, or "Clip 00294".</summary>
+    public string Label => FromClip == null ? Name : $"Clip {FromClip}";
+
+    public const string ClipPrefix = "clip";
+
+    /// <summary>The .mpls file name without extension: a made playlist is written as the clip's number (00294.mpls), as DGDemux expects.</summary>
+    public string FileName => FromClip ?? Name;
+
     /// <summary>The size of its clips, counted once each.</summary>
     public long Size { get; set; }
 
@@ -32,6 +49,12 @@ public sealed class PlaylistInfo
     /// </summary>
     public bool TooLittleData { get; set; }
 
+    /// <summary>
+    /// Far more bytes than its length can hold (over <see cref="DiscAnalysis.MaximumBitsPerSecond"/>):
+    /// the playlist's times are faked to make it look short, so it is not taken as short.
+    /// </summary>
+    public bool LengthLooksFaked { get; set; }
+
     /// <summary>Long, near the film's length, and made of the film's clips in another order: one of a disc's fakes, or the film.</summary>
     public bool Lookalike { get; set; }
 
@@ -51,8 +74,8 @@ public sealed class PlaylistInfo
     /// <summary>A copy for one job, with its playlist corrected (the shared analysis stays as read).</summary>
     public PlaylistInfo WithMpls(Mpls mpls) => new()
     {
-        Name = Name, Mpls = mpls, Size = Size, MainFeature = MainFeature, DuplicateOf = DuplicateOf,
-        PossibleCut = PossibleCut, Short = Short, PlayAll = PlayAll, TooLittleData = TooLittleData,
+        Name = Name, Mpls = mpls, FromClip = FromClip, MadePlaylist = MadePlaylist, Size = Size, MainFeature = MainFeature, DuplicateOf = DuplicateOf,
+        PossibleCut = PossibleCut, Short = Short, PlayAll = PlayAll, TooLittleData = TooLittleData, LengthLooksFaked = LengthLooksFaked,
         Lookalike = Lookalike, UniqueClips = UniqueClips, JoinScore = JoinScore, MainReason = MainReason
     };
 
@@ -86,6 +109,27 @@ public sealed class DiscAnalysis
     /// </summary>
     public const double MinimumBitsPerSecond = 3_000_000;
 
+    /// <summary>
+    /// More than any Blu-ray can play (UHD tops out at 128 Mbit/s for everything together): a
+    /// playlist over this, with a few GB in it, has faked times.
+    /// </summary>
+    public const double MaximumBitsPerSecond = 200_000_000;
+
+    /// <summary>A playlist holding less than this is never "faked long", however short it claims to be.</summary>
+    public const long FakedLengthMinimumBytes = 2L * 1024 * 1024 * 1024;
+
+    /// <summary>All the .m2ts files together.</summary>
+    public long ClipBytes => ClipSizes.Values.Sum();
+
+    /// <summary>
+    /// The playlist taken as the film holds only a sliver of a big disc: the real film's playlist
+    /// is missing (made at play time by the disc's BD-J menu) or hidden. MakeMKV can find it.
+    /// </summary>
+    public bool FilmMissing => MainFeature is { } main && ClipBytes >= 10L * 1024 * 1024 * 1024 && main.Size * 4 < ClipBytes;
+
+    /// <summary>Show "Check clip joins" and "Ask MakeMKV": the disc plays tricks with its playlists.</summary>
+    public bool NeedsFinding => HidesFilm || ManyPlaylists || FilmMissing || Playlists.Any(p => p.TooLittleData || p.LengthLooksFaked);
+
     /// <summary>Several playlists near the film's length use its clips in other orders: the film is hidden among fakes.</summary>
     public bool HidesFilm => Playlists.Count(p => p.Lookalike) >= 3;
 
@@ -116,7 +160,10 @@ public sealed class DiscAnalysis
         {
             playlist.Size = playlist.Mpls.Clips.Distinct(StringComparer.OrdinalIgnoreCase)
                 .Sum(c => ClipSizes.GetValueOrDefault(c));
-            playlist.Short = playlist.Duration < minimum;
+            var allSizes = playlist.Mpls.Clips.All(ClipSizes.ContainsKey);
+            playlist.LengthLooksFaked = allSizes && playlist.Size >= FakedLengthMinimumBytes
+                                                 && (playlist.Duration.TotalSeconds <= 0 || playlist.BitsPerSecond > MaximumBitsPerSecond);
+            playlist.Short = playlist.Duration < minimum && !playlist.LengthLooksFaked;
             playlist.MainFeature = false;
             playlist.PossibleCut = false;
             playlist.DuplicateOf = null;
@@ -124,7 +171,7 @@ public sealed class DiscAnalysis
             playlist.Lookalike = false;
             playlist.MainReason = null;
             // Only with every clip's size known: a missing size is not a small one.
-            playlist.TooLittleData = !playlist.Short && playlist.Mpls.Clips.All(ClipSizes.ContainsKey)
+            playlist.TooLittleData = !playlist.Short && allSizes
                                                      && playlist.BitsPerSecond < MinimumBitsPerSecond;
         }
 
@@ -154,8 +201,10 @@ public sealed class DiscAnalysis
         // A fake that loops tiny clips is never the film, however long it runs.
         var real = candidates.Where(p => !p.TooLittleData).ToList();
         var pool = real.Count > 0 ? real : candidates;
+        // A playlist whose times are faked short but holds gigabytes beats every length.
         var main = pool
-            .OrderByDescending(p => Math.Round(p.Duration.TotalSeconds))
+            .OrderByDescending(p => p.LengthLooksFaked ? p.Size : 0)
+            .ThenByDescending(p => Math.Round(p.Duration.TotalSeconds))
             .ThenByDescending(p => p.Mpls.Chapters.Count)
             .ThenBy(p => p.Name, StringComparer.Ordinal)
             .FirstOrDefault();
@@ -172,8 +221,22 @@ public sealed class DiscAnalysis
 
         MarkLookalikes(main, pool);
         // What MakeMKV said, or a clear winner on clip joins, beats length.
-        var pick = Find(MakeMkvPick ?? "") ?? Find(JoinPick ?? "");
-        if (pick != null && pick != main && pool.Contains(pick))
+        // MakeMKV plays the menus, so its pick wins even over a playlist Ripparr thought short or
+        // a duplicate (for a duplicate, the playlist listed in its place).
+        var makeMkv = Find(MakeMkvPick ?? "");
+        if (makeMkv?.DuplicateOf is { } original)
+        {
+            makeMkv = Find(original);
+        }
+
+        var join = Find(JoinPick ?? "");
+        var pick = makeMkv ?? (join != null && pool.Contains(join) ? join : null);
+        if (makeMkv != null)
+        {
+            makeMkv.Short = false;
+        }
+
+        if (pick != null && pick != main)
         {
             main.MainFeature = false;
             main.MainReason = null;
@@ -181,7 +244,12 @@ public sealed class DiscAnalysis
             main.MainFeature = true;
         }
 
-        if (main.Name == MakeMkvPick)
+        if (main.FromClip != null)
+        {
+            main.MainReason = "No playlist on the disc plays this clip (the menu builds it at play time): Ripparr made one from its CLIPINF file, without chapters.";
+        }
+
+        if (main == makeMkv)
         {
             main.MainReason = "MakeMKV calls it the main feature.";
         }
