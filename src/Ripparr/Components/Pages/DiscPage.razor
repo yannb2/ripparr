@@ -164,7 +164,7 @@
 
 @if (_tv)
 {
-    <EpisodesPicker Source="_source" Analysis="_analysis" Profiles="_profiles" InitialSearch="@ReleaseName.Guess(_source.Name).Title" CanListen="CanListen"/>
+    <EpisodesPicker Source="_source" Analysis="_analysis" Profiles="_profiles" InitialSearch="@ReleaseName.Guess(_source.Name).Title" CanListen="CanListen" State="_draft!.Episodes"/>
 }
 
 <div class="card mb-3">
@@ -606,6 +606,7 @@
 
         _profiles = Store.Profiles();
         _draft = Drafts.Get(_source.Path);
+        _draft.Name = _source.Name;
         if (_draft.Saved)
         {
             _title = _draft.Title;

@@ -275,11 +275,15 @@
                 <i class="bi bi-play-fill"></i> Queue @SelectedCount episode@(SelectedCount == 1 ? "" : "s")
             </button>
             <button class="btn btn-outline-secondary" disabled="@(SelectedCount == 0)" @onclick="() => Queue(true)">Dry run</button>
+            <span class="ms-auto align-self-center">
+                <BulkSubtitleCheck Source="Source" Analysis="Analysis" DetectSdh="Profile.DetectSdh" Changed="StateHasChanged"
+                                   Items="() => SelectedPlaylists.Select(p => (p, PlanFor(p), Row(p).Subtitles)).ToList()"/>
+            </span>
         </div>
     </div>
 </div>
 
-<ExtrasPicker Source="Source" Analysis="Analysis" Profiles="Profiles" Taken="Taken" Season="_season" Tv="true" FilmJob="SeriesJob" CanListen="CanListen"/>
+<ExtrasPicker Source="Source" Analysis="Analysis" Profiles="Profiles" Taken="Taken" Season="_season" Tv="true" FilmJob="SeriesJob" CanListen="CanListen" State="State.Extras"/>
 
 @code {
     [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
@@ -292,61 +296,53 @@
     /// <summary>ffmpeg can cut a sample: Listen buttons on the episodes' audio tracks.</summary>
     [Parameter] public bool CanListen { get; set; }
 
-    private sealed class EpisodeRow
-    {
-        public bool Selected { get; set; }
-        public int? Number { get; set; }
-        public string Title { get; set; } = "";
-        public bool Pictures { get; set; }
+    /// <summary>The card as typed: kept in the disc's draft, so leaving the page and coming back finds it.</summary>
+    [Parameter] public EpisodesPickerState State { get; set; } = new();
 
-        public bool Watch { get; set; }
-
-        public bool Tracks { get; set; }
-
-        /// <summary>The tracks, once opened: kept as edited (Reset goes back to the profile).</summary>
-        public TrackPlan? Plan { get; set; }
-
-        public PlaylistTracksState Subtitles { get; } = new();
-    }
-
-    private readonly Dictionary<string, EpisodeRow> _rows = new();
+    private Dictionary<string, EpisodeRow> _rows => State.Rows;
     private List<PlaylistInfo> _found = [];
-    private DiscAnalysis? _seen;
-    private bool _showAll;
-    private string _profileId = "";
+    private EpisodesPickerState? _seen;
+    private bool _showAll { get => State.ShowAll; set => State.ShowAll = value; }
+    private string _profileId { get => State.ProfileId; set => State.ProfileId = value; }
 
-    private string _search = "";
-    private DiscAnalysis? _lookedUp;
-    private string? _picked;
+    private string _search { get => State.Search; set => State.Search = value; }
+    private string? _picked { get => State.Picked; set => State.Picked = value; }
     private bool _searching;
     private string? _searchError;
-    private List<SeriesMatch> _matches = [];
-    private List<EpisodeInfo> _episodes = [];
-    private string? _episodesNote;
-    private string? _resumeNote;
+    private List<SeriesMatch> _matches { get => State.Matches; set => State.Matches = value; }
+    private List<EpisodeInfo> _episodes { get => State.Known; set => State.Known = value; }
+    private string? _episodesNote { get => State.EpisodesNote; set => State.EpisodesNote = value; }
+    private string? _resumeNote { get => State.ResumeNote; set => State.ResumeNote = value; }
 
-    private string _title = "";
-    private int? _year;
-    private int? _tvdb;
-    private int? _tmdb;
-    private string? _imdb;
-    private string? _original;
-    private bool _anime;
-    private int _season = 1;
-    private int _first = 1;
+    private string _title { get => State.Title; set => State.Title = value; }
+    private int? _year { get => State.Year; set => State.Year = value; }
+    private int? _tvdb { get => State.Tvdb; set => State.Tvdb = value; }
+    private int? _tmdb { get => State.Tmdb; set => State.Tmdb = value; }
+    private string? _imdb { get => State.Imdb; set => State.Imdb = value; }
+    private string? _original { get => State.Original; set => State.Original = value; }
+    private bool _anime { get => State.Anime; set => State.Anime = value; }
+    private int _season { get => State.Season; set => State.Season = value; }
+    private int _first { get => State.First; set => State.First = value; }
     private string? _error;
 
     private RipProfile Profile => Profiles.FirstOrDefault(p => p.Id == _profileId) ?? Profiles.FirstOrDefault() ?? new RipProfile();
 
     protected override void OnParametersSet()
     {
-        if (_seen == Analysis)
+        if (_seen == State && _found.Count > 0)
         {
             return;
         }
 
-        _seen = Analysis;
+        _seen = State;
         _found = EpisodeFinder.Find(Analysis);
+        if (State.Started)
+        {
+            // Back on the page: everything typed and ticked is still in the draft.
+            return;
+        }
+
+        State.Started = true;
         _rows.Clear();
         foreach (var playlist in _found)
         {
@@ -431,12 +427,12 @@
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_lookedUp == Analysis || !Sonarr.Configured || _search.Trim().Length == 0 || _tvdb != null)
+        if (State.LookedUp || !Sonarr.Configured || _search.Trim().Length == 0 || _tvdb != null)
         {
             return;
         }
 
-        _lookedUp = Analysis;
+        State.LookedUp = true;
         await Search();
         var mine = _matches.Where(m => m.SonarrId != null && string.Equals(m.Title, _search.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
         if (mine.Count == 1)

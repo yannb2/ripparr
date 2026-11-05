@@ -24,6 +24,13 @@ public sealed class DiscDraft
     public string? Original { get; set; }
     public Dictionary<string, PlaylistDraft> Playlists { get; } = new(StringComparer.OrdinalIgnoreCase);
     public ExtrasPickerState Extras { get; } = new();
+
+    /// <summary>The TV episodes card, with its own extras card.</summary>
+    public EpisodesPickerState Episodes { get; } = new();
+
+    /// <summary>The disc's name, for the sidebar's list of discs being worked on.</summary>
+    public string Name { get; set; } = "";
+
     public DateTime Touched { get; set; } = DateTime.UtcNow;
 
     /// <summary>True once the page has saved into it: there is something to put back.</summary>
@@ -72,6 +79,50 @@ public sealed class ExtrasPickerState
     public string ProfileId { get; set; } = "";
 }
 
+/// <summary>The TV episodes card: the series, numbers, titles and each episode's tracks.</summary>
+public sealed class EpisodesPickerState
+{
+    /// <summary>The card has filled itself in once (guesses, ticks): coming back keeps what is here.</summary>
+    public bool Started { get; set; }
+
+    public Dictionary<string, EpisodeRow> Rows { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool ShowAll { get; set; }
+    public string ProfileId { get; set; } = "";
+    public string Search { get; set; } = "";
+    public bool LookedUp { get; set; }
+    public string? Picked { get; set; }
+    public List<Arr.SeriesMatch> Matches { get; set; } = [];
+    public List<Arr.EpisodeInfo> Known { get; set; } = [];
+    public string? EpisodesNote { get; set; }
+    public string? ResumeNote { get; set; }
+    public string Title { get; set; } = "";
+    public int? Year { get; set; }
+    public int? Tvdb { get; set; }
+    public int? Tmdb { get; set; }
+    public string? Imdb { get; set; }
+    public string? Original { get; set; }
+    public bool Anime { get; set; }
+    public int Season { get; set; } = 1;
+    public int First { get; set; } = 1;
+    public ExtrasPickerState Extras { get; } = new();
+}
+
+/// <summary>One playlist on the TV episodes card.</summary>
+public sealed class EpisodeRow
+{
+    public bool Selected { get; set; }
+    public int? Number { get; set; }
+    public string Title { get; set; } = "";
+    public bool Pictures { get; set; }
+    public bool Watch { get; set; }
+    public bool Tracks { get; set; }
+
+    /// <summary>The tracks, once opened: kept as edited (Reset goes back to the profile).</summary>
+    public TrackPlan? Plan { get; set; }
+
+    public PlaylistTracksState Subtitles { get; } = new();
+}
+
 /// <summary>The drafts, in memory: they last until the app restarts, or two weeks unused.</summary>
 public sealed class DiscDrafts
 {
@@ -92,6 +143,17 @@ public sealed class DiscDrafts
         draft.Touched = DateTime.UtcNow;
         return draft;
     }
+
+    /// <summary>The discs being worked on (something typed or ticked), newest first: the sidebar lists them.</summary>
+    public List<(string Path, string Name)> Recent(int count = 6) => _drafts
+        .Where(d => (d.Value.Saved || d.Value.Episodes.Started) && d.Value.Name.Length > 0 && DateTime.UtcNow - d.Value.Touched <= KeepFor)
+        .OrderByDescending(d => d.Value.Touched)
+        .Take(count)
+        .Select(d => (d.Key, d.Value.Name))
+        .ToList();
+
+    /// <summary>Takes a disc off the sidebar list (and forgets what was typed on it).</summary>
+    public void Forget(string sourcePath) => _drafts.TryRemove(sourcePath, out _);
 
     /// <summary>"Start over": the disc's page comes back as on a first visit.</summary>
     public DiscDraft Reset(string sourcePath)

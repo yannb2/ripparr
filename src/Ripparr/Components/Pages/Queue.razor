@@ -46,7 +46,10 @@ else
                         <td class="text-body-secondary">@job.Id</td>
                         <td><JobStatusBadge Job="job"/></td>
                         <td class="fw-semibold sv-file-name">@job.DisplayTitle</td>
-                        <td class="small sv-file-name">@job.SourceName <span class="text-body-secondary">· @job.Playlist</span></td>
+                        <td class="small sv-file-name">
+                            <a href="@($"disc?Path={Uri.EscapeDataString(job.SourcePath)}")" @onclick:stopPropagation="true" title="Back to this disc's page">@job.SourceName</a>
+                            <span class="text-body-secondary">· @job.Playlist</span>
+                        </td>
                         <td class="small">
                             @if (job.Status == JobStatus.Running)
                             {
