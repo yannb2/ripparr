@@ -56,8 +56,9 @@
                         <label class="form-label" for="dvdSource">Source word for DVDs</label>
                         <input id="dvdSource" class="form-control form-control-sm" style="max-width: 320px" @bind="_profile.DvdSource" placeholder="@RipProfile.DefaultDvdSource"/>
                         <small class="form-text text-muted d-block">
-                            The same, when the disc is a DVD. <code>DVD Remux</code> by default: Radarr and Sonarr read the word DVD in it and
-                            import the file as DVD quality, as they do not in <code>DVDRemux</code> or <code>DVD-Remux</code>.
+                            The same, when the disc is a DVD. <code>DVDRemux</code> by default, as in the library and the SOURCE tag.
+                            The file name says <code>DVD Remux</code>: Radarr and Sonarr only read the word DVD (DVD quality) with a space
+                            after it, and their DVDRemux rename-only format writes <code>[DVDRemux]</code> again on import.
                         </small>
                     </div>
                     <div class="mb-3">

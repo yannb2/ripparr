@@ -322,7 +322,13 @@ public class MuxBuilderTests
     public void TheFileNameSaysBdRemuxWithASpaceForSonarr()
     {
         Assert.AreEqual("BD Remux", MuxBuilder.SourceInName("BDRemux"));
-        Assert.AreEqual("DVDRemux", MuxBuilder.SourceInName("DVDRemux"));
+        Assert.AreEqual("DVD Remux", MuxBuilder.SourceInName("DVDRemux"));
+        Assert.AreEqual("WEB-DL", MuxBuilder.SourceInName("WEB-DL"));
+
+        // A DVD profile saved by 0.4.33 ("DVD Remux") moves to the library word
+        var old = System.Text.Json.JsonSerializer.Deserialize<RipProfile>("{\"DvdSource\":\"DVD Remux\"}", JobStore.Json)!;
+        Assert.AreEqual("DVDRemux", old.DvdSource);
+        Assert.AreEqual("DVDRemux", new RipProfile().DvdSource);
         Assert.IsNull(MuxBuilder.SourceInName(null));
 
         // The SOURCE tag keeps the profile's word
