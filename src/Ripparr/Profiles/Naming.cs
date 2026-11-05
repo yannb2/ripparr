@@ -29,17 +29,7 @@ public static partial class Naming
     }
 
     /// <summary>Removes what Windows, Samba and Jellyfin do not like in a file name.</summary>
-    public static string SafeFileName(string name)
-    {
-        var cleaned = name.Replace(": ", " - ").Replace(':', '-');
-        cleaned = cleaned.Replace('/', ' ').Replace('\\', ' ');
-        foreach (var c in new[] { '?', '*', '"', '<', '>', '|' })
-        {
-            cleaned = cleaned.Replace(c.ToString(), "");
-        }
-
-        return SpacesRegex().Replace(cleaned, " ").Trim().TrimEnd('.');
-    }
+    public static string SafeFileName(string name) => Arrkit.Library.FileNames.Safe(name);
 
     [GeneratedRegex(@"\{(?<before>[^{}A-Za-z]*)(?<name>[A-Za-z]+)(?<after>[^{}A-Za-z]*)\}")]
     private static partial Regex TokenRegex();

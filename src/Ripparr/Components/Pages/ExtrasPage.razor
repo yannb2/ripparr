@@ -1,0 +1,286 @@
+@page "/extras"
+@implements IDisposable
+@inject ExtrasLibrary Library
+@inject Toasts Toasts
+
+<PageTitle>Extras · Ripparr</PageTitle>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+    <h2 class="mb-0 me-auto"><i class="bi bi-collection-play me-2"></i>Extras</h2>
+    <button class="btn btn-sm btn-outline-secondary" disabled="@_loading" @onclick="Reload"><i class="bi bi-arrow-repeat me-1"></i>Look again</button>
+    @if (_groups.Any(Ready))
+    {
+        <button class="btn btn-sm btn-primary" disabled="@(Library.Running != null)" @onclick="CopyAllReady">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Copy all ready (@_groups.Count(Ready))
+        </button>
+    }
+</div>
+<p class="text-body-secondary small">
+    Radarr's and Sonarr's manual import leave the extras in the done folder. Here they go into the film's or series' folder in the
+    library, in their Jellyfin folder (Heat (1995)/featurettes/), read back and compared, never overwriting anything.
+    @(Library.Options.AutoCopy ? "Auto copy is on: they go on their own once the film or series is imported." : "Auto copy is off (Settings > Extras).")
+</p>
+
+@if (_loading && _groups.Count == 0)
+{
+    <div class="text-body-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Looking for the library folders…</div>
+}
+else if (_groups.Count == 0)
+{
+    <div class="alert alert-secondary">No extras waiting: every finished extra is in the library (or none was ripped yet).</div>
+}
+
+@foreach (var group in _groups)
+{
+    var lookup = _lookups.GetValueOrDefault(group.Key);
+    var steps = _plans.GetValueOrDefault(group.Key) ?? [];
+    var running = Library.Running == group.Key;
+    <div class="card mb-3">
+        <div class="card-header d-flex flex-wrap align-items-center gap-2">
+            <i class="bi @(group.Tv ? "bi-tv" : "bi-film") text-body-secondary"></i>
+            <span class="fw-semibold">@group.Display</span>
+            <span class="small text-body-secondary">@group.Jobs.Count extra@(group.Jobs.Count == 1 ? "" : "s")</span>
+            <span class="ms-auto d-flex align-items-center gap-2">
+                @if (running)
+                {
+                    <span class="small text-body-secondary">Copying… @Library.Percent %</span>
+                }
+                else if (lookup?.Path != null)
+                {
+                    <button class="btn btn-sm btn-primary" disabled="@(Library.Running != null || !steps.Any(s => s.ToCopy || s.State == ExtraStepState.AlreadyThere))"
+                            @onclick="() => Copy(group)">
+                        <i class="bi bi-box-arrow-in-right me-1"></i>Copy to library
+                    </button>
+                }
+            </span>
+        </div>
+        @if (running)
+        {
+            <div class="progress rounded-0" style="height: 4px"><div class="progress-bar" style="width: @Library.Percent%"></div></div>
+        }
+        <div class="card-body py-2 small">
+            @if (lookup == null)
+            {
+                <span class="text-body-secondary"><span class="spinner-border spinner-border-sm me-1"></span>Looking for the folder…</span>
+            }
+            else if (lookup.Path != null)
+            {
+                <i class="bi bi-folder-check text-success me-1"></i><span class="sv-path">@lookup.Path</span>
+                <span class="text-body-secondary">· @lookup.How</span>
+                <button class="btn btn-sm btn-link p-0 ms-2" @onclick="() => StartPicking(group)">Change</button>
+            }
+            else
+            {
+                <i class="bi bi-folder-x text-warning me-1"></i>@lookup.How
+                <button class="btn btn-sm btn-link p-0 ms-2" @onclick="() => StartPicking(group)">Pick the folder</button>
+            }
+
+            @if (_picking == group.Key)
+            {
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    <input class="form-control form-control-sm" style="max-width: 16rem" placeholder="Search the library" @bind="_pickSearch" @bind:event="oninput"/>
+                    <select class="form-select form-select-sm" style="max-width: 28rem" @bind="_pickPath">
+                        <option value="">Choose a @(group.Tv ? "series" : "film")…</option>
+                        @foreach (var folder in _pickFolders.Where(f => _pickSearch.Length == 0 || f.Name.Contains(_pickSearch, StringComparison.OrdinalIgnoreCase)).Take(200))
+                        {
+                            <option value="@folder.Path">@folder.Display</option>
+                        }
+                    </select>
+                    <button class="btn btn-sm btn-outline-primary" disabled="@(_pickPath.Length == 0)" @onclick="() => Pick(group)">Use it</button>
+                    @if (lookup?.How == "picked by hand")
+                    {
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => Unpick(group)">Find it again</button>
+                    }
+                    <button class="btn btn-sm btn-link" @onclick="() => _picking = null">Cancel</button>
+                </div>
+            }
+
+            @if (Library.LastResult(group.Key) is { } result)
+            {
+                <div class="mt-2 @(result.Ok ? "text-success" : "text-danger")">@result.Summary</div>
+            }
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Extra</th>
+                    <th>Size</th>
+                    <th>Goes to</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var job in group.Jobs)
+                {
+                    var step = steps.FirstOrDefault(s => s.File.Source == job.OutputPath);
+                    <tr>
+                        <td class="text-nowrap">@ExtraTypes.Label(job.ExtraType)</td>
+                        <td class="sv-file-name"><a href="job/@job.Id">@job.ExtraName</a>@(job.Season is { } s ? $" · {FileNames.SeasonFolder(s)}" : "")</td>
+                        <td class="text-nowrap">@Format.Size(step?.Size ?? SizeOf(job.OutputPath))</td>
+                        <td class="sv-file-name text-body-secondary">@(step?.Relative ?? "")</td>
+                        <td class="text-nowrap">
+                            @switch (step?.State)
+                            {
+                                case ExtraStepState.Copy:
+                                    <span class="badge text-bg-primary">To copy</span>
+                                    break;
+                                case ExtraStepState.Renamed:
+                                    <span class="badge text-bg-warning" title="Another file has this name: this one gets a number, nothing is overwritten">New name</span>
+                                    break;
+                                case ExtraStepState.AlreadyThere:
+                                    <span class="badge text-bg-success" title="A file with this name and size is there: it is only marked as copied">Already there</span>
+                                    break;
+                                case ExtraStepState.Problem:
+                                    <span class="badge text-bg-danger" title="@step.Problem">@step.Problem</span>
+                                    break;
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (_copied.Count > 0)
+{
+    <FoldingCard Title="In the library" Open="false">
+        <Summary><span class="small text-body-secondary">@_copied.Count recent</span></Summary>
+        <ChildContent>
+            <ul class="list-group list-group-flush small">
+                @foreach (var job in _copied)
+                {
+                    <li class="list-group-item sv-file-name">
+                        <a href="job/@job.Id">@job.DisplayTitle</a>
+                        <span class="d-block sv-path text-body-secondary">@job.LibraryPath</span>
+                    </li>
+                }
+            </ul>
+        </ChildContent>
+    </FoldingCard>
+}
+
+@code {
+    private List<ExtrasGroup> _groups = [];
+    private List<Job> _copied = [];
+    private readonly Dictionary<string, FolderLookup> _lookups = [];
+    private readonly Dictionary<string, List<ExtraStep>> _plans = [];
+    private bool _loading;
+    private string? _picking;
+    private string _pickSearch = "";
+    private string _pickPath = "";
+    private List<LibraryFolder> _pickFolders = [];
+    private DateTime _lastRender = DateTime.MinValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Library.Changed += OnChanged;
+        await Reload();
+    }
+
+    private static long SizeOf(string? path) => path != null && File.Exists(path) ? new FileInfo(path).Length : 0;
+
+    private bool Ready(ExtrasGroup group) =>
+        _lookups.GetValueOrDefault(group.Key)?.Path != null
+        && _plans.GetValueOrDefault(group.Key) is { Count: > 0 } steps && steps.Any(s => s.ToCopy || s.State == ExtraStepState.AlreadyThere);
+
+    private async Task Reload()
+    {
+        _loading = true;
+        _groups = Library.Waiting();
+        _copied = Library.Copied();
+        _lookups.Clear();
+        _plans.Clear();
+        StateHasChanged();
+        foreach (var group in _groups)
+        {
+            await Look(group);
+            StateHasChanged();
+        }
+
+        _loading = false;
+    }
+
+    private async Task Look(ExtrasGroup group)
+    {
+        var lookup = await Library.FindAsync(group, CancellationToken.None);
+        _lookups[group.Key] = lookup;
+        _plans[group.Key] = lookup.Path != null ? Library.Plan(group, lookup.Path) : [];
+    }
+
+    private async Task Copy(ExtrasGroup group)
+    {
+        if (_lookups.GetValueOrDefault(group.Key)?.Path is not { } folder)
+        {
+            return;
+        }
+
+        var result = await Library.CopyAsync(group, folder, CancellationToken.None);
+        if (result.Ok)
+        {
+            Toasts.Success($"{group.Display}: {result.Summary}");
+        }
+        else
+        {
+            Toasts.Error($"{group.Display}: {result.Summary}");
+        }
+
+        await Reload();
+    }
+
+    private async Task CopyAllReady()
+    {
+        foreach (var group in _groups.Where(Ready).ToList())
+        {
+            if (_lookups.GetValueOrDefault(group.Key)?.Path is { } folder)
+            {
+                var result = await Library.CopyAsync(group, folder, CancellationToken.None);
+                if (!result.Ok)
+                {
+                    Toasts.Error($"{group.Display}: {result.Summary}");
+                }
+            }
+        }
+
+        Toasts.Success("Copied the extras that were ready.");
+        await Reload();
+    }
+
+    private void StartPicking(ExtrasGroup group)
+    {
+        _picking = group.Key;
+        _pickSearch = group.Title;
+        _pickPath = "";
+        _pickFolders = Library.Folders(group.Tv);
+    }
+
+    private async Task Pick(ExtrasGroup group)
+    {
+        Library.Choose(group, _pickPath);
+        _picking = null;
+        await Look(group);
+    }
+
+    private async Task Unpick(ExtrasGroup group)
+    {
+        Library.Choose(group, null);
+        _picking = null;
+        await Look(group);
+    }
+
+    private void OnChanged()
+    {
+        if (DateTime.UtcNow - _lastRender < TimeSpan.FromMilliseconds(400) && Library.Running != null)
+        {
+            return;
+        }
+
+        _lastRender = DateTime.UtcNow;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Library.Changed -= OnChanged;
+}

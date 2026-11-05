@@ -67,7 +67,7 @@ public sealed class Job
 
     /// <summary>
     /// For an extra (a featurette, a trailer...): its Jellyfin folder ("featurettes"), from
-    /// <see cref="ExtraTypes"/>. Null for the film itself.
+    /// <see cref="Arrkit.Library.ExtraTypes"/>. Null for the film itself.
     /// </summary>
     public string? ExtraType { get; set; }
 
@@ -76,6 +76,9 @@ public sealed class Job
 
     [JsonIgnore]
     public bool IsExtra => !string.IsNullOrWhiteSpace(ExtraType);
+
+    /// <summary>For an extra: where it was copied in the library (/movies/.../Heat (1995)/featurettes/Making Of.mkv).</summary>
+    public string? LibraryPath { get; set; }
 
     /// <summary>For a TV episode: the series' TVDB ID. Title and Year are the series'.</summary>
     public int? TvdbId { get; set; }
@@ -219,33 +222,6 @@ public sealed class Job
     public TimeSpan? Elapsed => Started is { } s ? (Finished ?? DateTime.UtcNow) - s : null;
 }
 
-/// <summary>
-/// The kinds of extras, by the folder they go in next to the film: names both Jellyfin (which
-/// shows them as extras) and Radarr (which leaves them alone) know.
-/// </summary>
-public static class ExtraTypes
-{
-    public static readonly (string Folder, string Label, string Singular)[] All =
-    [
-        ("featurettes", "Featurettes", "Featurette"),
-        ("behind the scenes", "Behind the scenes", "Behind the Scenes"),
-        ("deleted scenes", "Deleted scenes", "Deleted Scene"),
-        ("interviews", "Interviews", "Interview"),
-        ("scenes", "Scenes", "Scene"),
-        ("shorts", "Shorts", "Short"),
-        ("trailers", "Trailers", "Trailer"),
-        ("extras", "Other extras", "Extra")
-    ];
-
-    public static bool Known(string? folder) => All.Any(t => t.Folder == folder);
-
-    public static string Label(string? folder) => All.FirstOrDefault(t => t.Folder == folder).Label ?? folder ?? "";
-
-    /// <summary>"Featurette 2": the name an extra gets when none is typed.</summary>
-    public static string DefaultName(string folder, int number) =>
-        $"{All.FirstOrDefault(t => t.Folder == folder).Singular ?? "Extra"} {number}";
-}
-
 /// <summary>The whole-job percentage and the time left.</summary>
 public static class JobProgress
 {
@@ -333,6 +309,5 @@ public static class EpisodeNumbers
     public static string Absolute(int absolute) => absolute.ToString("000", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Sonarr's season folder: "Season 01", and "Specials" for season 0.</summary>
-    public static string SeasonFolder(int season) =>
-        season == 0 ? "Specials" : $"Season {season.ToString("00", System.Globalization.CultureInfo.InvariantCulture)}";
+    public static string SeasonFolder(int season) => Arrkit.Library.FileNames.SeasonFolder(season);
 }

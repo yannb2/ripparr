@@ -14,12 +14,15 @@ public sealed class LiveSettings(IOptions<RipparrOptions> options, JobStore stor
     public const string RadarrKey = "integrations.radarr";
     public const string SonarrKey = "integrations.sonarr";
     public const string NotificationsKey = "notifications";
+    public const string ExtrasKey = "extras";
 
     public ArrOptions Radarr => Read(RadarrKey, options.Value.Radarr);
 
     public ArrOptions Sonarr => Read(SonarrKey, options.Value.Sonarr);
 
     public NotificationOptions Notifications => Read(NotificationsKey, options.Value.Notifications);
+
+    public ExtrasOptions Extras => Read(ExtrasKey, options.Value.Extras);
 
     /// <summary>True when the page saved this setting; false when it still comes from the environment.</summary>
     public bool Saved(string key) => store.Setting(key) != null;

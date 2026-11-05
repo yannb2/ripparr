@@ -11,6 +11,7 @@ public sealed class JobRunner(
     JobEvents events,
     JobPipeline pipeline,
     Notifier notifier,
+    ExtrasLibrary extras,
     IOptions<RipparrOptions> options,
     ILogger<JobRunner> logger) : BackgroundService
 {
@@ -215,6 +216,7 @@ public sealed class JobRunner(
             store.Update(job);
             events.Raise(job.Id);
             _wake.Release();
+            extras.Poke(job);
         }
 
         if (job.Status is JobStatus.Done or JobStatus.Failed)

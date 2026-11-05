@@ -271,8 +271,8 @@ public class SmallPartsTests
         Assert.AreEqual("/done/Wolf Children (2012)/featurettes", Ripparr.Jobs.JobPipeline.DoneFolder("/done", extra, values));
         Assert.AreEqual("Wolf Children (2012) · Making Of", extra.DisplayTitle);
         Assert.AreEqual("featurettes", extra.ForReal().ExtraType);
-        Assert.AreEqual("Deleted Scene 2", Ripparr.Jobs.ExtraTypes.DefaultName("deleted scenes", 2));
-        Assert.IsTrue(Ripparr.Jobs.ExtraTypes.All.All(t => t.Folder == t.Folder.ToLowerInvariant()), "Jellyfin's folder names are lower case");
+        Assert.AreEqual("Deleted Scene 2", Arrkit.Library.ExtraTypes.DefaultName("deleted scenes", 2));
+        Assert.IsTrue(Arrkit.Library.ExtraTypes.All.All(t => t.Folder == t.Folder.ToLowerInvariant()), "Jellyfin's folder names are lower case");
     }
 
     [TestMethod]
