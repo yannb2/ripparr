@@ -61,6 +61,8 @@ public sealed class ExtrasPickerState
 
         /// <summary>The tracks, once opened: kept as edited until Reset.</summary>
         public TrackPlan? Plan { get; set; }
+
+        public PlaylistTracksState Subtitles { get; set; } = new();
     }
 
     public Dictionary<string, Row> Rows { get; } = new();
@@ -97,4 +99,20 @@ public sealed class DiscDrafts
         _drafts.TryRemove(sourcePath, out _);
         return Get(sourcePath);
     }
+}
+
+/// <summary>
+/// An episode's or extra's subtitle read as it went onto its plan: the tracks to compare, the read
+/// whose flags are on, and the flags as the app last set them (a difference is your choice).
+/// </summary>
+public sealed class PlaylistTracksState
+{
+    public HashSet<int> Compare { get; set; } = [];
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public TrackPlan? Plan { get; set; }
+
+    public int FlaggedVersion { get; set; } = -1;
+
+    public Dictionary<int, (bool Sdh, bool Commentary)> Auto { get; set; } = [];
 }
