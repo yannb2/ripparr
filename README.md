@@ -7,6 +7,10 @@ MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix bu
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
 [Specarr](https://github.com/yannb2/Specarr), with the same look as the [Muxarr fork](https://github.com/yannb2/muxarr).
 
+The **Sources** page lists every ISO and BDMV folder it finds, newest first. Click any column header to sort by it,
+and click it again to flip the order. Size and Changed start biggest and newest first, the others A to Z. The sort
+is kept in the address (`?sort=size&dir=asc`), so a reload or a bookmark keeps it.
+
 ## Finding the film on discs with fake playlists
 
 Ripparr takes the longest playlist as the film, then the one with most chapters. Some discs hide the

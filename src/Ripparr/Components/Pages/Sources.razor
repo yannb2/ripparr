@@ -53,11 +53,11 @@ else
             <table class="table table-hover align-middle mb-0">
                 <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Kind</th>
-                    <th class="text-end">Size</th>
-                    <th>Changed</th>
-                    <th>Where</th>
+                    <SortHeader Column="@SourceSort.Name" Label="Name" Current="@_sort" Descending="_descending" OnSort="Sort"/>
+                    <SortHeader Column="@SourceSort.Kind" Label="Kind" Current="@_sort" Descending="_descending" OnSort="Sort"/>
+                    <SortHeader Column="@SourceSort.Size" Label="Size" Current="@_sort" Descending="_descending" OnSort="Sort" Class="text-end"/>
+                    <SortHeader Column="@SourceSort.Changed" Label="Changed" Current="@_sort" Descending="_descending" OnSort="Sort"/>
+                    <SortHeader Column="@SourceSort.Where" Label="Where" Current="@_sort" Descending="_descending" OnSort="Sort"/>
                 </tr>
                 </thead>
                 <tbody>
@@ -77,7 +77,7 @@ else
                         </td>
                         <td class="text-end text-nowrap">@Format.Size(source.Size)</td>
                         <td class="text-nowrap" title="@Format.LocalDate(source.Modified)">@Format.TimeAgo(source.Modified)</td>
-                        <td class="sv-path text-body-secondary">@source.Root/@Path.GetDirectoryName(source.RelativePath)</td>
+                        <td class="sv-path text-body-secondary">@SourceSort.WhereText(source)</td>
                     </tr>
                 }
                 </tbody>
@@ -92,9 +92,32 @@ else
     private bool _loading = true;
     private List<FolderProblem> _folderProblems = [];
 
-    private IEnumerable<DiscSource> Filtered => string.IsNullOrWhiteSpace(_filter)
+    // Sort column and direction live in the URL (?sort=size&dir=asc), so a
+    // reload or a link keeps them.
+    [SupplyParameterFromQuery(Name = "sort")] public string? SortParam { get; set; }
+    [SupplyParameterFromQuery(Name = "dir")] public string? DirParam { get; set; }
+    private string _sort = SourceSort.Default;
+    private bool _descending = true;
+
+    private IEnumerable<DiscSource> Filtered => SourceSort.Apply(string.IsNullOrWhiteSpace(_filter)
         ? _sources
-        : _sources.Where(s => s.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase));
+        : _sources.Where(s => s.Name.Contains(_filter.Trim(), StringComparison.OrdinalIgnoreCase)), _sort, _descending);
+
+    protected override void OnParametersSet()
+    {
+        _sort = SourceSort.Column(SortParam);
+        _descending = SourceSort.Descending(_sort, DirParam);
+    }
+
+    private void Sort(string column)
+    {
+        (_sort, _descending) = SourceSort.Click(_sort, _descending, column);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["sort"] = _sort,
+            ["dir"] = _descending ? "desc" : "asc"
+        }), replace: true);
+    }
 
     protected override async Task OnInitializedAsync() => await Refresh();
 
