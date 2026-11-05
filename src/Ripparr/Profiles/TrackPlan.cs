@@ -101,6 +101,44 @@ public sealed class TrackPlan
         return true;
     }
 
+    /// <summary>
+    /// Gives <paramref name="target"/> (another episode with the same streams) this plan's choices:
+    /// keep, language, flags, description and order, track by track (same kind and PID). Tracks
+    /// this plan does not have stay as they were, after the others. False when none matched.
+    /// </summary>
+    public bool CopyChoicesTo(TrackPlan target)
+    {
+        var order = Tracks.Select((t, i) => (t.Kind, t.Pid, i)).ToDictionary(x => (x.Kind, x.Pid), x => x.i);
+        var matched = 0;
+        foreach (var track in target.Tracks)
+        {
+            if (Tracks.FirstOrDefault(t => t.Kind == track.Kind && t.Pid == track.Pid) is not { } mine)
+            {
+                continue;
+            }
+
+            matched++;
+            track.Keep = mine.Keep;
+            track.Language = mine.Language;
+            track.Default = mine.Default;
+            track.Forced = mine.Forced;
+            track.Commentary = mine.Commentary;
+            track.HearingImpaired = mine.HearingImpaired;
+            track.VisualImpaired = mine.VisualImpaired;
+            track.Name = mine.Name;
+        }
+
+        var kinds = target.Tracks.Select(t => t.Kind).Distinct().ToList();
+        target.Tracks = target.Tracks
+            .Select((t, i) => (Track: t, Index: i))
+            .OrderBy(x => kinds.IndexOf(x.Track.Kind))
+            .ThenBy(x => order.TryGetValue((x.Track.Kind, x.Track.Pid), out var at) ? at : int.MaxValue)
+            .ThenBy(x => x.Index)
+            .Select(x => x.Track)
+            .ToList();
+        return matched > 0;
+    }
+
     /// <summary>Makes one Default per kind at most: the first kept video, the given audio, forced subtitles only.</summary>
     public void SetDefault(PlannedTrack track)
     {

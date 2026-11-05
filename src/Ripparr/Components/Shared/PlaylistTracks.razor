@@ -1,0 +1,60 @@
+@* One episode's or extra's tracks: the film's track table for that playlist, with a reset and "same for all". *@
+
+<div class="border rounded p-2 my-1 bg-body-tertiary">
+    <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
+        <span class="fw-semibold">Tracks of @Playlist.Name</span>
+        <span class="text-body-secondary">Untick what you don't want; language, flags, description and order as for a film.</span>
+        <div class="ms-auto d-flex gap-2">
+            @if (CopyToOthers != null)
+            {
+                <button class="btn btn-sm btn-outline-secondary py-0" @onclick="Copy"
+                        title="Gives the other ticked @Others the same choices, track by track (same PID)">
+                    <i class="bi bi-files me-1"></i>Same for all @Others
+                </button>
+            }
+            <button class="btn btn-sm btn-outline-secondary py-0" @onclick="Reset" title="Back to what the profile picks">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to the profile
+            </button>
+        </div>
+    </div>
+    @if (_note != null)
+    {
+        <div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>@_note</div>
+    }
+    <TrackPlanEditor Plan="Plan" ListenUrl="@(CanListen ? ListenUrl : null)"/>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
+    [Parameter, EditorRequired] public PlaylistInfo Playlist { get; set; } = null!;
+    [Parameter, EditorRequired] public TrackPlan Plan { get; set; } = null!;
+
+    /// <summary>ffmpeg can cut a sample (not encrypted, the ISO mounted): Listen buttons on audio tracks.</summary>
+    [Parameter] public bool CanListen { get; set; }
+
+    /// <summary>"episodes" or "extras": what Same for all copies to.</summary>
+    [Parameter] public string Others { get; set; } = "episodes";
+
+    /// <summary>Copies this plan to the other ticked rows: how many took it, how many have none of its tracks.</summary>
+    [Parameter] public Func<TrackPlan, (int Copied, int Skipped)>? CopyToOthers { get; set; }
+
+    /// <summary>After Same for all: the other rows' open track tables show the copy.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    /// <summary>Asks for a fresh plan from the profile.</summary>
+    [Parameter] public EventCallback Reset { get; set; }
+
+    private string? _note;
+
+    private string ListenUrl(PlannedTrack track) =>
+        $"api/discs/listen/{track.Pid}.m4a?path={Uri.EscapeDataString(Source.Path)}&playlist={Uri.EscapeDataString(Playlist.Name)}";
+
+    private async Task Copy()
+    {
+        var (copied, skipped) = CopyToOthers!(Plan);
+        _note = copied == 0 && skipped == 0
+            ? $"No other {Others} are ticked."
+            : $"Copied to {copied} other {Others}." + (skipped > 0 ? $" {skipped} have other streams and stay as they were." : "");
+        await Changed.InvokeAsync();
+    }
+}
