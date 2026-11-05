@@ -314,6 +314,10 @@
                         }
                     </datalist>
                 </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1" title="Who released the ISO (FraMeSToR...), read from its name. Written as the MKV tag SOURCE_RELEASE_GROUP. Leave it empty for your own rips; your own group is the RELEASE_GROUP tag.">Source group</label>
+                    <input class="form-control form-control-sm" placeholder="from the ISO name" @bind="_sourceGroup" @bind:event="oninput"/>
+                </div>
                 <div class="col-md-1">
                     <label class="form-label small mb-1">TMDb ID</label>
                     <input class="form-control form-control-sm" type="number" @bind="_tmdb"/>
@@ -441,7 +445,7 @@
                     <div class="small fw-semibold mb-1"><i class="bi bi-tags me-1"></i>Global tags</div>
                     <GlobalTagEditor Tags="_tags" Placeholder="empty = not written" Changed="StateHasChanged"/>
                     <div class="form-text">
-                        From the profile, for this disc. TMDB, IMDB, SOURCE, RELEASE_NAME, EDITION, DISTRIBUTED_BY (the release label), HDR_FORMAT and the other automatic tags
+                        From the profile, for this disc. TMDB, IMDB, SOURCE, RELEASE_NAME, SOURCE_RELEASE_GROUP, EDITION, DISTRIBUTED_BY (the release label), HDR_FORMAT and the other automatic tags
                         are written too; a tag here with the same name replaces the automatic one.
                     </div>
                 </div>
@@ -503,6 +507,7 @@
     private int? _year;
     private string? _edition;
     private string? _label;
+    private string? _sourceGroup;
 
     /// <summary>Boutique labels offered in the Release label box (any other name can be typed).</summary>
     private static readonly string[] ReleaseLabels =
@@ -538,6 +543,8 @@
             _title = _draft.Title;
             _year = _draft.Year;
             _edition = _draft.Edition;
+            _label = _draft.Label;
+            _sourceGroup = _draft.SourceGroup;
             _tmdb = _draft.Tmdb;
             _imdb = _draft.Imdb;
             _original = _draft.Original;
@@ -558,6 +565,8 @@
         _title = guess.Title;
         _year = guess.Year;
         _edition = null;
+        _label = null;
+        _sourceGroup = ReleaseName.Group(_source.Name);
         _tmdb = null;
         _imdb = null;
         _original = null;
@@ -583,6 +592,8 @@
         _draft.Title = _title;
         _draft.Year = _year;
         _draft.Edition = _edition;
+        _draft.Label = _label;
+        _draft.SourceGroup = _sourceGroup;
         _draft.Tmdb = _tmdb;
         _draft.Imdb = _imdb;
         _draft.Original = _original;
@@ -1016,6 +1027,7 @@
             Year = _year,
             Edition = string.IsNullOrWhiteSpace(_edition) ? null : _edition.Trim(),
             ReleaseLabel = string.IsNullOrWhiteSpace(_label) ? null : _label.Trim(),
+            SourceReleaseGroup = string.IsNullOrWhiteSpace(_sourceGroup) ? null : _sourceGroup.Trim(),
             TmdbId = _tmdb,
             ImdbId = string.IsNullOrWhiteSpace(_imdb) ? null : _imdb.Trim(),
             OriginalLanguage = _original,
