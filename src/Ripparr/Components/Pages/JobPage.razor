@@ -113,14 +113,20 @@ else if (_job.Error != null)
 
 @if (_job.OutputPath != null)
 {
-    <div class="alert alert-success"><i class="bi bi-check-circle me-1"></i> <span class="sv-path">@_job.OutputPath</span></div>
+    <div class="alert alert-success d-flex flex-wrap align-items-center gap-2">
+        <span class="me-auto"><i class="bi bi-check-circle me-1"></i> <span class="sv-path">@_job.OutputPath</span></span>
+        @if (File.Exists(_job.OutputPath))
+        {
+            <OpenInSpecarr Url="@Options.Value.SpecarrUrl" Path="@_job.OutputPath"/>
+        }
+    </div>
 }
 
 @if (_job is { IsExtra: true, Status: JobStatus.Done, DryRun: false })
 {
     @if (_job.LibraryPath != null)
     {
-        <div class="alert alert-light border small"><i class="bi bi-collection-play me-1"></i>In the library: <span class="sv-path">@_job.LibraryPath</span></div>
+        <div class="alert alert-light border small"><i class="bi bi-collection-play me-1"></i>In the library: <span class="sv-path">@_job.LibraryPath</span><OpenInSpecarr Url="@Options.Value.SpecarrUrl" Path="@_job.LibraryPath" Compact="true"/></div>
     }
     else
     {

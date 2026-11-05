@@ -16,6 +16,7 @@ services:
       Ripparr__Radarr__ApiKey: ${RADARR_API_KEY}
       Ripparr__Sonarr__Url: http://sonarr:8989
       Ripparr__Sonarr__ApiKey: ${SONARR_API_KEY}
+      Ripparr__SpecarrUrl: http://10.1.72.11:8185      # Open in Specarr on finished files (tracks, bit rates, DV)
       # Defaults, shown here to make them easy to change:
       # Ripparr__WorkFolder: /downloads/ripparr/work
       # Ripparr__DoneFolder: /downloads/ripparr/done

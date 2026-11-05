@@ -17,6 +17,12 @@ public class RipparrOptions
     /// <summary>Finished files go to DoneFolder/Title (Year)/.</summary>
     public string DoneFolder { get; set; } = "/downloads/ripparr/done";
 
+    /// <summary>
+    /// Specarr's address as the browser reaches it (http://10.1.72.11:8185), for "Open in Specarr" on finished
+    /// files: tracks, bit rates, Dolby Vision and the source guess. Empty: no links.
+    /// </summary>
+    public string SpecarrUrl { get; set; } = "";
+
     /// <summary>Jobs, profiles and settings.</summary>
     public string DatabasePath { get; set; } = "/config/ripparr.db";
 

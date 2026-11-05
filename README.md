@@ -382,6 +382,7 @@ the queue, the current job and its progress for a Homepage tile.
 | `Ripparr__Sources__0__Name` / `__Path` | `Scratch` = `/downloads`, `USB drives` = `/usb` |
 | `Ripparr__WorkFolder` | `/downloads/ripparr/work` |
 | `Ripparr__DoneFolder` | `/downloads/ripparr/done` |
+| `Ripparr__SpecarrUrl` | not set (Specarr as the browser reaches it, `http://10.1.72.11:8185`: Open in Specarr on finished files, job page and History) |
 | `Ripparr__MaxParallelJobs` | `1` |
 | `Ripparr__CleanWorkFolder` | `true` (a failed job always keeps its folder) |
 | `Ripparr__SpareSpaceGb` | `20` |
