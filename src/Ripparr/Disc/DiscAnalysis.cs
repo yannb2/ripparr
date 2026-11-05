@@ -17,8 +17,22 @@ public sealed class PlaylistInfo
     /// <summary>The .mpls Ripparr made for <see cref="FromClip"/>; the job writes it into its work folder.</summary>
     public byte[]? MadePlaylist { get; init; }
 
-    /// <summary>How the page names it: the playlist number, or "Clip 00294".</summary>
-    public string Label => FromClip == null ? Name : $"Clip {FromClip}";
+    /// <summary>A DVD's title (Name is then "title03"): what the IFO says about it.</summary>
+    public DvdTitle? Dvd { get; init; }
+
+    /// <summary>A part of a DVD title (some chapters of it, one episode of several): the title's name.</summary>
+    public string? PartOf { get; init; }
+
+    /// <summary>For a part: its first and last chapter on the title, from 1.</summary>
+    public int FirstChapter { get; init; }
+
+    public int LastChapter { get; init; }
+
+    /// <summary>How the page names it: the playlist number, "Clip 00294", "Title 3" or "Title 1, ch. 7-12".</summary>
+    public string Label => FromClip != null ? $"Clip {FromClip}"
+        : Dvd == null ? Name
+        : PartOf == null ? $"Title {Dvd.Number}"
+        : $"Title {Dvd.Number}, ch. {FirstChapter}-{LastChapter}";
 
     public const string ClipPrefix = "clip";
 
@@ -74,7 +88,8 @@ public sealed class PlaylistInfo
     /// <summary>A copy for one job, with its playlist corrected (the shared analysis stays as read).</summary>
     public PlaylistInfo WithMpls(Mpls mpls) => new()
     {
-        Name = Name, Mpls = mpls, FromClip = FromClip, MadePlaylist = MadePlaylist, Size = Size, MainFeature = MainFeature, DuplicateOf = DuplicateOf,
+        Name = Name, Mpls = mpls, FromClip = FromClip, MadePlaylist = MadePlaylist, Dvd = Dvd, PartOf = PartOf, FirstChapter = FirstChapter,
+        LastChapter = LastChapter, Size = Size, MainFeature = MainFeature, DuplicateOf = DuplicateOf,
         PossibleCut = PossibleCut, Short = Short, PlayAll = PlayAll, TooLittleData = TooLittleData, LengthLooksFaked = LengthLooksFaked,
         Lookalike = Lookalike, UniqueClips = UniqueClips, JoinScore = JoinScore, MainReason = MainReason
     };
@@ -92,6 +107,9 @@ public sealed class DiscAnalysis
     public string? DiscTitle { get; set; }
 
     public Encryption Encryption { get; set; }
+
+    /// <summary>A DVD (VIDEO_TS): its titles are the playlists, MakeMKV rips them, there is no DGDemux step.</summary>
+    public bool IsDvd { get; set; }
 
     public bool HasAacsFolder { get; set; }
 
@@ -148,7 +166,35 @@ public sealed class DiscAnalysis
 
     public PlaylistInfo? MainFeature => Playlists.FirstOrDefault(p => p.MainFeature);
 
-    public PlaylistInfo? Find(string name) => Playlists.FirstOrDefault(p => p.Name == name);
+    public PlaylistInfo? Find(string name) => Playlists.FirstOrDefault(p => p.Name == name) ?? AddPart(name);
+
+    /// <summary>
+    /// A part of a DVD title by its name ("title01-c07-12"), made and added to the playlists on
+    /// first use: the TV episodes card makes them when a title holds several episodes, and a job
+    /// finds its part again on a fresh read of the disc.
+    /// </summary>
+    public PlaylistInfo? AddPart(string name)
+    {
+        if (!IsDvd || DvdDisc.ParsePart(name) is not var (title, from, to)
+                   || Playlists.FirstOrDefault(p => p.Name == title) is not { } whole
+                   || DvdDisc.Part(whole, from, to) is not { } part)
+        {
+            return null;
+        }
+
+        part.Size = part.Mpls.Clips.Distinct(StringComparer.OrdinalIgnoreCase).Sum(c => ClipSizes.GetValueOrDefault(c));
+        lock (Playlists)
+        {
+            if (Playlists.FirstOrDefault(p => p.Name == name) is { } added)
+            {
+                return added;
+            }
+
+            Playlists.Add(part);
+        }
+
+        return part;
+    }
 
     /// <summary>
     /// Picks the main feature (the longest, then the one with most chapters), marks playlists
@@ -156,6 +202,24 @@ public sealed class DiscAnalysis
     /// </summary>
     public void Classify(TimeSpan minimum)
     {
+        // Parts of a DVD title (one episode of several) are not the disc's own playlists: they
+        // keep out of the main feature, duplicates and "play all".
+        var parts = Playlists.Where(p => p.PartOf != null).ToList();
+        if (parts.Count > 0)
+        {
+            Playlists.RemoveAll(p => p.PartOf != null);
+            try
+            {
+                Classify(minimum);
+            }
+            finally
+            {
+                Playlists.AddRange(parts);
+            }
+
+            return;
+        }
+
         foreach (var playlist in Playlists)
         {
             playlist.Size = playlist.Mpls.Clips.Distinct(StringComparer.OrdinalIgnoreCase)
@@ -170,9 +234,10 @@ public sealed class DiscAnalysis
             playlist.PlayAll = false;
             playlist.Lookalike = false;
             playlist.MainReason = null;
-            // Only with every clip's size known: a missing size is not a small one.
-            playlist.TooLittleData = !playlist.Short && allSizes
-                                                     && playlist.BitsPerSecond < MinimumBitsPerSecond;
+            // Only with every clip's size known: a missing size is not a small one. A DVD's
+            // data rate is a fraction of a Blu-ray's: the check is for Blu-ray fakes only.
+            playlist.TooLittleData = !IsDvd && !playlist.Short && allSizes
+                                     && playlist.BitsPerSecond < MinimumBitsPerSecond;
         }
 
         var ordered = Playlists.OrderBy(p => p.Name, StringComparer.Ordinal).ToList();

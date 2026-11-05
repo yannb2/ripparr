@@ -44,8 +44,16 @@ public sealed class RipProfile : IJsonOnDeserialized
     public string Name { get; set; } = "New profile";
     public string Description { get; set; } = "";
 
-    /// <summary>The SOURCE tag and the last bracket of the file name (BDRemux, DVDRemux).</summary>
+    /// <summary>The SOURCE tag and the last bracket of the file name (BDRemux) for a Blu-ray.</summary>
     public string Source { get; set; } = "BDRemux";
+
+    /// <summary>
+    /// What <see cref="Source"/> is for a DVD. "DVD Remux": Radarr and Sonarr both read the
+    /// word DVD in it (quality DVD), as they do not in DVDRemux or DVD-Remux.
+    /// </summary>
+    public string DvdSource { get; set; } = DefaultDvdSource;
+
+    public const string DefaultDvdSource = "DVD Remux";
 
     // ---- DGDemux ----
 
@@ -173,7 +181,7 @@ public sealed class RipProfile : IJsonOnDeserialized
     /// <summary>Set once {-releasegroup} was added to a profile saved before it existed, so removing it sticks.</summary>
     public bool ReleaseGroupTokenAdded { get; set; }
 
-    /// <summary>What the file names get after [{source}] since 0.4.33: the disc's country, [GBR], only when one is set.</summary>
+    /// <summary>What the file names get after [{source}] since 0.4.34: the disc's country, [GBR], only when one is set.</summary>
     public const string CountryToken = "{[country]}";
 
     /// <summary>Set once {[country]} was added to a profile saved before it existed, so removing it sticks.</summary>
@@ -266,7 +274,7 @@ public sealed class RipProfile : IJsonOnDeserialized
         }
     }
 
-    /// <summary>Profiles saved before 0.4.33 get {[country]} right after [{source}] in both file names, once.</summary>
+    /// <summary>Profiles saved before 0.4.34 get {[country]} right after [{source}] in both file names, once.</summary>
     private void AddCountryToken()
     {
         if (CountryTokenAdded)

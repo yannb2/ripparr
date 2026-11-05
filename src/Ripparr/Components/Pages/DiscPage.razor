@@ -17,7 +17,7 @@
 
 @if (_source == null)
 {
-    <div class="alert alert-warning">This is not an ISO file or a folder with a BDMV folder: <code>@Path</code></div>
+    <div class="alert alert-warning">This is not an ISO file or a folder with a BDMV or VIDEO_TS folder: <code>@Path</code></div>
     return;
 }
 
@@ -31,8 +31,16 @@
 }
 
 <div class="d-flex flex-wrap gap-2 mb-3">
-    <span class="badge text-bg-secondary">@(_source.Kind == SourceKind.Iso ? "ISO" : "BDMV folder")</span>
+    <span class="badge text-bg-secondary">@(_source.Kind == SourceKind.Iso ? _analysis.IsDvd ? "DVD ISO" : "ISO" : _analysis.IsDvd ? "DVD folder" : "BDMV folder")</span>
     <span class="badge text-bg-secondary">@Format.Size(_source.Size)</span>
+    @if (_analysis.IsDvd)
+    {
+        <span class="badge text-bg-info" title="The job rips the title with MakeMKV (it reads CSS-scrambled DVDs too), then names, tags and checks it like a Blu-ray. DVD subtitles go in as they are (VobSub), with no OCR.">
+            <i class="bi bi-disc"></i> DVD: MakeMKV rips each title
+        </span>
+    }
+    else
+    {
     @switch (_analysis.Encryption)
     {
         case Encryption.None:
@@ -62,6 +70,7 @@
         default:
             <span class="badge text-bg-secondary">Encryption unknown</span>
             break;
+    }
     }
     @if (!string.IsNullOrEmpty(_analysis.DiscTitle))
     {
@@ -180,10 +189,10 @@
             <thead>
             <tr>
                 <th></th>
-                <th>Playlist</th>
+                <th>@(_analysis.IsDvd ? "Title" : "Playlist")</th>
                 <th>Length</th>
                 <th class="text-end">Chapters</th>
-                <th class="text-end">Clips</th>
+                <th class="text-end">@(_analysis.IsDvd ? "Cells" : "Clips")</th>
                 <th class="text-end">Size</th>
                 <th>Video</th>
                 <th>Audio</th>
@@ -257,10 +266,13 @@
                         {
                             <span class="badge text-bg-secondary">Short</span>
                         }
-                        <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-nowrap align-baseline" @onclick:stopPropagation="true"
-                                @onclick="() => ToggleWatch(playlist)" title="30 seconds of the playlist as a small video: start, middle or end">
-                            <i class="bi @(_watching.Contains(playlist.Name) ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
-                        </button>
+                        @if (!_analysis.IsDvd)
+                        {
+                            <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-nowrap align-baseline" @onclick:stopPropagation="true"
+                                    @onclick="() => ToggleWatch(playlist)" title="30 seconds of the playlist as a small video: start, middle or end">
+                                <i class="bi @(_watching.Contains(playlist.Name) ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
+                            </button>
+                        }
                     </td>
                 </tr>
                 @if (_watching.Contains(playlist.Name))
@@ -415,6 +427,14 @@
                     <span class="text-body-secondary">@probeError</span>
                     <button class="btn btn-sm btn-link p-0" @onclick="ReadStreams">Try again</button>
                 }
+                else if (_analysis.IsDvd)
+                {
+                    <i class="bi bi-info-circle text-body-secondary"></i>
+                    <span class="text-body-secondary">
+                        The tracks are as the DVD's IFO files list them (codec, channels, language, and the commentary, captions and
+                        forced marks some DVDs give); the job reads the rest from the rip.
+                    </span>
+                }
                 else if (_probe != null)
                 {
                     <i class="bi bi-check2 text-success"></i>
@@ -424,7 +444,8 @@
                 }
             </div>
 
-            @if (_selected.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle))
+            @* The subtitle checks read Blu-ray picture subtitles (PGS); a DVD's (VobSub) go in as they are. *@
+            @if (_selected.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle && s.Coding == StreamCoding.Pgs))
             {
                 <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
                     @if (_subtitles is { Running: true } running)
@@ -555,7 +576,7 @@
     /// ffmpeg cuts a sample from a plain folder, or a plain ISO the mount service mounts: it has to
     /// seek, and cannot read an encrypted stream.
     /// </summary>
-    private bool CanListen => _analysis is { Encryption: not Encryption.Encrypted }
+    private bool CanListen => _analysis is { Encryption: not Encryption.Encrypted, IsDvd: false }
                               && (_source!.Kind != SourceKind.Iso || _mount is { Ok: true });
 
     private string ListenUrl(PlannedTrack track) =>
@@ -601,8 +622,8 @@
     private string? _error;
 
     private IEnumerable<PlaylistInfo> VisiblePlaylists => (_showAll
-            ? _analysis!.Playlists
-            : _analysis!.Playlists.Where(p => !p.Short && p.DuplicateOf == null))
+            ? _analysis!.Playlists.Where(p => p.PartOf == null)
+            : _analysis!.Playlists.Where(p => p.PartOf == null && !p.Short && p.DuplicateOf == null))
         .OrderByDescending(p => p.MainFeature)
         .ThenByDescending(p => p.Duration);
 
@@ -790,7 +811,7 @@
             _chapterNames = kept.ChapterNames;
             ApplyProbe();
             ApplySubtitles();
-            if (_probe == null)
+            if (_probe == null && _analysis?.IsDvd != true)
             {
                 _ = ReadStreams();
             }
@@ -805,7 +826,7 @@
             : _profiles.FirstOrDefault(p => p.Id == "bd-remux")?.Id ?? _profiles.FirstOrDefault()?.Id ?? "";
         BuildPlan();
         ResetTags();
-        if (_probe == null)
+        if (_probe == null && _analysis?.IsDvd != true)
         {
             _ = ReadStreams();
         }
@@ -1096,7 +1117,7 @@
             // SDR only for 2160p; a 1080p disc gets no HDR bracket.
             ["hdr"] = dv ? "DV HDR10" : uhd ? "HDR10" : null,
             ["audio"] = audio == null ? null : audio.Layout is "Multi" or "2.0 + Multi" ? audio.Codec : $"{audio.Codec}-{audio.Layout}",
-            ["source"] = MuxBuilder.SourceInName(Profile.Source),
+            ["source"] = MuxBuilder.SourceInName(_analysis?.IsDvd == true ? Profile.DvdSource : Profile.Source),
             ["country"] = Job.CountryCode(_country),
             ["releasegroup"] = MuxBuilder.ReleaseGroupWord(GlobalTag.Find(_tags, GlobalTag.ReleaseGroup))
         };
@@ -1125,6 +1146,7 @@
             SourceKind = _source.Kind,
             SourceName = _source.Name,
             Playlist = _selected!.Name,
+            Dvd = _analysis!.IsDvd,
             Title = _title.Trim(),
             Year = _year,
             Edition = string.IsNullOrWhiteSpace(_edition) ? null : _edition.Trim(),

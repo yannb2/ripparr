@@ -170,18 +170,91 @@ public static partial class MakeMkv
     }
 
     /// <summary>Writes app_Key, keeping every other line of the file. A null key removes it.</summary>
-    public static void WriteKey(string home, string? key)
+    public static void WriteKey(string home, string? key) => WriteSetting(home, "app_Key", string.IsNullOrWhiteSpace(key) ? null : key.Trim());
+
+    /// <summary>Sets one line of settings.conf (name = "value"), keeping every other line. A null value removes it.</summary>
+    public static void WriteSetting(string home, string name, string? value)
     {
         var path = SettingsPath(home);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var lines = File.Exists(path) ? File.ReadAllLines(path).ToList() : [];
-        lines.RemoveAll(l => KeyLineRegex().IsMatch(l));
-        if (!string.IsNullOrWhiteSpace(key))
+        var regex = new Regex($@"^\s*{Regex.Escape(name)}\s*=");
+        lines.RemoveAll(l => regex.IsMatch(l));
+        if (value != null)
         {
-            lines.Add($"app_Key = \"{key.Trim()}\"");
+            lines.Add($"{name} = \"{value}\"");
         }
 
         File.WriteAllLines(path, lines);
+    }
+
+    /// <summary>
+    /// MakeMKV's track selection for "mkv": every track. Its default keeps only some languages,
+    /// and Ripparr's own plan decides which tracks go in the finished file.
+    /// </summary>
+    public const string SelectAll = "+sel:all";
+
+    /// <summary>A title in makemkvcon's robot "info" output: its id for "mkv" and what it says about it.</summary>
+    public sealed record Title(int Id, TimeSpan Duration, int Chapters, int? OriginalTitle, string? SourceFile, long Bytes);
+
+    /// <summary>The titles of TINFO lines: 9 = length (h:mm:ss), 8 = chapters, 24 = the disc's own title number, 16 = source file, 11 = bytes.</summary>
+    public static List<Title> Titles(string output)
+    {
+        var values = new SortedDictionary<int, Dictionary<string, string>>();
+        foreach (var raw in output.Split('\n'))
+        {
+            if (ParseRobot(raw.Trim()) is not { Type: "TINFO", Values.Count: >= 4 } line || !int.TryParse(line.Values[0], out var id))
+            {
+                continue;
+            }
+
+            if (!values.TryGetValue(id, out var title))
+            {
+                title = new Dictionary<string, string>();
+                values[id] = title;
+            }
+
+            title[line.Values[1]] = line.Values[3];
+        }
+
+        return values.Select(v => new Title(
+            v.Key,
+            TimeSpan.TryParse(v.Value.GetValueOrDefault("9"), System.Globalization.CultureInfo.InvariantCulture, out var length) ? length : TimeSpan.Zero,
+            int.TryParse(v.Value.GetValueOrDefault("8"), out var chapters) ? chapters : 0,
+            int.TryParse(v.Value.GetValueOrDefault("24"), out var original) ? original : null,
+            v.Value.GetValueOrDefault("16"),
+            long.TryParse(v.Value.GetValueOrDefault("11"), out var bytes) ? bytes : 0)).ToList();
+    }
+
+    /// <summary>
+    /// MakeMKV's title for a DVD title: one of about the same length (it prints whole seconds),
+    /// preferring the one whose original title number (TINFO 24) is the DVD's; among titles of
+    /// the same length and chapters, the same place in the order. Null when none fits.
+    /// </summary>
+    public static Title? DvdTitle(IReadOnlyList<Title> titles, Disc.DvdTitle wanted, IReadOnlyList<Disc.DvdTitle> all)
+    {
+        bool Near(TimeSpan a, TimeSpan b) => Math.Abs((a - b).TotalSeconds) <= 2;
+        var candidates = titles.Where(t => Near(t.Duration, wanted.Duration)).ToList();
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        if (candidates.FirstOrDefault(t => t.OriginalTitle == wanted.Number) is { } numbered)
+        {
+            return numbered;
+        }
+
+        var sameChapters = candidates.Where(t => t.Chapters == wanted.Chapters.Count).ToList();
+        if (sameChapters.Count > 0)
+        {
+            candidates = sameChapters;
+        }
+
+        var twins = all.Where(t => Near(t.Duration, wanted.Duration) && (sameChapters.Count == 0 || t.Chapters.Count == wanted.Chapters.Count))
+            .OrderBy(t => t.Number).ToList();
+        var place = Math.Max(0, twins.FindIndex(t => t.Number == wanted.Number));
+        return candidates[Math.Min(place, candidates.Count - 1)];
     }
 
     /// <summary>"T-abc...xyz" -> "T-abc…xyz", for the page.</summary>

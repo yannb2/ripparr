@@ -50,7 +50,15 @@
                     <div class="mb-3">
                         <label class="form-label" for="source">Source word</label>
                         <input id="source" class="form-control form-control-sm" style="max-width: 320px" @bind="_profile.Source"/>
-                        <small class="form-text text-muted d-block">Written to the SOURCE tag and to <code>{source}</code>, the last bracket of the file name: BDRemux, DVDRemux.</small>
+                        <small class="form-text text-muted d-block">Written to the SOURCE tag and to <code>{source}</code>, the last bracket of the file name: BDRemux.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="dvdSource">Source word for DVDs</label>
+                        <input id="dvdSource" class="form-control form-control-sm" style="max-width: 320px" @bind="_profile.DvdSource" placeholder="@RipProfile.DefaultDvdSource"/>
+                        <small class="form-text text-muted d-block">
+                            The same, when the disc is a DVD. <code>DVD Remux</code> by default: Radarr and Sonarr read the word DVD in it and
+                            import the file as DVD quality, as they do not in <code>DVDRemux</code> or <code>DVD-Remux</code>.
+                        </small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="chapters">Chapters</label>

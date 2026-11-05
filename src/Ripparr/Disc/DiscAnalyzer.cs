@@ -27,7 +27,7 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
             return new DiscSource(full, SourceKind.Iso, rootPath, info.Length, info.LastWriteTimeUtc);
         }
 
-        if (Directory.Exists(full) && SourceFinder.BdmvParent(full) is { } parent)
+        if (Directory.Exists(full) && SourceFinder.DiscParent(full) is { } parent)
         {
             return SourceFinder.Find([new SourceRoot { Path = parent }], [])
                 .Select(s => s with { Root = rootPath })
@@ -51,6 +51,10 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
             {
                 await ReadIsoAsync(analysis, cancellationToken);
             }
+            else if (source.Dvd)
+            {
+                ReadDvd(analysis, SourceFinder.DirIn(source.Path, "VIDEO_TS")!);
+            }
             else
             {
                 ReadFolder(analysis);
@@ -71,7 +75,7 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
 
         if (analysis.Playlists.Count == 0 && analysis.Error == null)
         {
-            analysis.Error = "No playlists found in BDMV/PLAYLIST.";
+            analysis.Error = analysis.IsDvd ? "No titles found in VIDEO_TS/VIDEO_TS.IFO." : "No playlists found in BDMV/PLAYLIST.";
         }
 
         _cache[source.Path] = (source.Modified, analysis);
@@ -162,6 +166,17 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
         }
     }
 
+    /// <summary>
+    /// A DVD: its titles from the IFO files. CSS (if any) only scrambles the VOBs, and MakeMKV
+    /// rips every DVD job, so the encryption is not looked at.
+    /// </summary>
+    internal static void ReadDvd(DiscAnalysis analysis, string videoTs)
+    {
+        analysis.IsDvd = true;
+        analysis.Encryption = Encryption.Unknown;
+        analysis.Playlists.AddRange(DvdDisc.Playlists(DvdIfo.Read(videoTs), analysis.ClipSizes));
+    }
+
     private async Task ReadIsoAsync(DiscAnalysis analysis, CancellationToken cancellationToken)
     {
         var reader = new IsoReader(_options.Tools.SevenZip);
@@ -169,6 +184,15 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
         if (entries == null)
         {
             analysis.Error = error;
+            return;
+        }
+
+        var dvd = entries.Any(e => e.Path.StartsWith("VIDEO_TS/", StringComparison.OrdinalIgnoreCase)
+                                   && e.Path.EndsWith(".IFO", StringComparison.OrdinalIgnoreCase))
+                  && !entries.Any(e => e.Path.StartsWith("BDMV/", StringComparison.OrdinalIgnoreCase));
+        if (dvd)
+        {
+            await ReadDvdIsoAsync(analysis, reader, cancellationToken);
             return;
         }
 
@@ -210,6 +234,60 @@ public sealed partial class DiscAnalyzer(IOptions<RipparrOptions> options, ILogg
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
             }
+        }
+    }
+
+    private static async Task ReadDvdIsoAsync(DiscAnalysis analysis, IsoReader reader, CancellationToken cancellationToken)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"ripparr-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await reader.ExtractAsync(analysis.Source.Path, temp, ["VIDEO_TS/*.IFO", "VIDEO_TS/*.BUP"], cancellationToken);
+            var videoTs = SourceFinder.DirIn(temp, "VIDEO_TS");
+            if (!result.Success || videoTs == null)
+            {
+                analysis.IsDvd = true;
+                analysis.Error = $"7-Zip could not unpack the DVD's IFO files: {result.LastLine}";
+                return;
+            }
+
+            ReadDvd(analysis, videoTs);
+            analysis.DiscTitle = IsoVolumeLabel(analysis.Source.Path);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(temp, recursive: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// An ISO's volume label (the primary volume descriptor at sector 16): a DVD's own name, such
+    /// as DOCTOR_WHO_S1_D1. Null when blank or not an ISO 9660 image.
+    /// </summary>
+    internal static string? IsoVolumeLabel(string iso)
+    {
+        try
+        {
+            using var stream = File.OpenRead(iso);
+            var sector = new byte[2048];
+            stream.Seek(16 * 2048, SeekOrigin.Begin);
+            if (stream.Read(sector, 0, sector.Length) < 72 || sector[0] != 1 || System.Text.Encoding.ASCII.GetString(sector, 1, 5) != "CD001")
+            {
+                return null;
+            }
+
+            var label = System.Text.Encoding.ASCII.GetString(sector, 40, 32).Trim(' ', '\0');
+            return label.Length == 0 ? null : label;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 

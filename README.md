@@ -1,7 +1,7 @@
 # Ripparr
 
-Turns a Blu-ray or UHD Blu-ray backup (an ISO file or a BDMV folder, on scratch or on a USB drive) into one
-finished MKV, named and tagged the way the library expects, ready for Radarr (or Sonarr, for TV discs) to import.
+Turns a Blu-ray, UHD Blu-ray or DVD backup (an ISO file, a BDMV folder or a VIDEO_TS folder, on scratch or on
+a USB drive) into one finished MKV, named and tagged the way the library expects, ready for Radarr (or Sonarr, for TV discs) to import.
 
 MakeMKV decrypts only when it has to, DGDemux splits the playlist, MKVToolNix builds the MKV, and MediaInfo
 and dovi_tool check the result. A sister app of [Salvarr](https://github.com/yannb2/salvarr) and
@@ -127,7 +127,7 @@ its kind. The job page shows the same flags as icons, and folds its Checks card 
    written as UTF-8), the frame rate from the playlist and the global tags. The **Release label** box
    on the job form (Criterion, Arrow, Kino Lorber...) is who put out the disc, not the cut (that is the
    edition); it is written as the standard Matroska tag `LABEL` ("the imprint on the disc"; `DISTRIBUTED_BY`
-   before 0.4.33), which tag_release keeps on later retags and edition_tags.py shows in Jellyfin as a
+   before 0.4.34), which tag_release keeps on later retags and edition_tags.py shows in Jellyfin as a
    `Release: Criterion` tag.
    The **Source group** box says where the disc came from: who released the ISO (FraMeSToR...), read from
    the ISO's name (the part after the last dash of a release name), or `Own disc` for your own rips (the
@@ -137,7 +137,7 @@ its kind. The job page shows the same flags as icons, and folds its Checks card 
    The **Country** box is only for the rare film whose releases differ by country (a better GBR or DEU
    disc): three letters as full-disc release names write them, read from the ISO name when it has one.
    It is written as `DISC_COUNTRY` and as `[GBR]` right after the source in the file name
-   (`{[country]}`, added once to profiles saved before 0.4.33; nothing is written when the box is empty).
+   (`{[country]}`, added once to profiles saved before 0.4.34; nothing is written when the box is empty).
    Radarr and Sonarr keep the bracket on rename through rename-only custom formats (homelab
    `create_rename_cfs.py`). The disc's own title (BDMV/META) is written as `DISC_TITLE`.
    `HDR_FORMAT` is spelled HDR10+ and `DV_PROFILE` "7 FEL" / "7 MEL", as tag_release.py writes them on import.
@@ -260,6 +260,34 @@ Episodes cut out of one big clip (common on TV discs) are told apart by their in
 all" playlist that plays the whole clip is flagged. The **Extras** card works on TV discs too: the extras go to
 the series folder, or to the season's folder (`Season 01/extras/`). Sonarr skips the same folder names.
 
+## DVDs
+
+DVD ISOs and VIDEO_TS folders show up on the Sources page with a **DVD** badge. Ripparr reads the disc's IFO
+files itself (from the ISO with 7-Zip, only the small IFO files): each **title** is listed like a Blu-ray
+playlist, with its length, chapters, cells (shared cells mark a "play all" or a duplicate, like shared clips),
+video, audio and subtitle streams, and the flags the disc sets (commentary, audio description, forced,
+closed captions). The disc title is the ISO's volume label (`LONG_SHOW_S01_D2`), and a label naming a
+season fills in the series and season on the TV episodes card.
+
+A job asks MakeMKV for the title (DGDemux reads Blu-rays only), matching MakeMKV's title to the DVD's by
+length and chapters, and rips it to `work/dvd-…-titleNN/` once: the episodes and extras cut from the same
+title share that rip, and it is deleted when the last job that needs it is done. Then the usual steps run on
+it: the track choices, names, flags and order from the profile and the Tracks table, the tags, the checks.
+DVD subtitles stay VobSub (pictures, like PGS), with no subtitle preview or OCR yet; Pictures, Watch and
+Listen are not offered for DVDs.
+
+**TV DVDs** come two ways. When each episode is its own title, the TV episodes card works as for a Blu-ray.
+When one long title plays all the episodes in a row (the episodes being its chapters), the card says so
+("Title 1 (1:06:56, 12 chapters) looks like 3 episodes") and **Split it into 3 episodes by chapters** cuts it:
+the **Split** button on the title's row sets how many episodes and which chapter each one starts at (**Even**
+picks the chapters nearest to even lengths; the chapter buttons show each chapter's length). Each part
+("Title 1, ch. 5-8") is then an episode row with its own number, title and Tracks; its job rips the whole
+title once and cuts the part out with mkvmerge, chapters kept.
+
+The source word in the file name is **`[DVD Remux]`** (the profile's "Source word for DVDs"), with a space:
+Radarr and Sonarr both read "DVD Remux" as a DVD source, but not "DVDRemux" or "DVD-Remux", which they take
+for an unknown or TV source. The resolution comes from the video (`480i`, `576i`).
+
 ## Add to Radarr / Sonarr
 
 A film or series that Radarr or Sonarr does not have yet gets an **Add to Radarr** / **Add to Sonarr** button in
@@ -329,7 +357,7 @@ marked SDH and not read is checked on a sample of 120 captions first, and read i
 
 The default file name follows Radarr's Standard Movie Format in this library:
 `Title (YYYY) - Edition [2160p][HEVC][DV HDR10][TrueHD Atmos-7.1][BD Remux].mkv`.
-The source is written `BD Remux` with a space (since 0.4.33): Sonarr reads `[BDRemux]` as HDTV-1080p, while
+The source is written `BD Remux` with a space (since 0.4.34): Sonarr reads `[BDRemux]` as HDTV-1080p, while
 `[BD Remux]` is Bluray Remux in Sonarr and Radarr alike. Their rename on import writes the library's `[BDRemux]`
 again (a rename-only custom format that follows the quality), and the `SOURCE` tag stays `BDRemux`.
 "SDR" is only written for 2160p video (`[SDR]` in the file name, `{range}` in the video track name): below 4K
