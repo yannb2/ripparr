@@ -284,9 +284,12 @@ picks the chapters nearest to even lengths; the chapter buttons show each chapte
 ("Title 1, ch. 5-8") is then an episode row with its own number, title and Tracks; its job rips the whole
 title once and cuts the part out with mkvmerge, chapters kept.
 
-The source word in the file name is **`[DVD Remux]`** (the profile's "Source word for DVDs"), with a space:
-Radarr and Sonarr both read "DVD Remux" as a DVD source, but not "DVDRemux" or "DVD-Remux", which they take
-for an unknown or TV source. The resolution comes from the video (`480i`, `576i`).
+The source word in the file name is **`[DVD Remux]`**, with a space: Radarr and Sonarr both read "DVD Remux"
+as a DVD source, but not "DVDRemux" or "DVD-Remux", which they take for an unknown or TV source. The SOURCE
+tag says `DVDRemux` (the profile's "Source word for DVDs", the library's word), and on import Radarr and
+Sonarr name the file `[DVDRemux]` again through their DVDRemux rename-only format, which matches "DVD Remux"
+in the release name (neither app has a DVD remux quality; homelab `create_rename_cfs.py`).
+The resolution comes from the video (`480i`, `576i`).
 
 ## Add to Radarr / Sonarr
 

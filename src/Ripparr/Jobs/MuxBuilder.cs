@@ -283,13 +283,18 @@ public static partial class MuxBuilder
         job.Dvd && !string.IsNullOrWhiteSpace(job.Profile.DvdSource) ? job.Profile.DvdSource.Trim() : job.Profile.Source;
 
     /// <summary>
-    /// The source as the file name writes it: "BD Remux" for BDRemux. Sonarr reads "[BDRemux]" as HDTV
+    /// The source as the file name writes it: "BD Remux" for BDRemux, "DVD Remux" for DVDRemux. Sonarr reads "[BDRemux]" as HDTV
     /// (its remux pattern wants a space, dot or underscore before the word, and "BD" alone is its Blu-ray
     /// source); "[BD Remux]" is Bluray Remux in Sonarr and Radarr alike. Their rename on import writes
     /// the library's [BDRemux] again, from the quality. The SOURCE tag keeps the profile's word.
     /// </summary>
-    public static string? SourceInName(string? source) =>
-        string.Equals(source?.Trim(), "BDRemux", StringComparison.OrdinalIgnoreCase) ? "BD Remux" : source;
+    public static string? SourceInName(string? source) => source?.Trim().ToUpperInvariant() switch
+    {
+        "BDREMUX" => "BD Remux",
+        // Radarr and Sonarr read DVD only when a space follows it; DVDRemux would be no source at all.
+        "DVDREMUX" => "DVD Remux",
+        _ => source
+    };
 
     /// <summary>The release group as one word for a file name: Radarr stops reading it at a space.</summary>
     public static string? ReleaseGroupWord(string? group) =>

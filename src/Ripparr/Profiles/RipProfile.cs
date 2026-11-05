@@ -48,12 +48,14 @@ public sealed class RipProfile : IJsonOnDeserialized
     public string Source { get; set; } = "BDRemux";
 
     /// <summary>
-    /// What <see cref="Source"/> is for a DVD. "DVD Remux": Radarr and Sonarr both read the
-    /// word DVD in it (quality DVD), as they do not in DVDRemux or DVD-Remux.
+    /// What <see cref="Source"/> is for a DVD: DVDRemux, the library's word (the SOURCE tag, and
+    /// Radarr/Sonarr's DVDRemux rename-only format). The file name says "DVD Remux"
+    /// (MuxBuilder.SourceInName): Radarr and Sonarr only read the word DVD (quality DVD) with a
+    /// space after it, and the format matches "DVD Remux" in the release name.
     /// </summary>
     public string DvdSource { get; set; } = DefaultDvdSource;
 
-    public const string DefaultDvdSource = "DVD Remux";
+    public const string DefaultDvdSource = "DVDRemux";
 
     // ---- DGDemux ----
 
@@ -298,6 +300,12 @@ public sealed class RipProfile : IJsonOnDeserialized
         CodecNames.MoveToMuxarrLabels(AudioCodecNames);
         AddReleaseGroupToken();
         AddCountryToken();
+        // 0.4.33 wrote "DVD Remux" in the tag too; the file name still gets it from SourceInName.
+        if (DvdSource == "DVD Remux")
+        {
+            DvdSource = DefaultDvdSource;
+        }
+
         if (CommentaryNameTemplate == null && ForcedSubtitleNameTemplate == null && SrtNameTemplate == null && ForcedSrtNameTemplate == null)
         {
             return;
