@@ -1,0 +1,18 @@
+@* A table header you click to sort by its column; the sorted one shows an arrow. *@
+<th class="@Class" aria-sort="@(Active ? (Descending ? "descending" : "ascending") : "none")">
+    <button type="button" class="sv-sort @(Active ? "sv-sort-active" : "")" @onclick="() => OnSort.InvokeAsync(Column)"
+            title="@(Active ? (Descending ? "Sorted high to low: click for low to high" : "Sorted low to high: click for high to low") : $"Sort by {Label}")">
+        @Label<i class="bi @(Active ? (Descending ? "bi-caret-down-fill" : "bi-caret-up-fill") : "bi-chevron-expand") ms-1"></i>
+    </button>
+</th>
+
+@code {
+    [Parameter, EditorRequired] public string Column { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string Current { get; set; } = "";
+    [Parameter] public bool Descending { get; set; }
+    [Parameter] public EventCallback<string> OnSort { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private bool Active => Column == Current;
+}
