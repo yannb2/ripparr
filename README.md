@@ -211,7 +211,10 @@ Ripparr cannot read the order from them; check it with Watch.
 **Tracks** on an episode's row opens its track table, the same as a film's: untick the audio and subtitle
 tracks you don't want, change a language, a flag, a description or the order, Listen to an audio track.
 **Same for all episodes** gives the other ticked episodes the same choices, track by track (same PID), and
-**Reset to the profile** starts over. Episodes never opened get the profile's picks. The **Extras** card has the
+**Reset to the profile** starts over. Episodes never opened get the profile's picks. The table has the film's
+subtitle tools too: **Check SDH and commentary** (a sample, seconds), **Preview subtitles** (the whole episode:
+exact and forced caption counts, previews, Side by side) and then **Read subtitles** (every caption through
+Tesseract); what they find ticks SDH (when the profile detects it) and Commentary the same way as for a film. The **Extras** card has the
 same Tracks button on each row (with **Same for all extras**).
 
 Each episode is its own job and goes to `done/Series (Year)/Season 01/` (season 0 to `Specials`) as

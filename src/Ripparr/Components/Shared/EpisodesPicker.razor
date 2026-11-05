@@ -224,7 +224,7 @@
                         <tr>
                             <td></td>
                             <td colspan="7">
-                                <PlaylistTracks Source="Source" Playlist="playlist" Plan="PlanFor(playlist)" CanListen="CanListen"
+                                <PlaylistTracks Source="Source" Analysis="Analysis" Playlist="playlist" Plan="PlanFor(playlist)" State="row.Subtitles" DetectSdh="@(Profile.DetectSdh)" CanListen="CanListen"
                                                 CopyToOthers="plan => CopyToOthers(playlist, plan)" Reset="() => row.Plan = null" Changed="StateHasChanged"/>
                             </td>
                         </tr>
@@ -305,6 +305,8 @@
 
         /// <summary>The tracks, once opened: kept as edited (Reset goes back to the profile).</summary>
         public TrackPlan? Plan { get; set; }
+
+        public PlaylistTracksState Subtitles { get; } = new();
     }
 
     private readonly Dictionary<string, EpisodeRow> _rows = new();

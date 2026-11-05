@@ -1,4 +1,7 @@
-@* One episode's or extra's tracks: the film's track table for that playlist, with a reset and "same for all". *@
+@* One episode's or extra's tracks: the film's track table for that playlist, with its subtitle check and
+   preview, a reset and "same for all". *@
+@implements IDisposable
+@inject SubtitleScanner Scanner
 
 <div class="border rounded p-2 my-1 bg-body-tertiary">
     <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
@@ -21,13 +24,102 @@
     {
         <div class="small text-body-secondary mb-2"><i class="bi bi-info-circle me-1"></i>@_note</div>
     }
-    <TrackPlanEditor Plan="Plan" ListenUrl="@(CanListen ? ListenUrl : null)"/>
+
+    @if (Playlist.Mpls.Streams.Any(s => s.Kind == StreamKind.Subtitle))
+    {
+        <div class="d-flex flex-wrap align-items-center gap-2 small mb-2">
+            @if (_subtitles is { Running: true } running)
+            {
+                <span class="spinner-border spinner-border-sm text-secondary"></span>
+                <span class="text-body-secondary">@running.Stage, @((running.Progress * 100).ToString("0"))%…</span>
+                <div class="progress flex-grow-1" style="height: 6px; max-width: 20rem">
+                    <div class="progress-bar" style="width: @((running.Progress * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                </div>
+            }
+            else if (_subtitles is { Error: { } subtitleError })
+            {
+                <i class="bi bi-info-circle text-body-secondary"></i>
+                <span class="text-body-secondary">@subtitleError</span>
+                <button class="btn btn-sm btn-link p-0" @onclick="() => ReadSubtitles(_subtitles.Quick)">Try again</button>
+            }
+            else if (_subtitles != null)
+            {
+                <span class="w-100 order-last d-flex flex-wrap align-items-center gap-2 mt-1">
+                    @if (State.Compare.Count >= 2)
+                    {
+                        <a class="btn btn-sm btn-outline-secondary" target="_blank"
+                           href="@($"discs/{_subtitles.Key}/compare?pids={string.Join(',', _subtitles.Tracks.Keys.Where(State.Compare.Contains))}")">
+                            <i class="bi bi-layout-three-columns"></i> Side by side (@State.Compare.Count tracks)
+                        </a>
+                        <button class="btn btn-sm btn-link p-0" @onclick="() => State.Compare.Clear()">clear</button>
+                    }
+                    else
+                    {
+                        <span class="text-body-secondary">Compare: tick <i class="bi bi-layout-three-columns"></i> compare on two or more subtitle tracks below, then open Side by side</span>
+                    }
+                </span>
+                <i class="bi bi-check2 text-success"></i>
+                <span class="text-body-secondary">
+                    @if (_subtitles.Quick)
+                    {
+                        @($"Checked in {Took(_subtitles)}, on {_subtitles.QuickNote}: ")
+                        <span>caption counts from that sample only@(FlagsNote).</span>
+                    }
+                    else
+                    {
+                        @($"{(_subtitles.FullText ? "Subtitles read" : "Subtitles previewed")} in {Took(_subtitles)}: ")
+                        <span>caption counts and <i class="bi bi-eye"></i> previews below@(FlagsNote).</span>
+                    }
+                </span>
+                @if (_subtitles.Stage.StartsWith("The OCR failed", StringComparison.Ordinal))
+                {
+                    <span class="text-danger">@_subtitles.Stage</span>
+                }
+                @if (_subtitles.Quick)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReadSubtitles(false)"
+                            title="Reads the whole playlist once: exact caption counts, forced captions and every caption in the preview">
+                        <i class="bi bi-badge-cc"></i> Preview subtitles (whole playlist)
+                    </button>
+                }
+                else if (!_subtitles.FullText)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ReadAllText"
+                            title="Tesseract reads every caption of every track: SDH and commentary checked on all of them, and the text shows in the preview and compare pages.">
+                        <i class="bi bi-fonts"></i> Read subtitles
+                    </button>
+                }
+            }
+            else
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReadSubtitles(true)"
+                        title="Reads a few slices spread over the playlist and checks a sample of each track's captions for SDH and commentary text">
+                    <i class="bi bi-search"></i> Check SDH and commentary
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ReadSubtitles(false)"
+                        title="Reads the whole playlist once for each subtitle track's exact caption count, forced captions, a preview and the SDH / commentary check">
+                    <i class="bi bi-badge-cc"></i> Preview subtitles
+                </button>
+                <span class="text-body-secondary">The check takes seconds; the preview reads the whole playlist for exact counts and forced captions.</span>
+            }
+        </div>
+    }
+
+    <TrackPlanEditor Plan="Plan" ListenUrl="@(CanListen ? ListenUrl : null)" Subtitles="_subtitles"
+                     Compare="@(_subtitles is { Running: false, Error: null } ? State.Compare : null)" CompareChanged="ToggleCompare"/>
 </div>
 
 @code {
     [Parameter, EditorRequired] public DiscSource Source { get; set; } = null!;
+    [Parameter, EditorRequired] public DiscAnalysis Analysis { get; set; } = null!;
     [Parameter, EditorRequired] public PlaylistInfo Playlist { get; set; } = null!;
     [Parameter, EditorRequired] public TrackPlan Plan { get; set; } = null!;
+
+    /// <summary>What the subtitle read set on this playlist's plan; kept by the row while the panel is closed.</summary>
+    [Parameter, EditorRequired] public PlaylistTracksState State { get; set; } = null!;
+
+    /// <summary>The profile ticks SDH by itself when the read finds it.</summary>
+    [Parameter] public bool DetectSdh { get; set; }
 
     /// <summary>ffmpeg can cut a sample (not encrypted, the ISO mounted): Listen buttons on audio tracks.</summary>
     [Parameter] public bool CanListen { get; set; }
@@ -45,9 +137,146 @@
     [Parameter] public EventCallback Reset { get; set; }
 
     private string? _note;
+    private SubtitleScan? _subtitles;
+    private Timer? _timer;
+
+    protected override void OnParametersSet()
+    {
+        if (State.Plan != Plan)
+        {
+            // A new plan (first open, or Reset): the flags as the profile set them are "the app's".
+            State.Plan = Plan;
+            State.FlaggedVersion = -1;
+            State.Auto = Plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle).ToDictionary(t => t.Pid, t => (t.HearingImpaired, t.Commentary));
+        }
+
+        // A read started earlier (or still running) for this playlist.
+        _subtitles ??= Scanner.Find(Source, Playlist);
+        if (_subtitles is { Running: true })
+        {
+            Watch();
+        }
+        else
+        {
+            ApplySubtitles();
+        }
+    }
+
+    private static string Took(SubtitleScan scan) =>
+        scan.Took.TotalSeconds < 60 ? $"{scan.Took.TotalSeconds:0.#} s" : Format.Duration(scan.Took);
 
     private string ListenUrl(PlannedTrack track) =>
         $"api/discs/listen/{track.Pid}.m4a?path={Uri.EscapeDataString(Source.Path)}&playlist={Uri.EscapeDataString(Playlist.Name)}";
+
+    private void ToggleCompare((int Pid, bool On) change)
+    {
+        if (change.On)
+        {
+            State.Compare.Add(change.Pid);
+        }
+        else
+        {
+            State.Compare.Remove(change.Pid);
+        }
+    }
+
+    private void ReadSubtitles(bool quick)
+    {
+        _subtitles = Scanner.Start(Source, Analysis, Playlist, quick);
+        Watch();
+    }
+
+    private void ReadAllText()
+    {
+        if (_subtitles != null && Scanner.StartFullText(_subtitles.Key) is { } scan)
+        {
+            _subtitles = scan;
+            Watch();
+        }
+    }
+
+    /// <summary>Redraws every second while the read runs, then puts its counts and flags on the plan.</summary>
+    private void Watch()
+    {
+        if (_timer != null || _subtitles is not { Running: true })
+        {
+            return;
+        }
+
+        var scan = _subtitles;
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            if (!scan.Running)
+            {
+                _timer?.Dispose();
+                _timer = null;
+                ApplySubtitles();
+            }
+
+            StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    /// <summary>
+    /// The caption counts on the subtitle tracks, and the SDH (when the profile detects SDH) and
+    /// commentary flags the read found, once per read; a flag changed by hand stays as you left it.
+    /// The same rules as the film's form.
+    /// </summary>
+    private void ApplySubtitles()
+    {
+        if (_subtitles is not { Running: false, Error: null })
+        {
+            return;
+        }
+
+        var flag = State.FlaggedVersion != _subtitles.GuessVersion;
+        var both = flag && State.FlaggedVersion >= 0 && _subtitles.FullText;
+        State.FlaggedVersion = _subtitles.GuessVersion;
+        foreach (var track in Plan.Tracks.Where(t => t.Kind == StreamKind.Subtitle))
+        {
+            var auto = State.Auto.GetValueOrDefault(track.Pid, (Sdh: track.HearingImpaired, Commentary: track.Commentary));
+            var sdhByHand = track.HearingImpaired != auto.Sdh;
+            var commentaryByHand = track.Commentary != auto.Commentary;
+            if (_subtitles.Tracks.TryGetValue(track.Pid, out var read))
+            {
+                track.Details = _subtitles.Quick
+                    ? $"{read.Captions:N0} elements in the sample"
+                    : $"{read.Captions:N0} elements" + (read.Forced > 0 ? $", {read.Forced:N0} forced" : "");
+                if (flag && DetectSdh && (read.Sdh || both) && !sdhByHand)
+                {
+                    track.HearingImpaired = read.Sdh;
+                }
+
+                if (flag && (read.Commentary || both) && !commentaryByHand)
+                {
+                    track.Commentary = read.Commentary;
+                }
+            }
+
+            State.Auto[track.Pid] = (sdhByHand ? auto.Sdh : track.HearingImpaired, commentaryByHand ? auto.Commentary : track.Commentary);
+        }
+    }
+
+    private string FlagsNote
+    {
+        get
+        {
+            var sdh = _subtitles?.Tracks.Values.Count(t => t.Sdh) ?? 0;
+            var commentary = _subtitles?.Tracks.Values.Count(t => t.Commentary) ?? 0;
+            var parts = new List<string>();
+            if (sdh > 0)
+            {
+                parts.Add(DetectSdh ? $"{sdh} SDH track{(sdh > 1 ? "s" : "")} found and ticked" : $"{sdh} SDH track{(sdh > 1 ? "s" : "")} found (the profile does not tick SDH by itself)");
+            }
+
+            if (commentary > 0)
+            {
+                parts.Add($"{commentary} commentary track{(commentary > 1 ? "s" : "")} guessed and ticked");
+            }
+
+            return parts.Count == 0 ? "" : "; " + string.Join(", ", parts);
+        }
+    }
 
     private async Task Copy()
     {
@@ -57,4 +286,6 @@
             : $"Copied to {copied} other {Others}." + (skipped > 0 ? $" {skipped} have other streams and stay as they were." : "");
         await Changed.InvokeAsync();
     }
+
+    public void Dispose() => _timer?.Dispose();
 }
