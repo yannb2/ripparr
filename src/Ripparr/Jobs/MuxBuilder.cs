@@ -268,7 +268,8 @@ public static partial class MuxBuilder
             // A 2160p SDR film gets [SDR], as the rename-only custom format does in Radarr; below 4K, nothing.
             ["hdr"] = video == null ? null : string.IsNullOrEmpty(range) ? TrackNaming.SdrOnlyAt2160p("SDR", video.Resolution) : range,
             ["audio"] = audioWords,
-            ["source"] = SourceWord(job),
+            ["source"] = SourceInName(SourceWord(job)),
+            ["country"] = string.IsNullOrWhiteSpace(job.Country) ? null : job.Country.Trim().ToUpperInvariant(),
             ["episode"] = job.EpisodeCode,
             ["absolute"] = job.AbsoluteEpisode is { } absolute ? EpisodeNumbers.Absolute(absolute) : null,
             ["episodetitle"] = job.EpisodeTitle,
@@ -280,6 +281,15 @@ public static partial class MuxBuilder
     /// <summary>The SOURCE tag and the file name's source word: the profile's, or its DVD one for a DVD (DVD Remux).</summary>
     public static string SourceWord(Job job) =>
         job.Dvd && !string.IsNullOrWhiteSpace(job.Profile.DvdSource) ? job.Profile.DvdSource.Trim() : job.Profile.Source;
+
+    /// <summary>
+    /// The source as the file name writes it: "BD Remux" for BDRemux. Sonarr reads "[BDRemux]" as HDTV
+    /// (its remux pattern wants a space, dot or underscore before the word, and "BD" alone is its Blu-ray
+    /// source); "[BD Remux]" is Bluray Remux in Sonarr and Radarr alike. Their rename on import writes
+    /// the library's [BDRemux] again, from the quality. The SOURCE tag keeps the profile's word.
+    /// </summary>
+    public static string? SourceInName(string? source) =>
+        string.Equals(source?.Trim(), "BDRemux", StringComparison.OrdinalIgnoreCase) ? "BD Remux" : source;
 
     /// <summary>The release group as one word for a file name: Radarr stops reading it at a space.</summary>
     public static string? ReleaseGroupWord(string? group) =>
@@ -328,12 +338,15 @@ public static partial class MuxBuilder
             ("ABSOLUTE_EPISODE", job.AbsoluteEpisode?.ToString(CultureInfo.InvariantCulture)),
             ("RELEASE_NAME", job.SourceName),
             ("SOURCE_RELEASE_GROUP", string.IsNullOrWhiteSpace(job.SourceReleaseGroup) ? null : job.SourceReleaseGroup.Trim()),
+            ("DISC_TITLE", string.IsNullOrWhiteSpace(job.DiscTitle) ? null : job.DiscTitle.Trim()),
+            ("DISC_COUNTRY", string.IsNullOrWhiteSpace(job.Country) ? null : job.Country.Trim().ToUpperInvariant()),
             ("SOURCE", SourceWord(job)),
             ("VIDEO_CODEC", video?.VideoCodec),
-            ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr : null),
-            ("DV_PROFILE", video is { DolbyVision: true } ? video.DolbyVisionProfile : null),
+            // Spelled as tag_release.py does on import (HDR10+, "7 FEL"), so the values stay the same; the file name keeps Radarr's HDR10Plus.
+            ("HDR_FORMAT", video?.DynamicRange is { Length: > 0 } hdr ? hdr.Replace("HDR10Plus", "HDR10+") : null),
+            ("DV_PROFILE", video is { DolbyVision: true } ? job.DolbyVisionProfile ?? video.DolbyVisionProfile : null),
             ("EDITION", string.IsNullOrWhiteSpace(job.Edition) ? null : job.Edition),
-            ("DISTRIBUTED_BY", string.IsNullOrWhiteSpace(job.ReleaseLabel) ? null : job.ReleaseLabel.Trim()),
+            ("LABEL", string.IsNullOrWhiteSpace(job.ReleaseLabel) ? null : job.ReleaseLabel.Trim()),
             ("ORIGINAL_LANGUAGE", job.OriginalLanguage),
             ("RIPPED_WITH", $"Ripparr {AppInfo.Version}, playlist {job.Playlist}")
         };

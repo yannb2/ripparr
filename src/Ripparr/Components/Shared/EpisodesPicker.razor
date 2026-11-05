@@ -112,6 +112,23 @@
                 <div class="small text-body-secondary text-truncate">@(_original == null ? "" : Languages.Name(_original))</div>
             </div>
         </div>
+        <div class="row g-2 mb-2">
+            <div class="col-md-3">
+                <label class="form-label small mb-1" title="Where the disc came from: who released the ISO (FraMeSToR...), read from its name, or Own disc. Written as the MKV tag SOURCE_RELEASE_GROUP; empty counts as Own disc.">Source group</label>
+                <input class="form-control form-control-sm" list="episode-source-groups" placeholder="@Job.OwnDisc" @bind="_sourceGroup" @bind:event="oninput"/>
+                <datalist id="episode-source-groups"><option value="@Job.OwnDisc"></option></datalist>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1" title="Only when two releases differ by country: three letters, such as GBR. Written as the MKV tag DISC_COUNTRY and as [GBR] after the source in the file names.">Country</label>
+                <input class="form-control form-control-sm" list="episode-countries" maxlength="3" placeholder="GBR..." @bind="_country" @bind:event="oninput"/>
+                <datalist id="episode-countries">
+                    @foreach (var country in ReleaseName.Countries)
+                    {
+                        <option value="@country"></option>
+                    }
+                </datalist>
+            </div>
+        </div>
 
         <div class="d-flex flex-wrap align-items-end gap-3 mb-2">
             <div>
@@ -394,6 +411,8 @@
     private int? _tmdb { get => State.Tmdb; set => State.Tmdb = value; }
     private string? _imdb { get => State.Imdb; set => State.Imdb = value; }
     private string? _original { get => State.Original; set => State.Original = value; }
+    private string? _sourceGroup { get => State.SourceGroup; set => State.SourceGroup = value; }
+    private string? _country { get => State.Country; set => State.Country = value; }
     private bool _anime { get => State.Anime; set => State.Anime = value; }
     private int _season { get => State.Season; set => State.Season = value; }
     private int _first { get => State.First; set => State.First = value; }
@@ -417,6 +436,8 @@
         }
 
         State.Started = true;
+        _sourceGroup = ReleaseName.Group(Source.Name) ?? Job.OwnDisc;
+        _country = ReleaseName.Country(Source.Name);
         _rows.Clear();
         foreach (var playlist in _found)
         {
@@ -759,6 +780,9 @@
             TmdbId = _tmdb,
             ImdbId = string.IsNullOrWhiteSpace(_imdb) ? null : _imdb.Trim(),
             OriginalLanguage = _original,
+            SourceReleaseGroup = Job.SourceGroupOrOwnDisc(_sourceGroup),
+            DiscTitle = Analysis.DiscTitle,
+            Country = Job.CountryCode(_country),
             Profile = Profile,
             Tags = Profile.CustomTags.Select(t => t.Copy()).ToList()
         }, null);
@@ -785,6 +809,9 @@
                 TmdbId = series.TmdbId,
                 ImdbId = series.ImdbId,
                 OriginalLanguage = series.OriginalLanguage,
+                SourceReleaseGroup = series.SourceReleaseGroup,
+                DiscTitle = series.DiscTitle,
+                Country = series.Country,
                 Season = _season,
                 Episode = number,
                 AbsoluteEpisode = _anime ? known?.Absolute : null,

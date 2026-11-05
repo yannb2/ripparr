@@ -19,6 +19,7 @@ public sealed class DiscDraft
     public string? Edition { get; set; }
     public string? Label { get; set; }
     public string? SourceGroup { get; set; }
+    public string? Country { get; set; }
     public int? Tmdb { get; set; }
     public string? Imdb { get; set; }
     public string? Original { get; set; }
@@ -101,6 +102,13 @@ public sealed class EpisodesPickerState
     public int? Tmdb { get; set; }
     public string? Imdb { get; set; }
     public string? Original { get; set; }
+
+    /// <summary>Where the disc came from: the ISO's group, or "Own disc" (Job.OwnDisc).</summary>
+    public string? SourceGroup { get; set; }
+
+    /// <summary>The disc's country (GBR...), usually empty.</summary>
+    public string? Country { get; set; }
+
     public bool Anime { get; set; }
     public int Season { get; set; } = 1;
     public int First { get; set; } = 1;

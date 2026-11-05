@@ -10,7 +10,7 @@ public class NamingTests
     private static Dictionary<string, string?> Values(string? edition = null, string? hdr = "DV HDR10") => new()
     {
         ["title"] = "Blade Runner", ["year"] = "1982", ["edition"] = edition, ["resolution"] = "2160p",
-        ["videocodec"] = "HEVC", ["hdr"] = hdr, ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux",
+        ["videocodec"] = "HEVC", ["hdr"] = hdr, ["audio"] = "TrueHD Atmos-7.1", ["source"] = "BDRemux", ["country"] = null,
         ["releasegroup"] = null
     };
 
