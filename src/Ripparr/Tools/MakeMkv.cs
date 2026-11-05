@@ -227,22 +227,27 @@ public static partial class MakeMkv
     }
 
     /// <summary>
-    /// MakeMKV's title for a DVD title: one of about the same length (it prints whole seconds),
-    /// preferring the one whose original title number (TINFO 24) is the DVD's; among titles of
-    /// the same length and chapters, the same place in the order. Null when none fits.
+    /// MakeMKV's title for a DVD title: the one whose original title number (TINFO 24) is the
+    /// DVD's, when its length is within 2% (MakeMKV's lengths can be a few seconds off the IFO's:
+    /// 1:15:46 for an IFO's 1:15:48); otherwise one of about the same length (5 s, or 0.5% of a
+    /// long title), the same number of chapters first, and among titles of the same length and
+    /// chapters, the same place in the order. Null when none fits.
     /// </summary>
     public static Title? DvdTitle(IReadOnlyList<Title> titles, Disc.DvdTitle wanted, IReadOnlyList<Disc.DvdTitle> all)
     {
-        bool Near(TimeSpan a, TimeSpan b) => Math.Abs((a - b).TotalSeconds) <= 2;
+        static bool Within(TimeSpan a, TimeSpan b, double seconds, double share) =>
+            Math.Abs((a - b).TotalSeconds) <= Math.Max(seconds, b.TotalSeconds * share);
+
+        if (titles.FirstOrDefault(t => t.OriginalTitle == wanted.Number && Within(t.Duration, wanted.Duration, 10, 0.02)) is { } numbered)
+        {
+            return numbered;
+        }
+
+        bool Near(TimeSpan a, TimeSpan b) => Within(a, b, 5, 0.005);
         var candidates = titles.Where(t => Near(t.Duration, wanted.Duration)).ToList();
         if (candidates.Count == 0)
         {
             return null;
-        }
-
-        if (candidates.FirstOrDefault(t => t.OriginalTitle == wanted.Number) is { } numbered)
-        {
-            return numbered;
         }
 
         var sameChapters = candidates.Where(t => t.Chapters == wanted.Chapters.Count).ToList();
