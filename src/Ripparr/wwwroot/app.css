@@ -170,6 +170,28 @@
     background: rgba(255, 255, 255, 0.1);
 }
 
+/* ---- Open discs: a long name is cut with "…" and the close button stays in view ---- */
+
+/* .nav wraps (Bootstrap), so its rows size to their content: hold this one to the sidebar's width. */
+.sv-open-disc {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.sv-open-disc .nav-link {
+    min-width: 0;
+}
+
+.sv-open-disc .nav-link span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sv-open-disc .sv-open-disc-close {
+    flex-shrink: 0;
+}
+
 /* ---- Desktop ---- */
 
 @media (min-width: 768px) {

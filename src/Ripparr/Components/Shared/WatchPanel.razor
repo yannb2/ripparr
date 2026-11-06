@@ -1,16 +1,49 @@
-@* 30 seconds of a playlist as a small video: the start (titles), the middle or the end (credits). *@
+@* A playlist as a small video: 30 seconds of the start (titles), the middle or the end (credits), or the whole playlist played live. *@
 <div class="d-flex flex-wrap align-items-start gap-3 py-1">
-    <div class="btn-group btn-group-sm" role="group" aria-label="Where to watch">
-        @foreach (var (percent, label) in Points)
+    <div class="d-flex flex-column gap-2">
+        <div class="btn-group btn-group-sm" role="group" aria-label="What to watch">
+            @foreach (var (percent, label) in Points)
+            {
+                <button type="button" class="btn @(!_whole && _percent == percent ? "btn-primary" : "btn-outline-secondary")" @onclick="() => Clip(percent)">@label</button>
+            }
+            <button type="button" class="btn @(_whole ? "btn-primary" : "btn-outline-secondary")" @onclick="() => Whole(0)"
+                    title="The whole playlist from the start, played as ffmpeg reads it">
+                <i class="bi bi-play-fill"></i> Whole
+            </button>
+        </div>
+        @if (_whole)
         {
-            <button type="button" class="btn @(_percent == percent ? "btn-primary" : "btn-outline-secondary")" @onclick="() => _percent = percent">@label</button>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Where to start">
+                @foreach (var from in LivePlay.StartPercents)
+                {
+                    <button type="button" class="btn @(_from == from ? "btn-secondary" : "btn-outline-secondary")" @onclick="() => Whole(from)"
+                            title="Play from @(from == 0 ? "the start" : $"{from} % in")">@(from == 0 ? "From start" : $"{from} %")</button>
+                }
+            </div>
         }
     </div>
-    <video src="@Url" controls autoplay preload="auto" class="rounded border bg-black" style="width: 480px; max-width: 100%; aspect-ratio: 16 / 9"
-           onerror="this.replaceWith(Object.assign(document.createElement('span'), {className: 'small text-body-secondary align-self-center', textContent: 'No preview (an ISO needs the mount service, or ffmpeg could not read it)'}))"></video>
+    <div @key="Url" class="d-flex">
+        <video src="@Url" controls autoplay preload="auto" class="rounded border bg-black" style="width: 640px; max-width: 100%; aspect-ratio: 16 / 9"
+               onerror="this.hidden = true; this.nextElementSibling.hidden = false"></video>
+        <span class="small text-body-secondary align-self-center" hidden>
+            @(_whole ? "Cannot play it (an ISO needs the mount service, or ffmpeg could not read the playlist)" : "No preview (an ISO needs the mount service, or ffmpeg could not read it)")
+        </span>
+    </div>
     <div class="small text-body-secondary align-self-center" style="max-width: 18rem">
-        30 seconds from @Points.First(p => p.Percent == _percent).Label.ToLowerInvariant() of the playlist, made with ffmpeg the first time
-        (a few seconds). HDR looks flat here; the rip is untouched.
+        @if (_whole)
+        {
+            <span>
+                The whole playlist@(_from > 0 ? $" from {_from} % in" : ""), turned into a 720p video with ffmpeg as it plays: no seeking,
+                start at a quarter, half or three quarters instead. HDR looks flat here; the rip is untouched.
+            </span>
+        }
+        else
+        {
+            <span>
+                30 seconds from @Points.First(p => p.Percent == _percent).Label.ToLowerInvariant() of the playlist, made with ffmpeg the first time
+                (a few seconds). HDR looks flat here; the rip is untouched.
+            </span>
+        }
     </div>
 </div>
 
@@ -18,9 +51,31 @@
     [Parameter, EditorRequired] public string SourcePath { get; set; } = "";
     [Parameter, EditorRequired] public string Playlist { get; set; } = "";
 
+    /// <summary>Opens on the whole playlist (extras, which are short) instead of 30 seconds of its start.</summary>
+    [Parameter] public bool StartWhole { get; set; }
+
     private static readonly (int Percent, string Label)[] Points = [(2, "Start"), (50, "Middle"), (95, "End")];
     private int _percent = 2;
+    private bool _whole;
+    private int _from;
 
-    private string Url =>
-        $"api/discs/watch/{_percent}.mp4?path={Uri.EscapeDataString(SourcePath)}&playlist={Uri.EscapeDataString(Playlist)}";
+    protected override void OnInitialized() => _whole = StartWhole;
+
+    private void Clip(int percent)
+    {
+        _whole = false;
+        _percent = percent;
+    }
+
+    private void Whole(int from)
+    {
+        _whole = true;
+        _from = from;
+    }
+
+    private string Query => $"path={Uri.EscapeDataString(SourcePath)}&playlist={Uri.EscapeDataString(Playlist)}";
+
+    private string Url => _whole
+        ? $"api/discs/play.mp4?{Query}&from={_from}"
+        : $"api/discs/watch/{_percent}.mp4?{Query}";
 }

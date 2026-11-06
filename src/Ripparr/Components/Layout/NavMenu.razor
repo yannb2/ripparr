@@ -23,14 +23,14 @@
             </li>
             @foreach (var (path, name) in _open)
             {
-                <li class="nav-item d-flex align-items-center sv-open-disc" title="@path">
+                <li class="nav-item d-flex align-items-center sv-open-disc" title="@($"{name}\n{path}")">
                     <NavLink class="nav-link py-1 small flex-grow-1 text-truncate" href="@($"disc?Path={Uri.EscapeDataString(path)}")" Match="NavLinkMatch.All" @onclick="Close">
                         <i class="bi bi-disc-fill" style="font-size: .8rem"></i>
                         <span class="text-truncate">@name</span>
                     </NavLink>
                     @if (!_collapsed)
                     {
-                        <button class="btn btn-link btn-sm text-secondary p-0 me-2" title="Take off this list (forgets what was typed on it)" @onclick="() => Forget(path)">
+                        <button class="btn btn-link btn-sm text-secondary p-0 me-2 sv-open-disc-close" title="Take off this list (forgets what was typed on it)" @onclick="() => Forget(path)">
                             <i class="bi bi-x"></i>
                         </button>
                     }

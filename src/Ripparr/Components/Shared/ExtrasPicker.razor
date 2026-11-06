@@ -94,6 +94,13 @@
                                             title="This extra's audio and subtitle tracks: untick what you don't want">
                                         <i class="bi @(row.Tracks ? "bi-music-note-list" : "bi-music-note")"></i> Tracks
                                     </button>
+                                    @if (!Analysis.IsDvd)
+                                    {
+                                        <button class="btn btn-sm btn-link p-0 ms-2 text-nowrap" @onclick="() => row.Watch = !row.Watch"
+                                                title="Play the extra in the browser to check what it is before ripping it">
+                                            <i class="bi @(row.Watch ? "bi-play-circle-fill" : "bi-play-circle")"></i> Watch
+                                        </button>
+                                    }
                                 </td>
                             </tr>
                             @if (row.Tracks)
@@ -104,6 +111,13 @@
                                         <PlaylistTracks Source="Source" Analysis="Analysis" Playlist="playlist" Plan="PlanFor(playlist)" State="row.Subtitles" DetectSdh="@(ExtrasProfile?.DetectSdh == true)" CanListen="CanListen" Others="extras"
                                                         CopyToOthers="plan => CopyToOthers(playlist, plan)" Reset="() => row.Plan = null" Changed="StateHasChanged"/>
                                     </td>
+                                </tr>
+                            }
+                            @if (row.Watch && !Analysis.IsDvd)
+                            {
+                                <tr>
+                                    <td></td>
+                                    <td colspan="8"><WatchPanel SourcePath="@Source.Path" Playlist="@playlist.Name" StartWhole="true"/></td>
                                 </tr>
                             }
                             @if (row.Pictures)
