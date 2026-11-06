@@ -79,11 +79,16 @@ public static class DvdSteps
                     playlist.LastChapter < title.Mpls.Chapters.Count ? title.Mpls.Chapters[playlist.LastChapter].Start : null)).CommandLine}");
             }
 
-            context.Log("Then: mkvmerge -J and mediainfo on the MKV, its tracks matched to the DVD's streams, and mkvmerge with these tracks:");
-            foreach (var track in job.Plan.Kept)
+            context.Log("Then: mkvmerge -J and mediainfo on the MKV, its tracks matched to the DVD's streams, and mkvmerge with these tracks and names:");
+            var names = DryRunNames.For(job, playlist);
+            foreach (var track in names)
             {
-                context.Log($"  {track.Kind} {track.Language} {track.Codec}{(track.Default ? " default" : "")}{(track.Forced ? " forced" : "")}" +
-                            $"{(track.Commentary ? " commentary" : "")}{(track.HearingImpaired ? " SDH" : "")}{(track.VisualImpaired ? " AD" : "")}");
+                context.Log(DryRunNames.Line(track));
+            }
+
+            foreach (var note in DryRunNames.Notes(job, names))
+            {
+                context.Log(note);
             }
 
             var values = MuxBuilder.NameValues(job, []);

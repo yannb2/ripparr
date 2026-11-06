@@ -83,6 +83,12 @@ the job previews) and work on folders and decrypted ISOs.
 
 SDH and commentary flags you set by hand stay as you set them: a later read only changes the ones it set itself.
 
+**Dry run** prints the commands the job would run and each track of the finished file with the name the profile's
+templates give it (`Audio eng TrueHD default → "English - TrueHD Atmos 7.1"`). The names use what the quick read of
+the streams found; without it (a DVD, an encrypted disc) they come from the playlist and are marked `~`, since
+channels, Atmos and DTS:X are only read during the job. The Dolby Vision layer (FEL or MEL) is read by dovi_tool
+during the job too.
+
 Everything typed and ticked on the disc page (title, year, IDs, each playlist's tracks, profile and tags, the
 extras card) is kept while the app runs: a subtitle preview, the job page after a dry run or another menu does
 not reset the form. **Start over** puts the page back as on a first visit; **Read again** reads the disc anew

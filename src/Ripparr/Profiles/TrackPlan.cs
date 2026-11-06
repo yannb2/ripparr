@@ -52,6 +52,12 @@ public sealed class PlannedTrack
     /// <summary>Text typed on the form: the {description} of the profile's name template ("=..." is the whole name).</summary>
     public string? Name { get; set; }
 
+    /// <summary>
+    /// What the Disc page's quick read (mediainfo) found for this stream, for the dry run's track names. The job itself
+    /// reads the demuxed streams again.
+    /// </summary>
+    public StreamFacts? Probed { get; set; }
+
     /// <summary>The Dolby Vision enhancement layer: never its own track, merged into the video.</summary>
     public bool DolbyVisionLayer { get; set; }
 
