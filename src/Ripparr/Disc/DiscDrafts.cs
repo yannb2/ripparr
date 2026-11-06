@@ -65,6 +65,7 @@ public sealed class ExtrasPickerState
         public string Type { get; set; } = "featurettes";
         public string Name { get; set; } = "";
         public bool Pictures { get; set; }
+        public bool Watch { get; set; }
         public bool Tracks { get; set; }
 
         /// <summary>The tracks, once opened: kept as edited until Reset.</summary>

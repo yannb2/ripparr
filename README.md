@@ -194,6 +194,12 @@ one job each, with the title, year, IDs and tags of the film's form. **Pictures*
 playlist (at a tenth, half and nine tenths) to tell them apart; they are cached in `/config/thumbnails`. For an
 ISO they are streamed out with 7-Zip, so only from clips up to 8 GB.
 
+**Watch** plays the extra in the browser to check it before ripping: it opens on **Whole**, the whole playlist
+turned into a 720p H.264 video by ffmpeg as it plays (nothing is kept on disk). A live stream cannot seek, so
+it can start at 25, 50 or 75 % instead; Start, Middle and End still give the 30-second clips. At most two
+streams run at once (a third stops the oldest), and an ISO needs the mount service. Blu-ray only. The Whole
+button is on every Watch panel (Playlists list and TV episodes too).
+
 A playlist that is just other playlists one after the other is flagged **Play all** and hidden with the
 duplicates (the switch shows them): ripping it would repeat the others.
 

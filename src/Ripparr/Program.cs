@@ -44,6 +44,7 @@ builder.Services.AddSingleton<DiscDrafts>();
 builder.Services.AddSingleton<StreamProbe>();
 builder.Services.AddSingleton<SubtitleScanner>();
 builder.Services.AddSingleton<Thumbnails>();
+builder.Services.AddSingleton<LivePlay>();
 builder.Services.AddSingleton<PlaylistFinder>();
 builder.Services.AddSingleton<JobPipeline>();
 builder.Services.AddSingleton<RadarrClient>();
@@ -160,6 +161,26 @@ app.MapGet("/api/discs/watch/{percent:int}.mp4",
 
         var (file, error) = await thumbnails.PreviewAsync(source, analysis, found, percent);
         return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "video/mp4", enableRangeProcessing: true);
+    });
+// A whole playlist, played live as it is read, to check an extra before ripping it: only discs inside the sources.
+app.MapGet("/api/discs/play.mp4",
+    async (string path, string playlist, int? from, HttpContext context, DiscAnalyzer analyzer, LivePlay player) =>
+    {
+        var source = analyzer.InSources(path) ? analyzer.Describe(path) : null;
+        if (source == null || from is { } f && !LivePlay.StartPercents.Contains(f))
+        {
+            return Results.NotFound();
+        }
+
+        var analysis = await analyzer.AnalyseAsync(source, CancellationToken.None);
+        var found = analysis.Find(playlist);
+        if (found == null || analysis.IsDvd)
+        {
+            return Results.NotFound();
+        }
+
+        var error = await player.StreamAsync(source, found, from ?? 0, context.Response, context.RequestAborted);
+        return error == null || context.Response.HasStarted ? Results.Empty : Results.Problem(error, statusCode: 404);
     });
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
