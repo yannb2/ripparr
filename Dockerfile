@@ -159,9 +159,12 @@ COPY --from=build /app ./
 RUN mkdir -p /config && chown $APP_UID /config
 VOLUME /config
 
+# UTF-8 locale: without it mkvmerge cuts a file name at the first non-ASCII letter ("Me²").
 # The pins show on the Tools page next to what each tool reports and the newest upstream version.
 ENV ASPNETCORE_HTTP_PORTS=8186 \
     TZ=Etc/UTC \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     RIPPARR_PIN_MAKEMKV=${MAKEMKV_VERSION} \
     RIPPARR_PIN_DGDEMUX=${DGDEMUX_VERSION} \
     RIPPARR_PIN_MKVTOOLNIX=${MKVTOOLNIX_VERSION} \
