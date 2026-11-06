@@ -16,7 +16,7 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 // Tools get UTF-8 file names and titles ("Me²"), whatever the container's locale.
-Utf8Locale.Ensure();
+Arrkit.Processes.Utf8Locale.Ensure();
 
 var builder = WebApplication.CreateBuilder(args);
 
