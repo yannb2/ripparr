@@ -851,11 +851,16 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
                 : "Then: a language whose subtitle tracks all turn out to be SDH gets an SRT without the SDH text (tracks not marked are checked on a sample).");
         }
 
-        context.Log("Then: mediainfo on each stream, dovi_tool mux for the Dolby Vision layer, mkvmerge with these tracks:");
-        foreach (var track in context.Job.Plan.Kept)
+        context.Log("Then: mediainfo on each stream, dovi_tool mux for the Dolby Vision layer, mkvmerge with these tracks and names:");
+        var names = DryRunNames.For(context.Job, playlist);
+        foreach (var track in names)
         {
-            context.Log($"  {track.Kind} {track.Language} {track.Codec}{(track.Default ? " default" : "")}{(track.Forced ? " forced" : "")}" +
-                        $"{(track.Commentary ? " commentary" : "")}{(track.HearingImpaired ? " SDH" : "")}{(track.VisualImpaired ? " AD" : "")}{(string.IsNullOrWhiteSpace(track.Name) ? "" : $" \"{track.Name}\"")}");
+            context.Log(DryRunNames.Line(track));
+        }
+
+        foreach (var note in DryRunNames.Notes(context.Job, names))
+        {
+            context.Log(note);
         }
 
         if (context.Job.Plan.MergeDolbyVisionLayer)

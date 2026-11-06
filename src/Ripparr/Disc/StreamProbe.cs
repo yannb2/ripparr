@@ -313,15 +313,20 @@ public sealed class StreamProbe(IOptions<RipparrOptions> options, ILogger<Stream
         return $"DV{(profile == null ? "" : " " + profile)} {range}".Trim();
     }
 
-    /// <summary>The read streams' details on the job's tracks, so the job keeps them too.</summary>
+    /// <summary>The read streams' details and facts on the job's tracks, so the job keeps them too (the dry run names tracks from the facts).</summary>
     public static void Apply(Profiles.TrackPlan plan, PlaylistInfo playlist, ProbeResult result)
     {
         var dolbyVision = playlist.Mpls.HasDolbyVisionEnhancementLayer;
         foreach (var track in plan.Tracks)
         {
             var stream = playlist.Mpls.Streams.ElementAtOrDefault(track.StreamIndex);
-            if (stream != null && result.Streams.TryGetValue(stream.Pid, out var probed)
-                && Describe(stream, probed.Facts, dolbyVision) is { Length: > 0 } details)
+            if (stream == null || !result.Streams.TryGetValue(stream.Pid, out var probed))
+            {
+                continue;
+            }
+
+            track.Probed = probed.Facts ?? track.Probed;
+            if (Describe(stream, probed.Facts, dolbyVision) is { Length: > 0 } details)
             {
                 track.Details = details;
             }
