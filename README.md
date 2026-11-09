@@ -240,7 +240,12 @@ series up in **Sonarr**: the title, year, TVDB, TMDb and IMDb IDs, the original 
 Anime series type, absolute numbers. Set the season and the first episode on the disc: the ticked playlists are
 numbered from it in disc order (any number can be typed over), and get their titles from Sonarr (or typed ones).
 Disc order is the order of the disc's "play all" playlist when it has one, else the order of the episodes' clips
-(playlist numbers are often out of order); a line above the list says which was used. When the disc's own title
+(playlist numbers are often out of order); a line above the list says which was used. Once Sonarr's episodes
+are in, **Match running times** (run by itself when no number was typed) gives each playlist the next episode
+from the first one whose runtime in Sonarr (TVDB's, in minutes) fits it best, or a special (season 0, aired from
+three months before the season to a year after it) when it fits that 3 minutes better; it keeps the disc order
+when runtimes can't tell the episodes apart (TVDB often gives a whole season the same runtime) or win by less
+than 2 minutes in all. **Disc order** undoes it. When the disc's own title
 names a season ("Doctor Who - Season 1 - Disc 1"), the series and season are filled in from it. The series is
 looked up in Sonarr as soon as the disc opens: when only one series of that name is in Sonarr it is picked
 straight away (the other matches stay listed to change it), and each episode's title box shows Sonarr's title

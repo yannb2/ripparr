@@ -16,7 +16,14 @@ public sealed record SeriesMatch(string Title, int Year, int TvdbId, int? TmdbId
 }
 
 /// <summary>One episode of a series in Sonarr.</summary>
-public sealed record EpisodeInfo(int Season, int Episode, int? Absolute, string Title);
+public sealed record EpisodeInfo(int Season, int Episode, int? Absolute, string Title)
+{
+    /// <summary>Its running time in minutes, as TVDB gives it (Sonarr v4); null when unknown.</summary>
+    public int? Runtime { get; init; }
+
+    /// <summary>When it first aired: picks the specials that belong with a season.</summary>
+    public DateOnly? AirDate { get; init; }
+}
 
 /// <summary>Looks up a series in Sonarr: its title, year, IDs, language, type (anime numbers) and episode titles.</summary>
 public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> logger)
@@ -145,7 +152,11 @@ public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> lo
         using var document = JsonDocument.Parse(json);
         return document.RootElement.EnumerateArray()
             .Select(e => new EpisodeInfo(Int(e, "seasonNumber") ?? 0, Int(e, "episodeNumber") ?? 0,
-                Int(e, "absoluteEpisodeNumber") is > 0 and var a ? a : null, Text(e, "title") ?? ""))
+                Int(e, "absoluteEpisodeNumber") is > 0 and var a ? a : null, Text(e, "title") ?? "")
+            {
+                Runtime = Int(e, "runtime") is > 0 and var runtime ? runtime : null,
+                AirDate = DateOnly.TryParse(Text(e, "airDate"), System.Globalization.CultureInfo.InvariantCulture, out var aired) ? aired : null
+            })
             .Where(e => e.Episode > 0)
             .OrderBy(e => e.Season).ThenBy(e => e.Episode)
             .ToList();

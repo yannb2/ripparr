@@ -150,8 +150,36 @@
         </div>
         @if (SelectedPlaylists.Count >= 2)
         {
-            <div class="small text-body-secondary mb-2">
-                <i class="bi bi-sort-numeric-down"></i> Numbered @OrderNote. @(Analysis.IsDvd ? "Check the order on the DVD's menu or in MakeMKV" : "Check with Watch (the start shows the title)") and change a number if it is wrong.
+            <div class="small text-body-secondary mb-2 d-flex flex-wrap align-items-center gap-2">
+                <span>
+                    <i class="bi bi-sort-numeric-down"></i>
+                    @if (Matched)
+                    {
+                        @State.MatchNote
+                    }
+                    else
+                    {
+                        <text>Numbered @OrderNote.</text>
+                        @if (State.MatchNote != null)
+                        {
+                            <text> @State.MatchNote</text>
+                        }
+                    }
+                    @(Analysis.IsDvd ? "Check the order on the DVD's menu or in MakeMKV" : "Check with Watch (the start shows the title)") and change a number if it is wrong.
+                </span>
+                @if (_episodes.Count > 0)
+                {
+                    <button class="btn btn-sm btn-link p-0" @onclick="MatchRunningTimes"
+                            title="Give each playlist the next episode (or a special of this season) whose running time in Sonarr fits it best">
+                        <i class="bi bi-stopwatch"></i> Match running times
+                    </button>
+                }
+                @if (Matched)
+                {
+                    <button class="btn btn-sm btn-link p-0" @onclick="DiscOrder" title="Number the episodes in disc order again">
+                        <i class="bi bi-arrow-counterclockwise"></i> Disc order
+                    </button>
+                }
             </div>
         }
         @if (_resumeNote != null)
@@ -194,7 +222,7 @@
                 {
                     var row = Row(playlist);
                     var number = Number(playlist);
-                    var known = number is { } n ? Known(n) : null;
+                    var known = number is { } n ? Known(SeasonOf(playlist), n) : null;
                     <tr class="@(row.Selected ? "table-active" : "")">
                         <td><input type="checkbox" class="form-check-input" checked="@row.Selected" @onchange="e => row.Selected = e.Value is true"/></td>
                         <td class="fw-semibold text-nowrap">
@@ -211,9 +239,13 @@
                             @if (row.Selected)
                             {
                                 <div class="input-group input-group-sm">
-                                    <span class="input-group-text">@($"S{_season:00}E")</span>
+                                    <span class="input-group-text" title="@(row.Season == 0 ? "A special (season 0 in Sonarr)" : null)">@($"S{SeasonOf(playlist):00}E")</span>
                                     <input class="form-control" type="number" min="0" value="@row.Number" placeholder="@number"
                                            @onchange="e => row.Number = int.TryParse(e.Value?.ToString(), out var v) ? v : null"/>
+                                    @if (row.Season is { } other)
+                                    {
+                                        <button class="btn btn-outline-secondary" title="@($"Back to season {_season}")" @onclick="() => row.Season = null"><i class="bi bi-x"></i></button>
+                                    }
                                 </div>
                             }
                         </td>
@@ -603,7 +635,59 @@
         return _first + SelectedPlaylists.IndexOf(playlist);
     }
 
-    private EpisodeInfo? Known(int number) => _episodes.FirstOrDefault(e => e.Season == _season && e.Episode == number);
+    private EpisodeInfo? Known(int season, int number) => _episodes.FirstOrDefault(e => e.Season == season && e.Episode == number);
+
+    private int SeasonOf(PlaylistInfo playlist) => Row(playlist).Season ?? _season;
+
+    // Matching set the numbers (and the note says how).
+    private bool Matched => State.MatchNote != null && SelectedPlaylists.Any(p => Row(p).Number != null);
+
+    /// <summary>
+    /// Numbers the ticked playlists by their running time against Sonarr's runtimes (the next
+    /// episodes from the first one, or a special of this season); keeps the disc order when the
+    /// running times can't tell them apart.
+    /// </summary>
+    private void MatchRunningTimes()
+    {
+        var (matches, note) = EpisodeMatcher.Find(SelectedPlaylists, _episodes, _season, _first);
+        if (matches != null)
+        {
+            foreach (var match in matches)
+            {
+                var row = Row(match.Playlist);
+                row.Number = match.Episode.Episode;
+                row.Season = match.Episode.Season == _season ? null : match.Episode.Season;
+                row.Title = ""; // Sonarr's title for the new number
+            }
+        }
+        else
+        {
+            DiscOrder();
+        }
+
+        State.MatchNote = note.Length > 0 ? note : null;
+    }
+
+    /// <summary>The ticked playlists numbered in disc order from the first episode again.</summary>
+    private void DiscOrder()
+    {
+        foreach (var playlist in SelectedPlaylists)
+        {
+            Row(playlist).Number = null;
+            Row(playlist).Season = null;
+        }
+
+        State.MatchNote = null;
+    }
+
+    // Once Sonarr's episodes are in: match, unless a number was typed (never overwritten).
+    private void MatchIfUntouched()
+    {
+        if (_episodes.Count > 0 && SelectedPlaylists.All(p => Row(p).Number == null && Row(p).Season == null))
+        {
+            MatchRunningTimes();
+        }
+    }
 
     private string PictureUrl(PlaylistInfo playlist, int index) =>
         $"api/discs/pictures/{index}.jpg?path={Uri.EscapeDataString(Source.Path)}&playlist={Uri.EscapeDataString(playlist.Name)}";
@@ -678,6 +762,7 @@
         }
 
         _episodesNote = _episodes.Count == 0 ? "Added to Sonarr; it has no episodes yet. Search again in a minute." : $"Added to Sonarr in {root}.";
+        MatchIfUntouched();
         StateHasChanged();
         return null;
     }
@@ -701,6 +786,7 @@
             string? error;
             (_episodes, error) = await Sonarr.EpisodesAsync(id, CancellationToken.None);
             _episodesNote = error ?? (_episodes.Count == 0 ? "Sonarr has no episodes for this series yet." : null);
+            MatchIfUntouched();
         }
         else
         {
@@ -794,7 +880,8 @@
         foreach (var playlist in SelectedPlaylists)
         {
             var number = Number(playlist)!.Value;
-            var known = Known(number);
+            var season = SeasonOf(playlist);
+            var known = Known(season, number);
             var row = Row(playlist);
             jobs.Add(new Job
             {
@@ -812,7 +899,7 @@
                 SourceReleaseGroup = series.SourceReleaseGroup,
                 DiscTitle = series.DiscTitle,
                 Country = series.Country,
-                Season = _season,
+                Season = season,
                 Episode = number,
                 AbsoluteEpisode = _anime ? known?.Absolute : null,
                 EpisodeTitle = row.Title.Trim() is { Length: > 0 } typed ? typed : known?.Title is { Length: > 0 } title ? title : null,
@@ -858,7 +945,7 @@
         }
 
         var jobs = Episodes(series, dryRun);
-        if (jobs.Select(j => j.Episode).Distinct().Count() != jobs.Count)
+        if (jobs.Select(j => (j.Season, j.Episode)).Distinct().Count() != jobs.Count)
         {
             _error = "Two playlists have the same episode number.";
             return;
@@ -877,7 +964,11 @@
 
         if (!dryRun)
         {
-            Store.SetSetting(ResumeKey, $"{_season}:{jobs.Max(j => j.Episode)!.Value + 1}");
+            // The next disc starts after this one's last episode of the season (specials aside).
+            if (jobs.Where(j => j.Season == _season).Max(j => j.Episode) is { } last)
+            {
+                Store.SetSetting(ResumeKey, $"{_season}:{last + 1}");
+            }
         }
 
         Navigation.NavigateTo(jobs.Count == 1 ? $"job/{jobs[0].Id}" : "queue");
