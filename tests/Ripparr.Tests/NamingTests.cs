@@ -22,6 +22,18 @@ public class NamingTests
     }
 
     [TestMethod]
+    public void WritesTheYearOnceWhenTheTitleHasIt()
+    {
+        // Sonarr's title for the 2005 series is "Doctor Who (2005)".
+        var values = new Dictionary<string, string?> { ["title"] = "Doctor Who (2005)", ["year"] = "2005", ["episode"] = "S01E11", ["episodetitle"] = null };
+        Assert.AreEqual("Doctor Who (2005)", Naming.Apply("{title} ({year})", values));
+        Assert.AreEqual("Doctor Who (2005) S01E11", Naming.Apply(Profile.EpisodeTitleTemplate, values), "the year Sonarr needs stays");
+        Assert.AreEqual("Doctor Who (2005)", Naming.TitleAndYear("Doctor Who (2005)", 2005));
+        Assert.AreEqual("Doctor Who (1963)", Naming.TitleAndYear("Doctor Who", 1963));
+        Assert.AreEqual("Doctor Who (2005) (2023)", Naming.TitleAndYear("Doctor Who (2005)", 2023), "another year is kept");
+    }
+
+    [TestMethod]
     public void DropsTheEditionGroupAndEmptyBrackets()
     {
         Assert.AreEqual("Blade Runner (1982) [2160p][HEVC][TrueHD Atmos-7.1][BDRemux]",

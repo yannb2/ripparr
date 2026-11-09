@@ -167,7 +167,7 @@
                     @if (SelectedCount > 0)
                     {
                         <span class="small text-body-secondary">
-                            To @(Film?.Title is { Length: > 0 } t ? $"{t} ({Film.Year})" : "Title (Year)")/@(SeasonFor is { } s ? EpisodeNumbers.SeasonFolder(s) + "/" : "")@string.Join(", ", SelectedTypes)/
+                            To @(Film?.Title is { Length: > 0 } t ? Naming.TitleAndYear(t, Film.Year) : "Title (Year)")/@(SeasonFor is { } s ? EpisodeNumbers.SeasonFolder(s) + "/" : "")@string.Join(", ", SelectedTypes)/
                         </span>
                     }
                 </div>

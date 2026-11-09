@@ -25,8 +25,20 @@ public static partial class Naming
 
         text = EmptyBracketsRegex().Replace(text, "");
         text = SpacesRegex().Replace(text, " ");
+        text = OneYear(text);
         return text.Trim().Trim('-').Trim();
     }
+
+    /// <summary>
+    /// "Doctor Who (2005) (2005)" becomes "Doctor Who (2005)": Sonarr and Radarr put the year in
+    /// the title itself when another show or film has the same name, and "{title} ({year})" then
+    /// adds it a second time.
+    /// </summary>
+    public static string OneYear(string text) => RepeatedYearRegex().Replace(text, "(${year})");
+
+    /// <summary>"Title (Year)", without the year twice when the title already ends with it.</summary>
+    public static string TitleAndYear(string title, int? year) =>
+        year is { } y ? OneYear($"{title.Trim()} ({y})") : title.Trim();
 
     /// <summary>Removes what Windows, Samba and Jellyfin do not like in a file name.</summary>
     public static string SafeFileName(string name) => Arrkit.Library.FileNames.Safe(name);
@@ -36,6 +48,9 @@ public static partial class Naming
 
     [GeneratedRegex(@"\[\s*\]|\(\s*\)")]
     private static partial Regex EmptyBracketsRegex();
+
+    [GeneratedRegex(@"\((?<year>\d{4})\)\s*\(\k<year>\)")]
+    private static partial Regex RepeatedYearRegex();
 
     [GeneratedRegex(@"\s{2,}")]
     private static partial Regex SpacesRegex();
