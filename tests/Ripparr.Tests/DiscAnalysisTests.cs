@@ -182,6 +182,36 @@ public class DiscAnalysisTests
     }
 
     [TestMethod]
+    public void TakesTheChristmasSpecialAndEveryEpisode()
+    {
+        // Doctor Who S2 disc 1: the 61-minute Christmas special and four 46-minute episodes, all about
+        // 8-11 GB, plus two short SD extras. A group around the special left out the shortest episode.
+        var sizes = new Dictionary<string, long>();
+        var playlists = new List<PlaylistInfo>();
+        foreach (var (name, clip, seconds, bytes) in new[]
+                 {
+                     ("00160", "00060", 3690, 10_800_000_000L), ("00168", "00068", 2802, 8_210_000_000L), ("00025", "00025", 2792, 8_210_000_000L),
+                     ("00071", "00071", 2771, 8_130_000_000L), ("00161", "00061", 2763, 8_090_000_000L), ("00119", "00119", 440, 334_000_000L),
+                     ("00115", "00115", 278, 204_000_000L)
+                 })
+        {
+            sizes[clip] = bytes;
+            playlists.Add(Playlist(name, MplsBuilder.Feature((clip, (double)seconds))));
+        }
+
+        var disc = new DiscAnalysis
+        {
+            Source = new DiscSource("/x.iso", SourceKind.Iso, "/", 0, DateTime.UtcNow),
+            Playlists = playlists,
+            ClipSizes = sizes
+        };
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        CollectionAssert.AreEquivalent(new[] { "00025", "00071", "00160", "00161", "00168" }, EpisodeFinder.Find(disc).Select(p => p.Name).ToArray());
+        Assert.IsTrue(EpisodeFinder.LooksLikeTv(disc));
+    }
+
+    [TestMethod]
     public void AnEpisodeWithALongerClipAddedIsNotARepeat()
     {
         var disc = Disc(

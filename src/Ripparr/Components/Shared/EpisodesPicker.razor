@@ -93,7 +93,7 @@
             </div>
             <div class="col-md-1">
                 <label class="form-label small mb-1">Year</label>
-                <input class="form-control form-control-sm" type="number" @bind="_year" @bind:event="oninput"/>
+                <input class="form-control form-control-sm" type="number" @bind="_year"/>
             </div>
             <div class="col-md-2">
                 <label class="form-label small mb-1">TVDB ID</label>
@@ -134,12 +134,30 @@
         <div class="d-flex flex-wrap align-items-end gap-3 mb-2">
             <div>
                 <label class="form-label small mb-1">Season</label>
-                <input class="form-control form-control-sm" type="number" min="0" style="width: 6rem" @bind="_season" @bind:event="oninput"/>
+                <input class="form-control form-control-sm" type="number" min="0" style="width: 6rem" list="episodes-seasons"
+                       @bind="_season" @bind:after="NumbersChanged"/>
             </div>
             <div>
                 <label class="form-label small mb-1">First episode on this disc</label>
-                <input class="form-control form-control-sm" type="number" min="1" style="width: 8rem" @bind="_first" @bind:event="oninput"/>
+                <input class="form-control form-control-sm" type="number" min="0" style="width: 8rem" list="@EpisodeList(_season)"
+                       @bind="_first" @bind:after="NumbersChanged"/>
             </div>
+            @* Sonarr's seasons and episodes to pick from; typing works too. *@
+            <datalist id="episodes-seasons">
+                @foreach (var season in _episodes.Select(e => e.Season).Distinct().Order())
+                {
+                    <option value="@season">@(season == 0 ? "Specials" : $"Season {season}")</option>
+                }
+            </datalist>
+            @foreach (var season in _episodes.Select(e => e.Season).Distinct())
+            {
+                <datalist id="@EpisodeList(season)">
+                    @foreach (var episode in _episodes.Where(e => e.Season == season).OrderBy(e => e.Episode))
+                    {
+                        <option value="@episode.Episode">@episode.Title@(episode.Runtime is { } runtime ? $" ({runtime} min)" : "")</option>
+                    }
+                </datalist>
+            }
             <div class="form-check form-switch mb-1">
                 <input class="form-check-input" type="checkbox" id="anime" @bind="_anime"/>
                 <label class="form-check-label small" for="anime" title="Sonarr's Anime series type: the absolute number goes in the name, S01E05 (005)">Absolute numbers (anime)</label>
@@ -296,7 +314,7 @@
                             {
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text" title="@(row.Season == 0 ? "A special (season 0 in Sonarr)" : null)">@($"S{SeasonOf(playlist):00}E")</span>
-                                    <input class="form-control" type="number" min="0" value="@row.Number" placeholder="@number"
+                                    <input class="form-control" type="number" min="0" value="@row.Number" placeholder="@number" list="@EpisodeList(SeasonOf(playlist))"
                                            @onchange="e => { row.Number = int.TryParse(e.Value?.ToString(), out var v) ? v : null; row.Matched = false; }"/>
                                     @if (row.Season is { } other)
                                     {
@@ -753,6 +771,20 @@
         }
     }
 
+    private static string EpisodeList(int season) => $"episodes-s{season}";
+
+    // A new season or first episode: numbers nobody typed follow it, matched again when Sonarr's episodes are in.
+    private void NumbersChanged()
+    {
+        _first = Math.Max(_first, 0);
+        _season = Math.Max(_season, 0);
+        if (Untouched)
+        {
+            DiscOrder();
+            MatchIfUntouched();
+        }
+    }
+
     // What a disagreement was found for: the ticked playlists, season and first episode.
     private string MatchKey => $"{_season}:{_first}:" + string.Join(",", SelectedPlaylists.Select(p => p.Name));
 
@@ -929,17 +961,35 @@
 
     private string ResumeKey => $"tv.next.{(_tvdb is { } tvdb ? tvdb.ToString() : _title.Trim().ToLowerInvariant())}";
 
-    /// <summary>Starts where the last disc of this series stopped.</summary>
+    /// <summary>
+    /// Starts where the last disc of this series stopped, unless the disc's own title names another
+    /// season ("Doctor Who - Season 2 - Disc 1"): then that season, from episode 1 on its first disc.
+    /// </summary>
     private void Resume()
     {
         _resumeNote = null;
+        var titled = ReleaseName.Season(Analysis.DiscTitle)?.Season;
         var saved = Store.Setting(ResumeKey);
-        if (saved?.Split(':') is [var s, var e] && int.TryParse(s, out var season) && int.TryParse(e, out var episode))
+        if (saved?.Split(':') is not [var s, var e] || !int.TryParse(s, out var season) || !int.TryParse(e, out var episode) || season == 0)
         {
-            _season = season;
-            _first = episode;
-            _resumeNote = $"The last disc of this series stopped before {EpisodeNumbers.Code(season, episode)}: this one starts there.";
+            return;
         }
+
+        if (titled is { } named && named != season)
+        {
+            _season = named;
+            if (ReleaseName.DiscNumber(Analysis.DiscTitle) == 1)
+            {
+                _first = 1;
+            }
+
+            _resumeNote = $"Season {named} from the disc's title (the last disc of this series stopped before {EpisodeNumbers.Code(season, episode)}).";
+            return;
+        }
+
+        _season = season;
+        _first = episode;
+        _resumeNote = $"The last disc of this series stopped before {EpisodeNumbers.Code(season, episode)}: this one starts there.";
     }
 
     /// <summary>The episode's tracks as the form stands: the edited plan, or a fresh one from the profile.</summary>
@@ -1097,8 +1147,8 @@
 
         if (!dryRun)
         {
-            // The next disc starts after this one's last episode of the season (specials aside).
-            if (jobs.Where(j => j.Season == _season).Max(j => j.Episode) is { } last)
+            // The next disc starts after this one's last episode of the season (specials aside: season 0 is never resumed).
+            if (_season > 0 && jobs.Where(j => j.Season == _season).Max(j => j.Episode) is { } last)
             {
                 Store.SetSetting(ResumeKey, $"{_season}:{last + 1}");
             }
