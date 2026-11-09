@@ -233,6 +233,10 @@
                         {
                             <span class="badge text-bg-info" title="@($"No playlist on the disc plays {playlist.FromClip}.m2ts (the disc's menu builds it at play time). Ripparr made one from {playlist.FromClip}.clpi: all its streams, no chapters.")">No playlist</span>
                         }
+                        @if (playlist.Reel > 0)
+                        {
+                            <span class="badge text-bg-info" title="@playlist.ReelNote">Reel of @playlist.Reel</span>
+                        }
                         @if (playlist.LengthLooksFaked)
                         {
                             <span class="badge text-bg-warning" title="@($"{Format.Size(playlist.Size)} in a playlist that claims {playlist.Duration:h\\:mm\\:ss}: more than any Blu-ray can play. Its times are faked.")">Faked length</span>

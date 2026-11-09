@@ -83,6 +83,9 @@ public sealed class Mpls
 
     public IReadOnlyList<SubPath> SubPaths { get; init; } = [];
 
+    /// <summary>The .mpls file as read: <see cref="MplsCut"/> cuts a piece of a reel out of it.</summary>
+    public byte[]? Raw { get; init; }
+
     /// <summary>The same playlist with the Dolby Vision layer under the PID its clip really uses.</summary>
     public Mpls WithLayerPid(int pid) => new()
     {
@@ -90,7 +93,8 @@ public sealed class Mpls
         Items = Items,
         Streams = Streams.Select(s => s.DolbyVisionEnhancementLayer ? s with { Pid = pid } : s).ToList(),
         Chapters = Chapters,
-        SubPaths = SubPaths
+        SubPaths = SubPaths,
+        Raw = Raw
     };
 
     /// <summary>
@@ -201,6 +205,7 @@ public sealed class Mpls
             Items = items,
             Streams = streams ?? [],
             SubPaths = subPaths,
+            Raw = data.ToArray(),
             Chapters = chapters
                 .DistinctBy(c => Math.Round(c.Start.TotalMilliseconds))
                 .OrderBy(c => c.Start)

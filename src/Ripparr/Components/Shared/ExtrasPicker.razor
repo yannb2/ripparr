@@ -49,9 +49,11 @@
                         {
                             var row = Row(playlist);
                             var streams = playlist.Mpls.Streams;
+                            var split = playlist.Reel > 0 && State.Split.Contains(playlist.Name);
                             <tr class="@(row.Selected ? "table-active" : "")">
-                                <td><input type="checkbox" class="form-check-input" checked="@row.Selected" @onchange="e => row.Selected = e.Value is true"/></td>
-                                <td class="fw-semibold text-nowrap">@playlist.Label</td>
+                                <td><input type="checkbox" class="form-check-input" checked="@row.Selected" disabled="@split" title="@(split ? "Split: tick its pieces below" : null)"
+                                           @onchange="e => row.Selected = e.Value is true"/></td>
+                                <td class="fw-semibold text-nowrap @(playlist.Piece > 0 ? "ps-4" : "")">@playlist.Label</td>
                                 <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
                                 <td class="text-end text-nowrap">@Format.Size(playlist.Size)</td>
                                 <td class="text-nowrap">@string.Join(" ", streams.Where(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer).Take(1).Select(s => $"{StreamCoding.Resolution(s.Format)} {s.CodecName}"))</td>
@@ -68,6 +70,14 @@
                                     @if (playlist.PossibleCut)
                                     {
                                         <span class="badge text-bg-info ms-1">Other cut?</span>
+                                    }
+                                    @if (playlist.Reel > 0)
+                                    {
+                                        <span class="badge text-bg-info ms-1" title="@playlist.ReelNote">Reel of @playlist.Reel</span>
+                                        <button class="btn btn-sm btn-link p-0 ms-1 text-nowrap" @onclick="() => ToggleSplit(playlist)"
+                                                title="@(split ? "Back to one extra for the whole reel" : "One extra per piece, cut at the disc's own marks between them")">
+                                            <i class="bi @(split ? "bi-arrows-collapse" : "bi-scissors")"></i> @(split ? "Join" : "Split")
+                                        </button>
                                     }
                                 </td>
                                 <td>
@@ -244,7 +254,7 @@
         }
     }
 
-    /// <summary>Playlists that can be extras: not the film (or the episodes), not a menu or logo (under 10 s), not a fake that loops tiny clips.</summary>
+    /// <summary>Playlists that can be extras: not the film (or the episodes), not a menu or logo (under 10 s), not a fake that loops tiny clips. A reel's pieces show under it once split.</summary>
     private IEnumerable<PlaylistInfo> Candidates => Free.Where(p => p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData);
 
     // A DVD title cut into episodes is taken by them (and its parts are never extras).
@@ -254,14 +264,55 @@
         .Where(p => p.Duration >= TimeSpan.FromSeconds(10))
         .OrderBy(p => p.Name, StringComparer.Ordinal);
 
-    private IEnumerable<PlaylistInfo> Visible => State.ShowAll ? Free : Candidates;
+    private IEnumerable<PlaylistInfo> Visible => WithPieces(State.ShowAll ? Free : Candidates);
+
+    // A split reel is followed by its pieces.
+    private IEnumerable<PlaylistInfo> WithPieces(IEnumerable<PlaylistInfo> playlists)
+    {
+        foreach (var playlist in playlists)
+        {
+            yield return playlist;
+            if (playlist.Reel > 0 && State.Split.Contains(playlist.Name))
+            {
+                foreach (var piece in PiecesOf(playlist))
+                {
+                    yield return piece;
+                }
+            }
+        }
+    }
+
+    private IEnumerable<PlaylistInfo> PiecesOf(PlaylistInfo reel) =>
+        DiscAnalysis.Pieces(reel).Select(x => Analysis.Find(DiscAnalysis.PieceName(reel.Name, x.Number))).OfType<PlaylistInfo>();
+
+    /// <summary>Split: the reel's pieces are ticked in its place. Join: the reel is ticked again.</summary>
+    private void ToggleSplit(PlaylistInfo reel)
+    {
+        var split = !State.Split.Remove(reel.Name);
+        if (split)
+        {
+            State.Split.Add(reel.Name);
+        }
+
+        var wasTicked = Row(reel).Selected || PiecesOf(reel).Any(p => Row(p).Selected);
+        Row(reel).Selected = !split && wasTicked;
+        foreach (var piece in PiecesOf(reel))
+        {
+            Row(piece).Selected = split;
+        }
+    }
 
     private ExtrasPickerState.Row Row(PlaylistInfo playlist)
     {
         if (!State.Rows.TryGetValue(playlist.Name, out var row))
         {
             // Short ones are usually trailers.
-            row = new ExtrasPickerState.Row { Type = playlist.Duration < TimeSpan.FromMinutes(3.5) ? "trailers" : "featurettes" };
+            // A reel and its pieces are usually deleted scenes.
+            row = new ExtrasPickerState.Row
+            {
+                Type = playlist.Reel > 0 || playlist.Piece > 0 ? "deleted scenes"
+                    : playlist.Duration < TimeSpan.FromMinutes(3.5) ? "trailers" : "featurettes"
+            };
             State.Rows[playlist.Name] = row;
         }
 

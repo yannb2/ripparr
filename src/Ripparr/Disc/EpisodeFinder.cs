@@ -3,7 +3,7 @@ namespace Ripparr.Disc;
 /// <summary>
 /// Finds a TV disc's episodes: the group of playlists of about the same length (within a quarter),
 /// five minutes or more, that holds the most of the disc's data, leaving out duplicates, "play all"
-/// playlists and fakes that loop tiny clips (Doctor Who's 12 four-hour playlists of 100 MB), in disc
+/// playlists, reels of deleted scenes and fakes that loop tiny clips (Doctor Who's 12 four-hour playlists of 100 MB), in disc
 /// order. Data, not the number of playlists: a disc's featurettes often outnumber its episodes
 /// (Doctor Who S1 disc 3: three 45-minute 11 GB episodes, thirteen 12-minute 800 MB featurettes),
 /// but the episodes are where the disc spends its bytes.
@@ -17,7 +17,7 @@ public static class EpisodeFinder
 
     public static List<PlaylistInfo> Find(DiscAnalysis analysis)
     {
-        var pool = analysis.Playlists.Where(p => p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Duration >= Minimum).ToList();
+        var pool = analysis.Playlists.Where(p => p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Reel == 0 && p.Duration >= Minimum).ToList();
         List<PlaylistInfo> best = [];
         foreach (var playlist in pool)
         {
@@ -104,6 +104,6 @@ public static class EpisodeFinder
 
         var longest = episodes.Max(p => p.Duration);
         return longest < TimeSpan.FromMinutes(75) && !analysis.Playlists.Any(p =>
-            p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && !episodes.Contains(p) && p.Duration > longest * 1.5);
+            p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Reel == 0 && !episodes.Contains(p) && p.Duration > longest * 1.5);
     }
 }

@@ -644,7 +644,7 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
     }
 
     /// <summary>
-    /// A clip no playlist on the disc plays: writes the playlist Ripparr made for it into the work
+    /// A clip no playlist on the disc plays, or a piece of a reel: writes the playlist Ripparr made for it into the work
     /// folder, next to links to the disc's STREAM and CLIPINF folders (DGDemux finds the clips from
     /// the playlist's place), and reads the disc through there. The links only point at the disc:
     /// deleting the work folder removes them, never the disc's files.
@@ -679,8 +679,11 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
 
         var mpls = Path.Combine(bdmv, "PLAYLIST", playlist.FileName + ".mpls");
         File.WriteAllBytes(mpls, playlist.MadePlaylist!);
-        context.Log($"The disc has no playlist for clip {playlist.FromClip}: wrote one made from {playlist.FromClip}.clpi " +
-                    $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, no chapters) to {mpls}.");
+        context.Log(playlist.Piece > 0
+            ? $"Piece {playlist.Piece} of reel {playlist.PartOf}: wrote a playlist of just that play item " +
+              $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, {playlist.Mpls.Chapters.Count} chapter(s)) to {mpls}."
+            : $"The disc has no playlist for clip {playlist.FromClip}: wrote one made from {playlist.FromClip}.clpi " +
+              $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, no chapters) to {mpls}.");
         return folder;
     }
 
@@ -825,8 +828,10 @@ public sealed class JobPipeline(DiscAnalyzer analyzer)
         if (playlist.MadePlaylist != null)
         {
             mpls = Path.Combine(context.WorkFolder, "playlist", "BDMV", "PLAYLIST", playlist.FileName + ".mpls");
-            context.Log($"The disc has no playlist for clip {playlist.FromClip}: the job writes one made from {playlist.FromClip}.clpi " +
-                        $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, no chapters) to {mpls}, " +
+            context.Log((playlist.Piece > 0
+                            ? $"Piece {playlist.Piece} of reel {playlist.PartOf}: the job writes a playlist of just that play item to {mpls}, "
+                            : $"The disc has no playlist for clip {playlist.FromClip}: the job writes one made from {playlist.FromClip}.clpi " +
+                              $"({Format.Duration(playlist.Duration)}, {playlist.Mpls.Streams.Count} streams, no chapters) to {mpls}, ") +
                         "with links to the disc's STREAM and CLIPINF folders.");
         }
 
