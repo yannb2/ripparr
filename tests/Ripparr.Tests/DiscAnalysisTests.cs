@@ -149,6 +149,39 @@ public class DiscAnalysisTests
     }
 
     [TestMethod]
+    public void PicksTheEpisodesOverMoreNumerousFeaturettes()
+    {
+        // Doctor Who S1 disc 3: three 45-minute 1080p episodes of 11 GB, thirteen 10-14 minute
+        // 480i featurettes of about 800 MB. More featurettes than episodes, far less data.
+        var sizes = new Dictionary<string, long>();
+        var playlists = new List<PlaylistInfo>();
+        foreach (var (name, clip, seconds) in new[] { ("00152", "00052", 2851), ("00117", "00017", 2713), ("00118", "00018", 2680) })
+        {
+            sizes[clip] = 11_000_000_000;
+            playlists.Add(Playlist(name, MplsBuilder.Feature((clip, (double)seconds))));
+        }
+
+        var featurettes = new[] { 725, 676, 669, 659, 651, 782, 774, 849, 793, 756, 580, 660, 697 };
+        for (var i = 0; i < featurettes.Length; i++)
+        {
+            var clip = $"{200 + i:00000}";
+            sizes[clip] = 800_000_000;
+            playlists.Add(Playlist($"{170 + i:00000}", MplsBuilder.Feature((clip, (double)featurettes[i]))));
+        }
+
+        var disc = new DiscAnalysis
+        {
+            Source = new DiscSource("/x.iso", SourceKind.Iso, "/", 0, DateTime.UtcNow),
+            Playlists = playlists,
+            ClipSizes = sizes
+        };
+        disc.Classify(TimeSpan.FromMinutes(2));
+
+        CollectionAssert.AreEqual(new[] { "00117", "00118", "00152" }, EpisodeFinder.Find(disc).Select(p => p.Name).ToArray());
+        Assert.IsTrue(EpisodeFinder.LooksLikeTv(disc));
+    }
+
+    [TestMethod]
     public void AnEpisodeWithALongerClipAddedIsNotARepeat()
     {
         var disc = Disc(

@@ -1,9 +1,12 @@
 namespace Ripparr.Disc;
 
 /// <summary>
-/// Finds a TV disc's episodes: the biggest group of playlists of about the same length (within a
-/// quarter), five minutes or more, leaving out duplicates, "play all" playlists and fakes that loop
-/// tiny clips (Doctor Who's 12 four-hour playlists of 100 MB), in disc order.
+/// Finds a TV disc's episodes: the group of playlists of about the same length (within a quarter),
+/// five minutes or more, that holds the most of the disc's data, leaving out duplicates, "play all"
+/// playlists and fakes that loop tiny clips (Doctor Who's 12 four-hour playlists of 100 MB), in disc
+/// order. Data, not the number of playlists: a disc's featurettes often outnumber its episodes
+/// (Doctor Who S1 disc 3: three 45-minute 11 GB episodes, thirteen 12-minute 800 MB featurettes),
+/// but the episodes are where the disc spends its bytes.
 /// </summary>
 public static class EpisodeFinder
 {
@@ -20,13 +23,28 @@ public static class EpisodeFinder
         {
             var length = playlist.Duration.TotalSeconds;
             var group = pool.Where(o => Math.Abs(o.Duration.TotalSeconds - length) <= length * Spread).ToList();
-            if (group.Count > best.Count || group.Count == best.Count && group.Sum(p => p.Duration.TotalSeconds) > best.Sum(p => p.Duration.TotalSeconds))
+            // A lone playlist (the film on a film disc) is no group of episodes.
+            if (group.Count >= 2 && Better(group, best))
             {
                 best = group;
             }
         }
 
-        return best.Count >= 2 ? InDiscOrder(analysis, best).Episodes : [];
+        return best.Count > 0 ? InDiscOrder(analysis, best).Episodes : [];
+    }
+
+    // More bytes wins; with no sizes known (or equal ones), more playlists, then more running time.
+    private static bool Better(List<PlaylistInfo> group, List<PlaylistInfo> best)
+    {
+        var bytes = group.Sum(p => p.Size).CompareTo(best.Sum(p => p.Size));
+        if (bytes != 0)
+        {
+            return bytes > 0;
+        }
+
+        return group.Count != best.Count
+            ? group.Count > best.Count
+            : group.Sum(p => p.Duration.TotalSeconds) > best.Sum(p => p.Duration.TotalSeconds);
     }
 
     /// <summary>
