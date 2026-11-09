@@ -23,6 +23,9 @@ public sealed record EpisodeInfo(int Season, int Episode, int? Absolute, string 
 
     /// <summary>When it first aired: picks the specials that belong with a season.</summary>
     public DateOnly? AirDate { get; init; }
+
+    /// <summary>Sonarr's summary of the episode (TVDB's), shown to tell the playlists apart; null when it has none.</summary>
+    public string? Overview { get; init; }
 }
 
 /// <summary>Looks up a series in Sonarr: its title, year, IDs, language, type (anime numbers) and episode titles.</summary>
@@ -155,7 +158,8 @@ public sealed class SonarrClient(LiveSettings settings, ILogger<SonarrClient> lo
                 Int(e, "absoluteEpisodeNumber") is > 0 and var a ? a : null, Text(e, "title") ?? "")
             {
                 Runtime = Int(e, "runtime") is > 0 and var runtime ? runtime : null,
-                AirDate = DateOnly.TryParse(Text(e, "airDate"), System.Globalization.CultureInfo.InvariantCulture, out var aired) ? aired : null
+                AirDate = DateOnly.TryParse(Text(e, "airDate"), System.Globalization.CultureInfo.InvariantCulture, out var aired) ? aired : null,
+                Overview = Text(e, "overview") is { } overview && !string.IsNullOrWhiteSpace(overview) ? overview.Trim() : null
             })
             .Where(e => e.Episode > 0)
             .OrderBy(e => e.Season).ThenBy(e => e.Episode)

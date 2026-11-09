@@ -1023,3 +1023,17 @@ h2:focus {
 .sv-sort-active {
     color: var(--bs-emphasis-color);
 }
+
+/* An episode's summary under its title: three lines, the rest on hover (title) or a click. */
+.episode-overview {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: 48rem;
+    cursor: pointer;
+}
+
+.episode-overview:active, .episode-overview:focus {
+    -webkit-line-clamp: unset;
+}
