@@ -363,12 +363,15 @@ public class SmallPartsTests
         Assert.IsNull(series[1].LibraryPath);
 
         var episodes = Ripparr.Arr.SonarrClient.ParseEpisodes("""
-            [{"seasonNumber":1,"episodeNumber":2,"absoluteEpisodeNumber":2,"title":"Two"},
-             {"seasonNumber":1,"episodeNumber":1,"title":"One"}]
+            [{"seasonNumber":1,"episodeNumber":2,"absoluteEpisodeNumber":2,"title":"Two","runtime":45,"airDate":"2005-06-11"},
+             {"seasonNumber":1,"episodeNumber":1,"title":"One","runtime":0}]
             """);
         Assert.AreEqual("One", episodes[0].Title);
         Assert.IsNull(episodes[0].Absolute);
+        Assert.IsNull(episodes[0].Runtime, "0 is Sonarr's unknown");
         Assert.AreEqual(2, episodes[1].Absolute);
+        Assert.AreEqual(45, episodes[1].Runtime);
+        Assert.AreEqual(new DateOnly(2005, 6, 11), episodes[1].AirDate);
     }
 
     [TestMethod]

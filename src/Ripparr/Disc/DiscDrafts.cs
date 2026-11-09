@@ -117,6 +117,18 @@ public sealed class EpisodesPickerState
     public bool Anime { get; set; }
     public int Season { get; set; } = 1;
     public int First { get; set; } = 1;
+
+    /// <summary>What matching the running times did (or why the disc order stayed); null before it ran.</summary>
+    public string? MatchNote { get; set; }
+
+    /// <summary>The disc's order and Sonarr's running times disagree: both, and what to check.</summary>
+    public EpisodeMatcher.Disagreement? Disagreement { get; set; }
+
+    /// <summary>Picked on the warning: true = running times, false = the disc's order; null = the default for the order's source.</summary>
+    public bool? UseRunningTimes { get; set; }
+
+    public bool DisagreementHidden { get; set; }
+
     public ExtrasPickerState Extras { get; } = new();
 }
 
@@ -125,6 +137,13 @@ public sealed class EpisodeRow
 {
     public bool Selected { get; set; }
     public int? Number { get; set; }
+
+    /// <summary>Another season than the card's: 0 for a special (set by matching running times, or typed).</summary>
+    public int? Season { get; set; }
+
+    /// <summary>Number and season set by matching running times (not typed): a new disc order may redo them.</summary>
+    public bool Matched { get; set; }
+
     public string Title { get; set; } = "";
     public bool Pictures { get; set; }
     public bool Watch { get; set; }
