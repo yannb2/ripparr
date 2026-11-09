@@ -261,7 +261,7 @@ When the disc's own title
 names a season ("Doctor Who - Season 1 - Disc 1"), the series and season are filled in from it. That season also beats "where the last disc stopped" when the two differ (from episode 1 on its disc 1), and specials (season 0) are never remembered as where a disc stopped. The season and first episode boxes take typing as well as the arrows, and list Sonarr's seasons and episodes (with titles and runtimes) to pick from, like each episode's number box. The series is
 looked up in Sonarr as soon as the disc opens: when only one series of that name is in Sonarr it is picked
 straight away (the other matches stay listed to change it), and each episode's title box shows Sonarr's title
-for its number ("from Sonarr"; typing another one replaces it).
+for its number ("from Sonarr"; typing another one replaces it). Under it are Sonarr's runtime, air date and summary of that episode (three lines, click for all), so Watch and Tracks can be checked against the story; they follow the number when it changes.
 **Pictures** show three frames of each playlist to check the order, and **Watch** plays 30 seconds from its
 start, middle or end (made with ffmpeg the first time, 640 px wide; a Watch button is on every row of the
 Playlists list too). Ripparr remembers where the last disc of a series stopped, so the next disc starts at the

@@ -330,9 +330,37 @@
                                 <input class="form-control form-control-sm" placeholder="episode title"
                                        value="@(row.Title.Length > 0 ? row.Title : known?.Title)"
                                        @onchange="e => SetTitle(row, e, known)"/>
-                                @if (row.Title.Length == 0 && known?.Title is { Length: > 0 })
+                                @if (known != null)
                                 {
-                                    <div class="text-body-secondary">from Sonarr</div>
+                                    var facts = new List<string>();
+                                    if (row.Title.Length == 0 && known.Title.Length > 0)
+                                    {
+                                        facts.Add("from Sonarr");
+                                    }
+                                    else if (known.Title.Length > 0 && row.Title != known.Title)
+                                    {
+                                        facts.Add($"Sonarr: {known.Title}");
+                                    }
+
+                                    if (known.Runtime is { } runtime)
+                                    {
+                                        facts.Add($"{runtime} min");
+                                    }
+
+                                    if (known.AirDate is { } aired)
+                                    {
+                                        facts.Add($"aired {aired:d MMM yyyy}");
+                                    }
+
+                                    @if (facts.Count > 0)
+                                    {
+                                        <div class="text-body-secondary">@string.Join(" · ", facts)</div>
+                                    }
+                                    @* The episode's summary, to tell the playlists apart (Watch, Tracks); it follows the number. *@
+                                    @if (known.Overview is { } overview)
+                                    {
+                                        <div class="small text-body-secondary episode-overview" tabindex="0" title="@overview">@overview</div>
+                                    }
                                 }
                                 @if (_anime && known?.Absolute is { } absolute)
                                 {
