@@ -47,6 +47,7 @@ builder.Services.AddSingleton<DiscDrafts>();
 builder.Services.AddSingleton<StreamProbe>();
 builder.Services.AddSingleton<SubtitleScanner>();
 builder.Services.AddSingleton<Thumbnails>();
+builder.Services.AddSingleton<MenuReader>();
 builder.Services.AddSingleton<LivePlay>();
 builder.Services.AddSingleton<PlaylistFinder>();
 builder.Services.AddSingleton<JobPipeline>();

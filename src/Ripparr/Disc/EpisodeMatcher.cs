@@ -84,6 +84,79 @@ public static class EpisodeMatcher
                          (specialCount > 0 ? $", {specialCount} as a special" : "") + ".");
     }
 
+    /// <summary>
+    /// The disc's order and the running times give some playlists different episodes: both, row by
+    /// row (in disc order), and what to check.
+    /// </summary>
+    public sealed record Disagreement(string Key, DiscOrderSource Source, List<Match> Disc, List<Match> RunningTimes, List<string> Suggestions)
+    {
+        public bool Differs(int row) => Disc[row].Episode != RunningTimes[row].Episode;
+    }
+
+    /// <summary>A playlist this many minutes off the runtime of the episode the disc order gives it is pointed out.</summary>
+    public const double FarOff = 4;
+
+    /// <summary>
+    /// When the disc says something about the order (a "play all" playlist, the menu) and the
+    /// running times <see cref="Find"/> found say otherwise: the two side by side, with suggestions.
+    /// Null when they agree, or when the order is only the clips' (nothing from the disc to weigh).
+    /// </summary>
+    public static Disagreement? Compare(string key, IReadOnlyList<PlaylistInfo> playlists, List<Match>? matches, IReadOnlyList<EpisodeInfo> known,
+        int season, int first, DiscOrderSource source)
+    {
+        var regular = known.Where(e => e.Season == season && e.Episode >= first).OrderBy(e => e.Episode).Take(playlists.Count).ToList();
+        if (matches == null || source == DiscOrderSource.Clips || regular.Count < playlists.Count)
+        {
+            return null;
+        }
+
+        var disc = playlists.Select((p, i) => new Match(p, regular[i])).ToList();
+        var rows = Enumerable.Range(0, disc.Count).Where(i => disc[i].Episode != matches[i].Episode).ToList();
+        if (rows.Count == 0)
+        {
+            return null;
+        }
+
+        var suggestions = new List<string>();
+        if (rows.Count == 2 && disc[rows[0]].Episode == matches[rows[1]].Episode && disc[rows[1]].Episode == matches[rows[0]].Episode)
+        {
+            suggestions.Add($"Only {disc[rows[0]].Playlist.Label} and {disc[rows[1]].Playlist.Label} trade places: watch the start of those two, the title settles it.");
+        }
+        else
+        {
+            suggestions.Add("Watch the start of the playlists in bold: the title (or the \"previously\" recap) settles it.");
+        }
+
+        foreach (var special in matches.Where(m => m.Episode.Season != season))
+        {
+            suggestions.Add($"Running times make {special.Playlist.Label} the special {Code(special.Episode)} \"{special.Episode.Title}\". " +
+                            "If the menu lists it with the episodes, it is more likely an episode about as long as that special.");
+        }
+
+        var worst = rows.Select(i => disc[i]).OrderByDescending(m => Gap(m.Playlist, m.Episode)).First();
+        var gap = Gap(worst.Playlist, worst.Episode);
+        if (gap >= FarOff)
+        {
+            var way = worst.Playlist.Duration.TotalMinutes > worst.Episode.Runtime ? "longer" : "shorter";
+            suggestions.Add($"{worst.Playlist.Label} ({worst.Playlist.Duration.TotalMinutes:0} min) is {gap:0} min {way} than {Code(worst.Episode)} in Sonarr " +
+                            "(the disc order's episode for it): if that runtime is right, it is not that episode.");
+        }
+
+        suggestions.Add(source == DiscOrderSource.JavaMenu
+            ? "The Java menu's order is read out of its files, a guess: the running times are more likely right unless Watch says otherwise."
+            : "Sonarr numbers episodes in TVDB's aired order. A box set in production or DVD order lists them otherwise: then the running times are right for Sonarr.");
+        suggestions.Add("TVDB's runtimes are sometimes rounded, or one episode's copied to all: check them on TheTVDB if both orders look odd.");
+        suggestions.Add($"Check the first episode (E{first:00}): if the disc starts elsewhere, change it and press Match running times again.");
+
+        return new Disagreement(key, source, disc, matches, suggestions);
+    }
+
+    /// <summary>"S01E05 Dalek (45 min)".</summary>
+    public static string Describe(EpisodeInfo episode) =>
+        $"{Code(episode)} {episode.Title}" + (episode.Runtime is { } runtime ? $" ({runtime} min)" : "");
+
+    public static string Code(EpisodeInfo episode) => $"S{episode.Season:00}E{episode.Episode:00}";
+
     /// <summary>The specials (season 0) that aired from three months before the season to a year after its last episode.</summary>
     public static List<EpisodeInfo> Specials(IReadOnlyList<EpisodeInfo> known, int season)
     {

@@ -179,6 +179,18 @@ public sealed class DiscAnalysis
 
     public string? Error { get; set; }
 
+    /// <summary>The episodes in the order the disc's menu shows them (<see cref="MenuReader"/>), once read; null when it could not tell.</summary>
+    public List<string>? MenuOrder { get; set; }
+
+    /// <summary>How the menu order was found ("in the order of the disc menu's buttons (clip 00003)"), or why there is none.</summary>
+    public string? MenuNote { get; set; }
+
+    /// <summary>The menu order comes from the Java menu's files (a guess), not from the menu's buttons.</summary>
+    public bool MenuIsGuess { get; set; }
+
+    /// <summary>The menu was read (or tried) for these playlists, so it is not read again.</summary>
+    public string? MenuReadFor { get; set; }
+
     public List<string> Notes { get; set; } = [];
 
     public PlaylistInfo? MainFeature => Playlists.FirstOrDefault(p => p.MainFeature);

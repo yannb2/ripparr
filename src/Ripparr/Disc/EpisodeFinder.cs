@@ -1,5 +1,21 @@
 namespace Ripparr.Disc;
 
+/// <summary>Where a TV disc's episode order comes from, the disc's own word first.</summary>
+public enum DiscOrderSource
+{
+    /// <summary>A "play all" playlist strings the episodes together.</summary>
+    PlayAll,
+
+    /// <summary>The HDMV menu's buttons play them.</summary>
+    MenuButtons,
+
+    /// <summary>The Java menu's files name them: a guess.</summary>
+    JavaMenu,
+
+    /// <summary>The order of their clips: no word from the disc.</summary>
+    Clips
+}
+
 /// <summary>
 /// Finds a TV disc's episodes: the group of playlists of about the same length (within a quarter),
 /// five minutes or more, that holds the most of the disc's data, leaving out duplicates, "play all"
@@ -49,21 +65,22 @@ public static class EpisodeFinder
 
     /// <summary>
     /// The episodes in the order the disc plays them: as a "play all" playlist strings them
-    /// together when there is one, else by the number of their first clip (discs are authored in
+    /// together when there is one, else as the disc's menu lists them once read, else by the number of their first clip (discs are authored in
     /// order; playlist numbers often are not), then by playlist number. Says which it used.
     /// </summary>
     public static (List<PlaylistInfo> Episodes, string How) InDiscOrder(DiscAnalysis analysis, List<PlaylistInfo> episodes)
     {
-        var playAll = analysis.Playlists
-            .Where(p => p.PlayAll && p.DuplicateOf == null)
-            .Select(p => (Playlist: p, Positions: episodes.Select(e => Position(p.Mpls.Clips, e.Mpls.Clips)).ToList()))
-            .Where(x => x.Positions.All(i => i >= 0))
-            .OrderByDescending(x => x.Playlist.Duration)
-            .FirstOrDefault();
+        var playAll = PlayAll(analysis, episodes);
         if (playAll.Playlist != null)
         {
             return (episodes.Select((e, i) => (e, playAll.Positions[i])).OrderBy(x => x.Item2).Select(x => x.e).ToList(),
                 $"in the order of the disc's \"play all\" playlist {playAll.Playlist.Name}");
+        }
+
+        // The menu's buttons (or the Java menu's list), when they name every episode.
+        if (MenuCovers(analysis, episodes) && analysis.MenuOrder is { } menu)
+        {
+            return (episodes.OrderBy(e => menu.IndexOf(e.Name)).ToList(), analysis.MenuNote ?? "in the order of the disc menu");
         }
 
         var byClip = episodes
@@ -75,6 +92,24 @@ public static class EpisodeFinder
             ? "in playlist order, which is also the order of their clips"
             : "in the order of their clips on the disc (the playlist numbers are out of order)");
     }
+
+    /// <summary>Where <see cref="InDiscOrder"/> takes the order of these episodes from.</summary>
+    public static DiscOrderSource SourceOf(DiscAnalysis analysis, List<PlaylistInfo> episodes) =>
+        PlayAll(analysis, episodes).Playlist != null ? DiscOrderSource.PlayAll
+        : MenuCovers(analysis, episodes) ? analysis.MenuIsGuess ? DiscOrderSource.JavaMenu : DiscOrderSource.MenuButtons
+        : DiscOrderSource.Clips;
+
+    private static bool MenuCovers(DiscAnalysis analysis, List<PlaylistInfo> episodes) =>
+        analysis.MenuOrder is { } menu && episodes.Count >= 2 && episodes.All(e => menu.Contains(e.Name));
+
+    /// <summary>The longest "play all" playlist that plays every one of the episodes, and where each starts in it.</summary>
+    public static (PlaylistInfo? Playlist, List<int> Positions) PlayAll(DiscAnalysis analysis, IReadOnlyList<PlaylistInfo> episodes) =>
+        analysis.Playlists
+            .Where(p => p.PlayAll && p.DuplicateOf == null)
+            .Select(p => (Playlist: (PlaylistInfo?)p, Positions: episodes.Select(e => Position(p.Mpls.Clips, e.Mpls.Clips)).ToList()))
+            .Where(x => x.Positions.All(i => i >= 0))
+            .OrderByDescending(x => x.Playlist!.Duration)
+            .FirstOrDefault();
 
     // Where a run of clips starts inside a longer list of clips, or -1.
     private static int Position(IReadOnlyList<string> all, IReadOnlyList<string> part)

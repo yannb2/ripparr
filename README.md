@@ -239,13 +239,23 @@ beside them), the disc page switches to **TV episodes**; the switch at the top c
 series up in **Sonarr**: the title, year, TVDB, TMDb and IMDb IDs, the original language and, for Sonarr's
 Anime series type, absolute numbers. Set the season and the first episode on the disc: the ticked playlists are
 numbered from it in disc order (any number can be typed over), and get their titles from Sonarr (or typed ones).
-Disc order is the order of the disc's "play all" playlist when it has one, else the order of the episodes' clips
-(playlist numbers are often out of order); a line above the list says which was used. Once Sonarr's episodes
-are in, **Match running times** (run by itself when no number was typed) gives each playlist the next episode
-from the first one whose runtime in Sonarr (TVDB's, in minutes) fits it best, or a special (season 0, aired from
-three months before the season to a year after it) when it fits that 3 minutes better; it keeps the disc order
-when runtimes can't tell the episodes apart (TVDB often gives a whole season the same runtime) or win by less
-than 2 minutes in all. **Disc order** undoes it. When the disc's own title
+Disc order is the order of the disc's "play all" playlist when it has one, else the order the disc menu lists
+them in, else the order of the episodes' clips (playlist numbers are often out of order); a line above the list
+says which was used. The menu is read once when the card opens: an HDMV menu's buttons (its interactive graphics
+stream, at the start of a small menu clip) give the playlists they play, on the page that plays most episodes,
+by their remote numbers or top to bottom; a Java (BD-J) menu isn't run, but its JAR files are searched for the
+playlist numbers ("00117", "PLAYLIST:00117"), in the order the file naming most episodes names them (a guess).
+Once Sonarr's episodes are in, **Match running times** (run by itself when no number was typed) gives each
+playlist the next episode from the first one whose runtime in Sonarr (TVDB's, in minutes) fits it best, or a
+special (season 0, aired from three months before the season to a year after it) when it fits that 3 minutes
+better; it keeps the disc order when runtimes can't tell the episodes apart (TVDB often gives a whole season the
+same runtime) or win by less than 2 minutes in all. **Disc order** undoes it. When the disc itself gave the order
+(a "play all" playlist or the menu's buttons) and the running times say otherwise, the disc's order stays and a
+warning shows both side by side, the playlists that differ in bold, with suggestions (watch those, a special
+that may only be about as long, a playlist far from its runtime, a box set in production or DVD order rather than
+Sonarr's aired order, rounded TVDB runtimes, the first episode); **Use running times** switches. For a Java
+menu's guessed order it is the other way round: the running times win, and **Use the disc's order** switches back.
+When the disc's own title
 names a season ("Doctor Who - Season 1 - Disc 1"), the series and season are filled in from it. The series is
 looked up in Sonarr as soon as the disc opens: when only one series of that name is in Sonarr it is picked
 straight away (the other matches stay listed to change it), and each episode's title box shows Sonarr's title

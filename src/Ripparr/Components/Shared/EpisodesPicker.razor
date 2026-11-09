@@ -3,6 +3,7 @@
 @inject JobStore Store
 @inject JobRunner Runner
 @inject NavigationManager Navigation
+@inject MenuReader Menus
 
 <div class="card mb-3">
     <div class="card-header fw-semibold">TV episodes: @SelectedCount of @Shown.Count() playlists</div>
@@ -160,6 +161,14 @@
                     else
                     {
                         <text>Numbered @OrderNote.</text>
+                        @if (_readingMenu)
+                        {
+                            <text> Reading the disc menu for its order…</text>
+                        }
+                        else if (Analysis.MenuOrder == null && Analysis.MenuNote != null)
+                        {
+                            <text> @Analysis.MenuNote</text>
+                        }
                         @if (State.MatchNote != null)
                         {
                             <text> @State.MatchNote</text>
@@ -169,17 +178,64 @@
                 </span>
                 @if (_episodes.Count > 0)
                 {
-                    <button class="btn btn-sm btn-link p-0" @onclick="MatchRunningTimes"
+                    <button class="btn btn-sm btn-link p-0" @onclick="() => UseRunningTimes(true)"
                             title="Give each playlist the next episode (or a special of this season) whose running time in Sonarr fits it best">
                         <i class="bi bi-stopwatch"></i> Match running times
                     </button>
                 }
                 @if (Matched)
                 {
-                    <button class="btn btn-sm btn-link p-0" @onclick="DiscOrder" title="Number the episodes in disc order again">
+                    <button class="btn btn-sm btn-link p-0" @onclick="() => UseRunningTimes(false)" title="Number the episodes in disc order again">
                         <i class="bi bi-arrow-counterclockwise"></i> Disc order
                     </button>
                 }
+            </div>
+        }
+        @if (State.Disagreement is { } disagreement && !State.DisagreementHidden && disagreement.Key == MatchKey)
+        {
+            <div class="alert alert-warning py-2 small">
+                <div class="fw-semibold mb-1">
+                    <i class="bi bi-exclamation-triangle me-1"></i>@(disagreement.Source switch
+                    {
+                        DiscOrderSource.PlayAll => "The disc's \"play all\" order",
+                        DiscOrderSource.MenuButtons => "The disc menu's order",
+                        _ => "The Java menu's order"
+                    }) and Sonarr's running times don't agree.
+                    @(Matched ? "Numbered by running times for now." : "Numbered in the disc's order for now.")
+                </div>
+                <table class="table table-sm table-borderless small mb-1 w-auto" style="--bs-table-bg: transparent">
+                    <thead>
+                    <tr><th>Playlist</th><th>Disc order</th><th>Running times</th></tr>
+                    </thead>
+                    <tbody>
+                    @for (var i = 0; i < disagreement.Disc.Count; i++)
+                    {
+                        var differs = disagreement.Differs(i);
+                        <tr class="@(differs ? "fw-semibold" : "text-body-secondary")">
+                            <td>@disagreement.Disc[i].Playlist.Label (@Format.Duration(disagreement.Disc[i].Playlist.Duration))</td>
+                            <td>@EpisodeMatcher.Describe(disagreement.Disc[i].Episode)</td>
+                            <td>@EpisodeMatcher.Describe(disagreement.RunningTimes[i].Episode)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+                <ul class="mb-2 ps-3">
+                    @foreach (var suggestion in disagreement.Suggestions)
+                    {
+                        <li>@suggestion</li>
+                    }
+                </ul>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    @if (Matched)
+                    {
+                        <button class="btn btn-sm btn-light border" @onclick="() => UseRunningTimes(false)"><i class="bi bi-list-ol"></i> Use the disc's order</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-sm btn-light border" @onclick="() => UseRunningTimes(true)"><i class="bi bi-stopwatch"></i> Use running times</button>
+                    }
+                    <button class="btn btn-sm btn-link p-0" @onclick="() => State.DisagreementHidden = true">Hide</button>
+                </div>
             </div>
         }
         @if (_resumeNote != null)
@@ -241,7 +297,7 @@
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text" title="@(row.Season == 0 ? "A special (season 0 in Sonarr)" : null)">@($"S{SeasonOf(playlist):00}E")</span>
                                     <input class="form-control" type="number" min="0" value="@row.Number" placeholder="@number"
-                                           @onchange="e => row.Number = int.TryParse(e.Value?.ToString(), out var v) ? v : null"/>
+                                           @onchange="e => { row.Number = int.TryParse(e.Value?.ToString(), out var v) ? v : null; row.Matched = false; }"/>
                                     @if (row.Season is { } other)
                                     {
                                         <button class="btn btn-outline-secondary" title="@($"Back to season {_season}")" @onclick="() => row.Season = null"><i class="bi bi-x"></i></button>
@@ -645,28 +701,60 @@
     /// <summary>
     /// Numbers the ticked playlists by their running time against Sonarr's runtimes (the next
     /// episodes from the first one, or a special of this season); keeps the disc order when the
-    /// running times can't tell them apart.
+    /// running times can't tell them apart. When the disc itself gives the order (a "play all"
+    /// playlist, the menu's buttons) and the running times disagree, the disc's order stays and a
+    /// warning shows both; a Java menu's order is a guess, so there the running times win.
     /// </summary>
     private void MatchRunningTimes()
     {
-        var (matches, note) = EpisodeMatcher.Find(SelectedPlaylists, _episodes, _season, _first);
-        if (matches != null)
+        var playlists = SelectedPlaylists;
+        var (matches, note) = EpisodeMatcher.Find(playlists, _episodes, _season, _first);
+        var source = EpisodeFinder.SourceOf(Analysis, playlists);
+        var disagreement = EpisodeMatcher.Compare(MatchKey, playlists, matches, _episodes, _season, _first, source);
+        if (disagreement?.Key != State.Disagreement?.Key)
         {
-            foreach (var match in matches)
+            State.DisagreementHidden = false;
+        }
+
+        State.Disagreement = disagreement;
+        var apply = matches != null && (disagreement == null
+            || (State.UseRunningTimes ?? source is not (DiscOrderSource.PlayAll or DiscOrderSource.MenuButtons)));
+        if (apply)
+        {
+            foreach (var match in matches!)
             {
                 var row = Row(match.Playlist);
                 row.Number = match.Episode.Episode;
                 row.Season = match.Episode.Season == _season ? null : match.Episode.Season;
+                row.Matched = true;
                 row.Title = ""; // Sonarr's title for the new number
             }
+
+            State.MatchNote = note;
+        }
+        else
+        {
+            DiscOrder();
+            State.MatchNote = matches == null && note.Length > 0 ? note : null;
+        }
+    }
+
+    /// <summary>The order picked on the warning (or with the buttons): it sticks for this disc.</summary>
+    private void UseRunningTimes(bool use)
+    {
+        State.UseRunningTimes = use;
+        if (use)
+        {
+            MatchRunningTimes();
         }
         else
         {
             DiscOrder();
         }
-
-        State.MatchNote = note.Length > 0 ? note : null;
     }
+
+    // What a disagreement was found for: the ticked playlists, season and first episode.
+    private string MatchKey => $"{_season}:{_first}:" + string.Join(",", SelectedPlaylists.Select(p => p.Name));
 
     /// <summary>The ticked playlists numbered in disc order from the first episode again.</summary>
     private void DiscOrder()
@@ -675,6 +763,7 @@
         {
             Row(playlist).Number = null;
             Row(playlist).Season = null;
+            Row(playlist).Matched = false;
         }
 
         State.MatchNote = null;
@@ -683,10 +772,49 @@
     // Once Sonarr's episodes are in: match, unless a number was typed (never overwritten).
     private void MatchIfUntouched()
     {
-        if (_episodes.Count > 0 && SelectedPlaylists.All(p => Row(p).Number == null && Row(p).Season == null))
+        if (_episodes.Count > 0 && Untouched)
         {
             MatchRunningTimes();
         }
+    }
+
+    // No number typed: every one is the disc order's or came from matching.
+    private bool Untouched => SelectedPlaylists.All(p => Row(p).Matched || Row(p).Number == null && Row(p).Season == null);
+
+    private bool _readingMenu;
+
+    /// <summary>
+    /// Reads the disc's menu (once) for the order it lists the episodes in, when no "play all"
+    /// playlist gives it; numbers set by the disc order or by matching follow the new order.
+    /// </summary>
+    private async Task ReadMenuAsync()
+    {
+        var key = string.Join(",", _found.Select(p => p.Name).Order(StringComparer.Ordinal));
+        if (Analysis.IsDvd || _found.Count < 2 || _readingMenu || Analysis.MenuReadFor == key || EpisodeFinder.PlayAll(Analysis, _found).Playlist != null)
+        {
+            return;
+        }
+
+        Analysis.MenuReadFor = key;
+        _readingMenu = true;
+        StateHasChanged();
+        try
+        {
+            await Menus.ReadAsync(Source, Analysis, _found, CancellationToken.None);
+        }
+        finally
+        {
+            _readingMenu = false;
+        }
+
+        // Numbers from the disc order or from matching follow the menu's order, and are weighed against the running times again.
+        if (Analysis.MenuOrder != null && Untouched)
+        {
+            DiscOrder();
+            MatchIfUntouched();
+        }
+
+        StateHasChanged();
     }
 
     private string PictureUrl(PlaylistInfo playlist, int index) =>
@@ -699,6 +827,11 @@
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _ = InvokeAsync(ReadMenuAsync);
+        }
+
         if (State.LookedUp || !Sonarr.Configured || _search.Trim().Length == 0 || _tvdb != null)
         {
             return;

@@ -67,4 +67,59 @@ public class EpisodeMatcherTests
         var cost = new double[,] { { 4, 1, 3 }, { 2, 0, 5 }, { 3, 2, 2 } };
         CollectionAssert.AreEqual(new[] { 1, 0, 2 }, EpisodeMatcher.Hungarian(cost));
     }
+
+    [TestMethod]
+    public void WarnsWhenTheMenuAndTheRunningTimesDisagree()
+    {
+        var disc = new[] { Playlist("00117", 44.2), Playlist("00118", 51.5), Playlist("00152", 38.9) };
+        var known = new[] { Episode(1, 11, 39), Episode(1, 12, 44), Episode(1, 13, 52) };
+        var (matches, _) = EpisodeMatcher.Find(disc, known, 1, 11);
+
+        var warning = EpisodeMatcher.Compare("k", disc, matches, known, 1, 11, DiscOrderSource.MenuButtons);
+
+        Assert.IsNotNull(warning);
+        CollectionAssert.AreEqual(new[] { 11, 12, 13 }, warning.Disc.Select(m => m.Episode.Episode).ToArray());
+        CollectionAssert.AreEqual(new[] { 12, 13, 11 }, warning.RunningTimes.Select(m => m.Episode.Episode).ToArray());
+        Assert.IsTrue(Enumerable.Range(0, 3).All(warning.Differs));
+        Assert.IsTrue(warning.Suggestions.Any(s => s.Contains("Watch")));
+        Assert.IsTrue(warning.Suggestions.Any(s => s.Contains("aired order")));
+        Assert.IsTrue(warning.Suggestions.Any(s => s.Contains("13 min shorter than S01E13")), "00152 (39 min) is 13 min short of E13's 52");
+        Assert.AreEqual("S01E11 S1E11 (39 min)", EpisodeMatcher.Describe(warning.Disc[0].Episode));
+
+        Assert.IsNull(EpisodeMatcher.Compare("k", disc, matches, known, 1, 11, DiscOrderSource.Clips), "clip order is no word from the disc");
+        Assert.IsNull(EpisodeMatcher.Compare("k", disc, null, known, 1, 11, DiscOrderSource.MenuButtons), "they agree");
+    }
+
+    [TestMethod]
+    public void SaysWhenOnlyTwoTradePlaces()
+    {
+        var disc = new[] { Playlist("00001", 45), Playlist("00002", 58), Playlist("00003", 50) };
+        var known = new[] { Episode(1, 1, 45), Episode(1, 2, 50), Episode(1, 3, 58) };
+        var (matches, _) = EpisodeMatcher.Find(disc, known, 1, 1);
+
+        var warning = EpisodeMatcher.Compare("k", disc, matches, known, 1, 1, DiscOrderSource.JavaMenu);
+
+        Assert.IsNotNull(warning);
+        Assert.IsFalse(warning.Differs(0));
+        StringAssert.Contains(warning.Suggestions[0], "trade places");
+        Assert.IsTrue(warning.Suggestions.Any(s => s.Contains("Java menu")));
+    }
+
+    [TestMethod]
+    public void TheOrderSourceIsTheDiscsWordFirst()
+    {
+        var episodes = new List<PlaylistInfo> { Playlist("00002", 45), Playlist("00001", 45) };
+        var disc = new DiscAnalysis
+        {
+            Source = new DiscSource("/x.iso", SourceKind.Iso, "/", 0, DateTime.UtcNow),
+            Playlists = episodes
+        };
+        Assert.AreEqual(DiscOrderSource.Clips, EpisodeFinder.SourceOf(disc, episodes));
+
+        disc.MenuOrder = ["00001", "00002"];
+        Assert.AreEqual(DiscOrderSource.MenuButtons, EpisodeFinder.SourceOf(disc, episodes));
+
+        disc.MenuIsGuess = true;
+        Assert.AreEqual(DiscOrderSource.JavaMenu, EpisodeFinder.SourceOf(disc, episodes));
+    }
 }
