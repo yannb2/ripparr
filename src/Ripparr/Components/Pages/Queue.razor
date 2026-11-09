@@ -19,7 +19,15 @@
 @if (!Shown.Any())
 {
     <div class="alert alert-secondary">
-        Nothing in the queue. Pick a disc on the <a href="">Sources</a> page; finished jobs are in <a href="history">History</a>.
+        @if (HiddenDryRuns > 0)
+        {
+            <text>Nothing in the queue but @HiddenDryRuns dry run@(HiddenDryRuns == 1 ? "" : "s"): </text>
+            <button class="btn btn-link p-0 align-baseline" @onclick="() => _showDryRuns = true">show @(HiddenDryRuns == 1 ? "it" : "them")</button><text>.</text>
+        }
+        else
+        {
+            <text>Nothing in the queue. Pick a disc on the <a href="">Sources</a> page; finished jobs are in <a href="history">History</a>.</text>
+        }
     </div>
 }
 else
@@ -115,6 +123,9 @@ else
     }
 
     private IEnumerable<Job> Shown => _jobs.Where(j => j.InQueue && (_showDryRuns || !j.DryRun));
+
+    // The menu's count includes dry runs; say so when the switch hides them all.
+    private int HiddenDryRuns => _showDryRuns ? 0 : _jobs.Count(j => j.InQueue && j.DryRun);
 
     private void Load()
     {

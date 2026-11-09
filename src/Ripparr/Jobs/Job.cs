@@ -209,7 +209,7 @@ public sealed class Job
     [JsonIgnore]
     public string DisplayTitle => (string.IsNullOrWhiteSpace(Title)
         ? SourceName
-        : Year is { } y ? $"{Title} ({y}){(string.IsNullOrWhiteSpace(Edition) ? "" : " - " + Edition)}" : Title)
+        : Year is { } ? $"{Naming.TitleAndYear(Title, Year)}{(string.IsNullOrWhiteSpace(Edition) ? "" : " - " + Edition)}" : Title)
         + (IsExtra ? $" · {ExtraName}" : "")
         + (IsEpisode ? $" · {EpisodeCode}{(string.IsNullOrWhiteSpace(EpisodeTitle) ? "" : " - " + EpisodeTitle)}" : "");
 

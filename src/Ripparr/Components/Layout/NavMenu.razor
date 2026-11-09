@@ -151,10 +151,33 @@
 
     private void OnJobChanged(long id)
     {
-        // Progress ticks often: count at most every two seconds.
-        if (DateTime.UtcNow - _lastCount < TimeSpan.FromSeconds(2))
+        // Progress ticks often: count at most every two seconds. A change inside those two seconds
+        // (a job finishing right after its last progress tick) is counted when they are up, or the
+        // menu kept saying "Queue (1)" with nothing left in it.
+        var wait = _lastCount + CountEvery - DateTime.UtcNow;
+        if (wait > TimeSpan.Zero)
         {
+            lock (_countLock)
+            {
+                _recount ??= new Timer(_ => Recount(), null, wait, Timeout.InfiniteTimeSpan);
+            }
+
             return;
+        }
+
+        Recount();
+    }
+
+    private static readonly TimeSpan CountEvery = TimeSpan.FromSeconds(2);
+    private readonly Lock _countLock = new();
+    private Timer? _recount;
+
+    private void Recount()
+    {
+        lock (_countLock)
+        {
+            _recount?.Dispose();
+            _recount = null;
         }
 
         InvokeAsync(() =>
@@ -185,6 +208,12 @@
 
     public void Dispose()
     {
+        lock (_countLock)
+        {
+            _recount?.Dispose();
+            _recount = null;
+        }
+
         Events.Changed -= OnJobChanged;
         Navigation.LocationChanged -= OnLocationChanged;
     }
