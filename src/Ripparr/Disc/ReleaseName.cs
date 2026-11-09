@@ -59,6 +59,21 @@ public static partial class ReleaseName
 
     private static readonly Dictionary<string, string> CountryAliases = new(StringComparer.OrdinalIgnoreCase) { ["UK"] = "GBR", ["GER"] = "DEU" };
 
+    /// <summary>The disc number a TV disc's title names: "Doctor Who - Season 2 - Disc 1" -> 1, DOCTOR_WHO_S1_D3 -> 3.</summary>
+    public static int? DiscNumber(string? discTitle)
+    {
+        if (string.IsNullOrWhiteSpace(discTitle))
+        {
+            return null;
+        }
+
+        var match = DiscNumberRegex().Match(SeparatorRegex().Replace(discTitle, " "));
+        return match.Success ? int.Parse(match.Groups["n"].Value, CultureInfo.InvariantCulture) : null;
+    }
+
+    [GeneratedRegex(@"\b(?:Disc|Disk|Disque|Volume|Vol)\s*(?<n>\d{1,2})\b|\bS\d{1,2}\s*D(?<n>\d{1,2})\b", RegexOptions.IgnoreCase)]
+    private static partial Regex DiscNumberRegex();
+
     /// <summary>
     /// Series and season from a TV disc's own title (BDMV/META): "Doctor Who - Season 1 - Disc 1" ->
     /// (Doctor Who, 1); "Sherlock: Series 2" -> (Sherlock, 2); a DVD's volume label DOCTOR_WHO_S1_D1 ->

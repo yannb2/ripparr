@@ -122,4 +122,36 @@ public class EpisodeMatcherTests
         disc.MenuIsGuess = true;
         Assert.AreEqual(DiscOrderSource.JavaMenu, EpisodeFinder.SourceOf(disc, episodes));
     }
+
+    private static readonly EpisodeInfo[] DoctorWhoSeason2 =
+    [
+        Episode(2, 1, 45, "2006-04-15"), Episode(2, 2, 45, "2006-04-22"), Episode(2, 3, 45, "2006-04-29"), Episode(2, 4, 45, "2006-05-06"),
+        Episode(2, 5, 45, "2006-05-13"), Episode(0, 1, 7, "2005-11-18"), Episode(0, 2, 60, "2005-12-25"), Episode(0, 3, 13, "2005-12-25"),
+        Episode(0, 4, 60, "2006-12-25"), Episode(0, 5, 45, "2007-06-30"), Episode(0, 6, 8, "2007-11-16")
+    ];
+
+    // Doctor Who S2 disc 1, in playlist order: the Christmas special (00160) and four episodes.
+    private static readonly PlaylistInfo[] DoctorWhoDisc =
+        [Playlist("00025", 46.5), Playlist("00071", 46.2), Playlist("00160", 61.5), Playlist("00161", 46.05), Playlist("00168", 46.7)];
+
+    [TestMethod]
+    public void TheChristmasSpecialBeforeTheSeasonIsFound()
+    {
+        var (matches, note) = EpisodeMatcher.Find(DoctorWhoDisc, DoctorWhoSeason2, 2, 1);
+
+        Assert.IsNotNull(matches, note);
+        CollectionAssert.AreEqual(new[] { "S2E1", "S2E2", "S0E2", "S2E3", "S2E4" }, matches.Select(m => m.Episode.Title).ToArray(),
+            "aired in December, four months before the season; the next Christmas special is as long but further away");
+    }
+
+    [TestMethod]
+    public void RunningTimesThatFitNothingKeepTheDiscOrder()
+    {
+        // The season was left on 0: the specials from S00E03 are nothing like these playlists.
+        var four = DoctorWhoDisc.Where(p => p.Name != "00161").ToArray();
+        var (matches, note) = EpisodeMatcher.Find(four, DoctorWhoSeason2, 0, 3);
+
+        Assert.IsNull(matches);
+        StringAssert.Contains(note, "fit none");
+    }
 }

@@ -16,8 +16,15 @@ public static class EpisodeMatcher
     /// <summary>Running times must win by this much in all over the disc order (minutes), or the disc order stays.</summary>
     public const double MinimumGain = 2;
 
-    // Ties (TVDB gives most episodes of a series the same runtime) keep the disc order.
+    /// <summary>More than this many minutes off per playlist on average, even at best: the running times fit no episodes here.</summary>
+    public const double MaximumAverageGap = 5;
+
+    // Ties (TVDB gives most episodes of a series the same runtime) keep the disc order: squared, so a
+    // special taking one place shifts the rest by one rather than swapping two of them.
     private const double OrderTieBreak = 0.01;
+
+    // Two specials as long as each other (Christmas specials are all an hour): the one aired nearer the season.
+    private const double DayTieBreak = 0.0005;
 
     public sealed record Match(PlaylistInfo Playlist, EpisodeInfo Episode);
 
@@ -54,8 +61,8 @@ public static class EpisodeMatcher
                         // Rows past the playlists take the specials no playlist uses.
                         ? column < episodes.Count ? double.PositiveInfinity : 0
                         : column < episodes.Count
-                            ? Gap(playlists[row], columns[column]) + OrderTieBreak * Math.Abs(row - column)
-                            : Gap(playlists[row], columns[column]) + SpecialPenalty;
+                            ? Gap(playlists[row], columns[column]) + OrderTieBreak * (row - column) * (row - column)
+                            : Gap(playlists[row], columns[column]) + SpecialPenalty + DayTieBreak * DaysAway(columns[column], known, season);
                 }
             }
 
@@ -69,6 +76,11 @@ public static class EpisodeMatcher
 
         var matches = best!.Value.Matches;
         var bestGaps = matches.Sum(m => Gap(m.Playlist, m.Episode));
+        if (bestGaps / count > MaximumAverageGap)
+        {
+            return (null, $"Sonarr's running times fit none of these episodes well ({bestGaps / count:0} min off each at best): numbered in disc order. " +
+                          "Check the season and the first episode.");
+        }
         if (matches.Select((m, i) => m.Episode == regular[i]).All(x => x))
         {
             return (null, "Running times agree with the disc order.");
@@ -157,14 +169,31 @@ public static class EpisodeMatcher
 
     public static string Code(EpisodeInfo episode) => $"S{episode.Season:00}E{episode.Episode:00}";
 
-    /// <summary>The specials (season 0) that aired from three months before the season to a year after its last episode.</summary>
+    /// <summary>Days between a special's air date and the season's first to last episode (0 inside it or unknown).</summary>
+    private static double DaysAway(EpisodeInfo special, IReadOnlyList<EpisodeInfo> known, int season)
+    {
+        var dates = known.Where(e => e.Season == season && e.AirDate != null).Select(e => e.AirDate!.Value).ToList();
+        if (special.AirDate is not { } aired || dates.Count == 0)
+        {
+            return 0;
+        }
+
+        return aired < dates.Min() ? dates.Min().DayNumber - aired.DayNumber
+            : aired > dates.Max() ? aired.DayNumber - dates.Max().DayNumber
+            : 0;
+    }
+
+    /// <summary>
+    /// The specials (season 0) that aired from six months before the season (the Christmas special
+    /// before a spring season) to a year after its last episode.
+    /// </summary>
     public static List<EpisodeInfo> Specials(IReadOnlyList<EpisodeInfo> known, int season)
     {
         var dates = known.Where(e => e.Season == season && e.AirDate != null).Select(e => e.AirDate!.Value).ToList();
         return known
             .Where(e => e.Season == 0 && e.Runtime != null && season != 0)
             .Where(e => dates.Count == 0 || e.AirDate == null
-                        || e.AirDate >= dates.Min().AddMonths(-3) && e.AirDate <= dates.Max().AddYears(1))
+                        || e.AirDate >= dates.Min().AddMonths(-6) && e.AirDate <= dates.Max().AddYears(1))
             .OrderBy(e => e.Episode)
             .ToList();
     }

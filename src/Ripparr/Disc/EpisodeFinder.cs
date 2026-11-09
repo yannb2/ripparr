@@ -33,12 +33,16 @@ public static class EpisodeFinder
 
     public static List<PlaylistInfo> Find(DiscAnalysis analysis)
     {
-        var pool = analysis.Playlists.Where(p => p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Reel == 0 && p.Duration >= Minimum).ToList();
+        var pool = analysis.Playlists
+            .Where(p => p.PartOf == null && p.DuplicateOf == null && !p.PlayAll && !p.TooLittleData && p.Reel == 0 && p.Duration >= Minimum)
+            .OrderBy(p => p.Duration).ToList();
         List<PlaylistInfo> best = [];
-        foreach (var playlist in pool)
+        for (var i = 0; i < pool.Count; i++)
         {
-            var length = playlist.Duration.TotalSeconds;
-            var group = pool.Where(o => Math.Abs(o.Duration.TotalSeconds - length) <= length * Spread).ToList();
+            // Every run of playlists, shortest first, none more than a quarter longer than the shortest: a
+            // group around one playlist would let a longer special pull it off and drop the shortest episode.
+            var limit = pool[i].Duration.TotalSeconds * (1 + Spread);
+            var group = pool.Skip(i).TakeWhile(o => o.Duration.TotalSeconds <= limit).ToList();
             // A lone playlist (the film on a film disc) is no group of episodes.
             if (group.Count >= 2 && Better(group, best))
             {
@@ -46,7 +50,32 @@ public static class EpisodeFinder
             }
         }
 
+        if (best.Count > 0)
+        {
+            best.AddRange(Longer(pool, best));
+        }
+
         return best.Count > 0 ? InDiscOrder(analysis, best).Episodes : [];
+    }
+
+    /// <summary>A longer episode (a special) is at most this many times the group's usual length.</summary>
+    public const double LongerUpTo = 2;
+
+    /// <summary>
+    /// The playlists a bit shorter or up to twice as long as the episodes (a feature-length Christmas
+    /// special, a double episode) made like them: same picture, about the same data rate.
+    /// </summary>
+    private static IEnumerable<PlaylistInfo> Longer(List<PlaylistInfo> pool, List<PlaylistInfo> group)
+    {
+        var lengths = group.Select(p => p.Duration.TotalSeconds).Order().ToList();
+        var usual = lengths[lengths.Count / 2];
+        var rates = group.Where(p => p.Size > 0).Select(p => p.BitsPerSecond).Order().ToList();
+        var rate = rates.Count > 0 ? rates[rates.Count / 2] : 0;
+        var resolution = group.GroupBy(p => p.Resolution).OrderByDescending(g => g.Count()).First().Key;
+        return pool.Where(p => !group.Contains(p)
+                               && p.Duration.TotalSeconds >= usual * (1 - Spread) && p.Duration.TotalSeconds <= usual * LongerUpTo
+                               && p.Resolution == resolution
+                               && (rate == 0 || p.Size > 0 && p.BitsPerSecond >= rate * 0.5 && p.BitsPerSecond <= rate * 2));
     }
 
     // More bytes wins; with no sizes known (or equal ones), more playlists, then more running time.
