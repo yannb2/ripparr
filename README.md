@@ -203,6 +203,13 @@ button is on every Watch panel (Playlists list and TV episodes too).
 A playlist that is just other playlists one after the other is flagged **Play all** and hidden with the
 duplicates (the switch shows them): ripping it would repeat the others.
 
+A playlist of three or more short pieces (10 s to 6 min each, from at least two clips, not all joined seamlessly)
+that do not play on their own is flagged **Reel of N**: usually the deleted scenes or outtakes, played one after
+the other. Its **Split** button lists the pieces under it, ticked, as "Deleted Scene 1, 2…": each job rips one piece
+from a playlist of just that play item (copied byte for byte from the disc's, with its chapter marks), written in
+the job's work folder next to links to the disc's STREAM and CLIPINF folders. **Join** goes back to one extra for
+the whole reel. A reel is never taken as a TV episode. Reels kept in one clip with a chapter per scene are not found.
+
 The extras use the **Extras** profile (original language and English audio, English and French subtitles, no
 OCR) unless another is picked. An extra is named after what was typed (`Making Of.mkv`, MKV title
 `Making Of`; empty gives `Featurette 2`) and goes to `done/Title (Year)/<type>/`. The types are the folder

@@ -75,6 +75,10 @@ public sealed class ExtrasPickerState
     }
 
     public Dictionary<string, Row> Rows { get; } = new();
+
+    /// <summary>Reels shown as their pieces, one extra each, instead of one extra for the whole reel.</summary>
+    public HashSet<string> Split { get; } = new(StringComparer.Ordinal);
+
     public bool Open { get; set; }
     public bool ShowAll { get; set; }
     public bool InSeason { get; set; }

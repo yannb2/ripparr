@@ -28,8 +28,25 @@ public sealed class PlaylistInfo
 
     public int LastChapter { get; init; }
 
-    /// <summary>How the page names it: the playlist number, "Clip 00294", "Title 3" or "Title 1, ch. 7-12".</summary>
+    /// <summary>
+    /// A piece of a Blu-ray reel (one deleted scene of a playlist that plays them all): its play
+    /// item's number on the reel, from 1. <see cref="PartOf"/> is the reel's name, Name "00050-p03".
+    /// </summary>
+    public int Piece { get; init; }
+
+    /// <summary>
+    /// A reel: three or more short pieces (deleted scenes, outtakes) that no other playlist plays
+    /// on its own, one after the other. How many pieces; 0 when it is no reel.
+    /// </summary>
+    public int Reel { get; set; }
+
+    /// <summary>What the "Reel" badge explains.</summary>
+    public string ReelNote =>
+        $"{Reel} short pieces back to back (deleted scenes, outtakes...) that do not play on their own: the Extras card can split it into one extra per piece.";
+
+    /// <summary>How the page names it: the playlist number, "Clip 00294", "00050, piece 3", "Title 3" or "Title 1, ch. 7-12".</summary>
     public string Label => FromClip != null ? $"Clip {FromClip}"
+        : Piece > 0 ? $"{PartOf}, piece {Piece}"
         : Dvd == null ? Name
         : PartOf == null ? $"Title {Dvd.Number}"
         : $"Title {Dvd.Number}, ch. {FirstChapter}-{LastChapter}";
@@ -37,7 +54,7 @@ public sealed class PlaylistInfo
     public const string ClipPrefix = "clip";
 
     /// <summary>The .mpls file name without extension: a made playlist is written as the clip's number (00294.mpls), as DGDemux expects.</summary>
-    public string FileName => FromClip ?? Name;
+    public string FileName => FromClip ?? (Piece > 0 ? PartOf! : Name);
 
     /// <summary>The size of its clips, counted once each.</summary>
     public long Size { get; set; }
@@ -91,7 +108,7 @@ public sealed class PlaylistInfo
         Name = Name, Mpls = mpls, FromClip = FromClip, MadePlaylist = MadePlaylist, Dvd = Dvd, PartOf = PartOf, FirstChapter = FirstChapter,
         LastChapter = LastChapter, Size = Size, MainFeature = MainFeature, DuplicateOf = DuplicateOf,
         PossibleCut = PossibleCut, Short = Short, PlayAll = PlayAll, TooLittleData = TooLittleData, LengthLooksFaked = LengthLooksFaked,
-        Lookalike = Lookalike, UniqueClips = UniqueClips, JoinScore = JoinScore, MainReason = MainReason
+        Lookalike = Lookalike, UniqueClips = UniqueClips, JoinScore = JoinScore, MainReason = MainReason, Piece = Piece, Reel = Reel
     };
 
     public string? Resolution => Mpls.Streams.FirstOrDefault(s => s.Kind == StreamKind.Video && !s.DolbyVisionEnhancementLayer) is { } v
@@ -175,7 +192,12 @@ public sealed class DiscAnalysis
     /// </summary>
     public PlaylistInfo? AddPart(string name)
     {
-        if (!IsDvd || DvdDisc.ParsePart(name) is not var (title, from, to)
+        if (!IsDvd)
+        {
+            return AddPiece(name);
+        }
+
+        if ( DvdDisc.ParsePart(name) is not var (title, from, to)
                    || Playlists.FirstOrDefault(p => p.Name == title) is not { } whole
                    || DvdDisc.Part(whole, from, to) is not { } part)
         {
@@ -194,6 +216,81 @@ public sealed class DiscAnalysis
         }
 
         return part;
+    }
+
+    /// <summary>The play items of a reel that count as pieces: those over <see cref="TinyClip"/> (not a logo or a blank between scenes).</summary>
+    public static IEnumerable<(PlayItem Item, int Number)> Pieces(PlaylistInfo reel) =>
+        reel.Mpls.Items.Select((item, i) => (item, i + 1)).Where(x => x.item.Duration45k > TinyClip.TotalSeconds * Mpls.ClockRate);
+
+    /// <summary>The name of a reel's piece: "00050-p03".</summary>
+    public static string PieceName(string reel, int number) => $"{reel}-p{number:00}";
+
+    private static (string Reel, int Number)? ParsePiece(string name)
+    {
+        var dash = name.LastIndexOf("-p", StringComparison.Ordinal);
+        return dash > 0 && int.TryParse(name[(dash + 2)..], out var number) && number > 0 ? (name[..dash], number) : null;
+    }
+
+    /// <summary>A piece of a Blu-ray reel by its name ("00050-p03"): its play item cut out as a playlist of its own, made on first use.</summary>
+    private PlaylistInfo? AddPiece(string name)
+    {
+        if (ParsePiece(name) is not var (reelName, number)
+            || Playlists.FirstOrDefault(p => p.Name == reelName && p.PartOf == null) is not { Mpls.Raw: { } raw } reel
+            || number > reel.Mpls.Items.Count)
+        {
+            return null;
+        }
+
+        byte[] bytes;
+        Mpls mpls;
+        try
+        {
+            bytes = MplsCut.Piece(raw, number - 1);
+            mpls = Mpls.Parse(bytes);
+        }
+        catch (Exception e) when (e is InvalidDataException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+        {
+            return null;
+        }
+
+        var piece = new PlaylistInfo
+        {
+            Name = name, Mpls = mpls, MadePlaylist = bytes, PartOf = reelName, Piece = number,
+            Size = mpls.Clips.Distinct(StringComparer.OrdinalIgnoreCase).Sum(c => ClipSizes.GetValueOrDefault(c))
+        };
+        lock (Playlists)
+        {
+            if (Playlists.FirstOrDefault(p => p.Name == name) is { } added)
+            {
+                return added;
+            }
+
+            Playlists.Add(piece);
+        }
+
+        return piece;
+    }
+
+    /// <summary>Longest a piece of a reel may run: deleted scenes and outtakes are short.</summary>
+    public static readonly TimeSpan ReelPieceMaximum = TimeSpan.FromMinutes(6);
+
+    /// <summary>
+    /// Three or more pieces (play items over <see cref="TinyClip"/>), none over
+    /// <see cref="ReelPieceMaximum"/>, from at least two clips, not all joined seamlessly (a film's
+    /// or featurette's clips are): a reel of deleted scenes or outtakes. Its pieces, or 0.
+    /// </summary>
+    private static int ReelPieces(PlaylistInfo playlist)
+    {
+        var items = playlist.Mpls.Items;
+        var pieces = Pieces(playlist).Select(x => x.Item).ToList();
+        if (pieces.Count < 3 || items.Any(i => i.Duration45k > ReelPieceMaximum.TotalSeconds * Mpls.ClockRate)
+            || pieces.Select(i => i.Clip).Distinct(StringComparer.OrdinalIgnoreCase).Count() < 2
+            || items.Skip(1).All(i => i.ConnectionCondition == 6))
+        {
+            return 0;
+        }
+
+        return pieces.Count;
     }
 
     /// <summary>
@@ -265,6 +362,14 @@ public sealed class DiscAnalysis
 
         // Only a flag for the extras list: a film can be clips that also play on their own.
         MarkPlayAll(ordered.Where(p => p.DuplicateOf == null).ToList());
+
+        // Short pieces back to back that do not play on their own: the extras card can split them.
+        foreach (var playlist in Playlists)
+        {
+            playlist.Reel = IsDvd || playlist.DuplicateOf != null || playlist.PlayAll || playlist.TooLittleData || playlist.FromClip != null
+                ? 0
+                : ReelPieces(playlist);
+        }
 
         var candidates = ordered.Where(p => p.DuplicateOf == null && !p.Short).ToList();
         foreach (var playlist in candidates)
