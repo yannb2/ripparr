@@ -286,7 +286,7 @@
                     <th>Length</th>
                     <th class="text-end">Chapters</th>
                     <th class="text-end">Size</th>
-                    <th style="width: 7rem">Episode</th>
+                    <th style="width: 10rem">Episode</th>
                     <th style="min-width: 16rem">Title</th>
                     <th></th>
                 </tr>
@@ -312,9 +312,10 @@
                         <td>
                             @if (row.Selected)
                             {
-                                <div class="input-group input-group-sm">
+                                <div class="input-group input-group-sm flex-nowrap">
                                     <span class="input-group-text" title="@(row.Season == 0 ? "A special (season 0 in Sonarr)" : null)">@($"S{SeasonOf(playlist):00}E")</span>
-                                    <input class="form-control" type="number" min="0" value="@row.Number" placeholder="@number" list="@EpisodeList(SeasonOf(playlist))"
+                                    @* A fixed width: the number (and its picker arrow) stays readable beside the x of a special. *@
+                                    <input class="form-control" type="number" min="0" style="min-width: 4.5rem" value="@row.Number" placeholder="@number" list="@EpisodeList(SeasonOf(playlist))"
                                            @onchange="e => { row.Number = int.TryParse(e.Value?.ToString(), out var v) ? v : null; row.Matched = false; }"/>
                                     @if (row.Season is { } other)
                                     {
