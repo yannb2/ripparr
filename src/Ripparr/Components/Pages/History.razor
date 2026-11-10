@@ -112,7 +112,7 @@ else
     private string _search = "";
     private string _status = "";
     private bool _showDryRuns;
-    private DateTime _lastLoad = DateTime.MinValue;
+    private Throttle? _refresh;
 
     private IEnumerable<Job> Shown => _jobs
         .Where(j => !j.InQueue && (_showDryRuns || !j.DryRun))
@@ -133,28 +133,24 @@ else
     protected override void OnInitialized()
     {
         Load();
+        _refresh = new Throttle(TimeSpan.FromSeconds(1), Refresh);
         Events.Changed += OnChanged;
     }
 
     private void Load()
     {
         _jobs = Store.List(2000);
-        _lastLoad = DateTime.UtcNow;
     }
 
-    private void OnChanged(long id)
-    {
-        if (DateTime.UtcNow - _lastLoad < TimeSpan.FromSeconds(1))
-        {
-            return;
-        }
+    // At most once a second, and always after the last change: a job that just ended shows up.
+    private void OnChanged(long id) => _refresh?.Poke();
 
+    private void Refresh() =>
         InvokeAsync(() =>
         {
             Load();
             StateHasChanged();
         });
-    }
 
     private void Retry(Job job)
     {
@@ -208,5 +204,9 @@ else
         }
     }
 
-    public void Dispose() => Events.Changed -= OnChanged;
+    public void Dispose()
+    {
+        Events.Changed -= OnChanged;
+        _refresh?.Dispose();
+    }
 }

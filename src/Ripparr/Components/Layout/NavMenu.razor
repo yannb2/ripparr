@@ -113,7 +113,6 @@
     /// <summary>The theme lives in the browser (localStorage); dark until the first render says otherwise.</summary>
     private bool _dark = true;
     private int _active;
-    private DateTime _lastCount = DateTime.MinValue;
 
     private List<(string Path, string Name)> _open = [];
 
@@ -121,6 +120,7 @@
     {
         Count();
         _open = Drafts.Recent();
+        _recount = new Throttle(TimeSpan.FromSeconds(2), Recount);
         Events.Changed += OnJobChanged;
         Navigation.LocationChanged += OnLocationChanged;
     }
@@ -146,46 +146,20 @@
     private void Count()
     {
         _active = Store.List(200, [JobStatus.Queued, JobStatus.Running]).Count;
-        _lastCount = DateTime.UtcNow;
     }
 
-    private void OnJobChanged(long id)
-    {
-        // Progress ticks often: count at most every two seconds. A change inside those two seconds
-        // (a job finishing right after its last progress tick) is counted when they are up, or the
-        // menu kept saying "Queue (1)" with nothing left in it.
-        var wait = _lastCount + CountEvery - DateTime.UtcNow;
-        if (wait > TimeSpan.Zero)
-        {
-            lock (_countLock)
-            {
-                _recount ??= new Timer(_ => Recount(), null, wait, Timeout.InfiniteTimeSpan);
-            }
+    // Progress ticks often: count at most every two seconds, and always after the last change (a
+    // job finishing right after its last progress tick), or the menu kept saying "Queue (1)".
+    private void OnJobChanged(long id) => _recount?.Poke();
 
-            return;
-        }
+    private Throttle? _recount;
 
-        Recount();
-    }
-
-    private static readonly TimeSpan CountEvery = TimeSpan.FromSeconds(2);
-    private readonly Lock _countLock = new();
-    private Timer? _recount;
-
-    private void Recount()
-    {
-        lock (_countLock)
-        {
-            _recount?.Dispose();
-            _recount = null;
-        }
-
+    private void Recount() =>
         InvokeAsync(() =>
         {
             Count();
             StateHasChanged();
         });
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -208,12 +182,7 @@
 
     public void Dispose()
     {
-        lock (_countLock)
-        {
-            _recount?.Dispose();
-            _recount = null;
-        }
-
+        _recount?.Dispose();
         Events.Changed -= OnJobChanged;
         Navigation.LocationChanged -= OnLocationChanged;
     }

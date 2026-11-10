@@ -114,12 +114,23 @@ else
     private ConfirmDialog _confirm = null!;
     private List<Job> _jobs = [];
     private bool _showDryRuns = true;
-    private DateTime _lastLoad = DateTime.MinValue;
+    private Throttle? _refresh;
+    private Timer? _clock;
 
     protected override void OnInitialized()
     {
         Load();
+        _refresh = new Throttle(TimeSpan.FromSeconds(1), Refresh);
         Events.Changed += OnChanged;
+        // The Time column, and a step that writes nothing for a while (moving the MKV to the done
+        // folder), move on without job events too.
+        _clock = new Timer(_ =>
+        {
+            if (_jobs.Any(j => j.Status == JobStatus.Running))
+            {
+                _refresh?.Poke();
+            }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private IEnumerable<Job> Shown => _jobs.Where(j => j.InQueue && (_showDryRuns || !j.DryRun));
@@ -130,22 +141,17 @@ else
     private void Load()
     {
         _jobs = Store.List(300);
-        _lastLoad = DateTime.UtcNow;
     }
 
-    private void OnChanged(long id)
-    {
-        if (DateTime.UtcNow - _lastLoad < TimeSpan.FromSeconds(1))
-        {
-            return;
-        }
+    // Progress ticks come often: reload at most once a second, and always after the last change.
+    private void OnChanged(long id) => _refresh?.Poke();
 
+    private void Refresh() =>
         InvokeAsync(() =>
         {
             Load();
             StateHasChanged();
         });
-    }
 
     private void Retry(Job job)
     {
@@ -174,5 +180,10 @@ else
 
     private static string Href(Job job) => $"job/{job.Id}";
 
-    public void Dispose() => Events.Changed -= OnChanged;
+    public void Dispose()
+    {
+        Events.Changed -= OnChanged;
+        _clock?.Dispose();
+        _refresh?.Dispose();
+    }
 }
