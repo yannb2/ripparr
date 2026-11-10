@@ -359,7 +359,8 @@ manual import of the finished MKV later.
 The queue shows what is waiting, running, or needs a look (failed, interrupted, waiting for an answer). Every
 row has **Remove**: a queued or running job is cancelled, the others move to **History**, where done, failed
 and cancelled jobs stay with their result, a search, a status filter, Retry, and a delete that forgets a job and
-its log (never the MKV in the done folder).
+its log (never the MKV in the done folder). Both pages follow the jobs live: a job that ends leaves the queue
+(and shows in History) within a second or two, without reloading the page.
 
 Removing a failed, cancelled or finished job (from the queue or from History) also deletes its work folder
 (`job-<id>` under the work folder: demuxed streams, and the MKV of a job that failed its checks, after asking).
