@@ -500,7 +500,8 @@ public sealed class DiscAnalysis
     {
         foreach (var all in playlists)
         {
-            var parts = playlists.Where(p => p != all && p.Duration < all.Duration && Contains(all.Mpls.Items, p.Mpls.Items)).ToList();
+            // An episode with a logo of its own the "play all" leaves out counts by its longest clip.
+            var parts = playlists.Where(p => p != all && p.Duration < all.Duration && EpisodeFinder.StartIn(all.Mpls.Items, p.Mpls.Items) != null).ToList();
             var covered = parts.Sum(p => p.Duration.TotalSeconds);
             if (parts.Count >= 2 && covered >= all.Duration.TotalSeconds * 0.8)
             {
