@@ -6,6 +6,9 @@ public enum DiscOrderSource
     /// <summary>A "play all" playlist strings the episodes together.</summary>
     PlayAll,
 
+    /// <summary>A "play all" playlist strings some of them together (the rest are placed by their clips).</summary>
+    PlayAllPart,
+
     /// <summary>The HDMV menu's buttons play them.</summary>
     MenuButtons,
 
@@ -94,16 +97,16 @@ public static class EpisodeFinder
 
     /// <summary>
     /// The episodes in the order the disc plays them: as a "play all" playlist strings them
-    /// together when there is one, else as the disc's menu lists them once read, else by the number of their first clip (discs are authored in
-    /// order; playlist numbers often are not), then by playlist number. Says which it used.
+    /// together when one plays them all, else as the disc's menu lists them once read, else by the number of their first clip (discs are authored in
+    /// order; playlist numbers often are not), then by playlist number; a "play all" that plays only
+    /// some of them puts those in its order among the others. Says which it used.
     /// </summary>
     public static (List<PlaylistInfo> Episodes, string How) InDiscOrder(DiscAnalysis analysis, List<PlaylistInfo> episodes)
     {
         var playAll = PlayAll(analysis, episodes);
-        if (playAll.Playlist != null)
+        if (playAll is { Complete: true })
         {
-            return (episodes.Select((e, i) => (e, playAll.Positions[i])).OrderBy(x => x.Item2).Select(x => x.e).ToList(),
-                $"in the order of the disc's \"play all\" playlist {playAll.Playlist.Name}");
+            return (playAll.Order, $"in the order of the disc's \"play all\" playlist {playAll.Playlist.Name}");
         }
 
         // The menu's buttons (or the Java menu's list), when they name every episode.
@@ -116,6 +119,19 @@ public static class EpisodeFinder
             .OrderBy(e => e.Mpls.Clips.FirstOrDefault() ?? "", StringComparer.Ordinal)
             .ThenBy(e => e.Name, StringComparer.Ordinal)
             .ToList();
+        if (playAll != null)
+        {
+            // The ones the "play all" plays take its order, in the places the clip order gives them.
+            var places = byClip.Select((e, i) => (e, i)).Where(x => !playAll.Missing.Contains(x.e)).Select(x => x.i).ToList();
+            for (var i = 0; i < places.Count; i++)
+            {
+                byClip[places[i]] = playAll.Order[i];
+            }
+
+            return (byClip, $"{playAll.Order.Count} of {episodes.Count} in the order of the disc's \"play all\" playlist {playAll.Playlist.Name}, " +
+                            $"{string.Join(", ", playAll.Missing.Select(m => m.Label))} (not in it) by {(playAll.Missing.Count == 1 ? "its clip" : "their clips")}");
+        }
+
         var byName = episodes.OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
         return (byClip, byClip.SequenceEqual(byName)
             ? "in playlist order, which is also the order of their clips"
@@ -123,35 +139,142 @@ public static class EpisodeFinder
     }
 
     /// <summary>Where <see cref="InDiscOrder"/> takes the order of these episodes from.</summary>
-    public static DiscOrderSource SourceOf(DiscAnalysis analysis, List<PlaylistInfo> episodes) =>
-        PlayAll(analysis, episodes).Playlist != null ? DiscOrderSource.PlayAll
-        : MenuCovers(analysis, episodes) ? analysis.MenuIsGuess ? DiscOrderSource.JavaMenu : DiscOrderSource.MenuButtons
-        : DiscOrderSource.Clips;
+    public static DiscOrderSource SourceOf(DiscAnalysis analysis, List<PlaylistInfo> episodes)
+    {
+        var playAll = PlayAll(analysis, episodes);
+        return playAll is { Complete: true } ? DiscOrderSource.PlayAll
+            : MenuCovers(analysis, episodes) ? analysis.MenuIsGuess ? DiscOrderSource.JavaMenu : DiscOrderSource.MenuButtons
+            : playAll != null ? DiscOrderSource.PlayAllPart
+            : DiscOrderSource.Clips;
+    }
 
     private static bool MenuCovers(DiscAnalysis analysis, List<PlaylistInfo> episodes) =>
         analysis.MenuOrder is { } menu && episodes.Count >= 2 && episodes.All(e => menu.Contains(e.Name));
 
-    /// <summary>The longest "play all" playlist that plays every one of the episodes, and where each starts in it.</summary>
-    public static (PlaylistInfo? Playlist, List<int> Positions) PlayAll(DiscAnalysis analysis, IReadOnlyList<PlaylistInfo> episodes) =>
-        analysis.Playlists
-            .Where(p => p.PlayAll && p.DuplicateOf == null)
-            .Select(p => (Playlist: (PlaylistInfo?)p, Positions: episodes.Select(e => Position(p.Mpls.Clips, e.Mpls.Clips)).ToList()))
-            .Where(x => x.Positions.All(i => i >= 0))
-            .OrderByDescending(x => x.Playlist!.Duration)
-            .FirstOrDefault();
-
-    // Where a run of clips starts inside a longer list of clips, or -1.
-    private static int Position(IReadOnlyList<string> all, IReadOnlyList<string> part)
+    /// <summary>
+    /// A "play all" playlist and what it says about the episodes: the ones it plays, in its order,
+    /// where each starts in it, the ones it does not play, and whether its chapters mark each start.
+    /// </summary>
+    public sealed record PlayAllMatch(PlaylistInfo Playlist, List<PlaylistInfo> Order, List<TimeSpan> Starts, List<PlaylistInfo> Missing, bool ChaptersAgree)
     {
-        for (var i = 0; part.Count > 0 && i + part.Count <= all.Count; i++)
+        /// <summary>It plays every one of the episodes.</summary>
+        public bool Complete => Missing.Count == 0;
+
+        /// <summary>Where the playlist comes in the "play all" (1 = first), 0 when it does not play it.</summary>
+        public int PlaceOf(PlaylistInfo playlist) => Order.IndexOf(playlist) + 1;
+    }
+
+    /// <summary>Longest the clips of an episode a "play all" leaves out (its own logo, a warning) may run.</summary>
+    public static readonly TimeSpan OwnIntro = TimeSpan.FromSeconds(30);
+
+    /// <summary>A chapter mark this close to an episode's start in the "play all" marks it.</summary>
+    public static readonly TimeSpan ChapterSlack = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// The "play all" playlist that plays the most of the episodes (two at least), the longest on a
+    /// tie, or null. An episode plays in it when its clips do, back to back, within the in and out
+    /// times of the "play all"'s items: episodes cut out of one big clip are told apart (and
+    /// ordered) by where they start in it. An episode with a logo or warning of its own (up to
+    /// <see cref="OwnIntro"/>) that the "play all" leaves out still counts when its longest clip plays in it.
+    /// </summary>
+    public static PlayAllMatch? PlayAll(DiscAnalysis analysis, IReadOnlyList<PlaylistInfo> episodes)
+    {
+        PlayAllMatch? best = null;
+        foreach (var all in analysis.Playlists.Where(p => p.PlayAll && p.DuplicateOf == null && !episodes.Contains(p)))
         {
-            if (part.Select((c, j) => string.Equals(c, all[i + j], StringComparison.OrdinalIgnoreCase)).All(x => x))
+            var found = episodes.Select(e => (Episode: e, Start: StartIn(all.Mpls.Items, e.Mpls.Items)))
+                .Where(x => x.Start != null)
+                .OrderBy(x => x.Start)
+                .ToList();
+            if (found.Count < 2)
             {
-                return i;
+                continue;
+            }
+
+            var starts = found.Select(x => TimeSpan.FromSeconds(x.Start!.Value / (double)Mpls.ClockRate)).ToList();
+            var chapters = all.Mpls.Chapters;
+            var match = new PlayAllMatch(all, found.Select(x => x.Episode).ToList(), starts,
+                episodes.Where(e => found.All(x => x.Episode != e)).ToList(),
+                chapters.Count > 0 && starts.All(s => chapters.Any(c => (c.Start - s).Duration() <= ChapterSlack)));
+            if (best == null || match.Order.Count > best.Order.Count
+                             || match.Order.Count == best.Order.Count && all.Duration > best.Playlist.Duration)
+            {
+                best = match;
             }
         }
 
-        return -1;
+        return best;
+    }
+
+    // Where (45 kHz ticks from its start) an episode's items start playing inside a "play all"'s
+    // items, or null: all of them back to back, else its longest one.
+    internal static long? StartIn(IReadOnlyList<PlayItem> all, IReadOnlyList<PlayItem> part)
+    {
+        if (part.Count == 0)
+        {
+            return null;
+        }
+
+        for (var start = 0; start + part.Count <= all.Count; start++)
+        {
+            if (Enumerable.Range(0, part.Count).All(i => Inside(all[start + i], part[i])))
+            {
+                return Offset(all, start) + (part[0].InTime - all[start].InTime);
+            }
+        }
+
+        // Only when the rest is a logo or a warning: a playlist that shares one clip of several is no episode of it.
+        var longest = part.Select((item, i) => (item, i)).MaxBy(x => x.item.Duration45k);
+        if (part.Sum(i => i.Duration45k) - longest.item.Duration45k > OwnIntro.TotalSeconds * Mpls.ClockRate)
+        {
+            return null;
+        }
+
+        for (var at = 0; at < all.Count; at++)
+        {
+            if (Inside(all[at], longest.item))
+            {
+                // Back to where the episode would start, before its own shorter items.
+                var before = part.Take(longest.i).Sum(i => i.Duration45k);
+                return Math.Max(0, Offset(all, at) + (longest.item.InTime - all[at].InTime) - before);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool Inside(PlayItem outer, PlayItem inner) =>
+        string.Equals(outer.Clip, inner.Clip, StringComparison.OrdinalIgnoreCase)
+        && outer.InTime <= inner.InTime && inner.OutTime <= outer.OutTime;
+
+    private static long Offset(IReadOnlyList<PlayItem> items, int index) => items.Take(index).Sum(i => i.Duration45k);
+
+    /// <summary>
+    /// The playlists whose episode numbers go against the "play all"'s order: a lower number (in
+    /// the same season) than one the "play all" plays before it.
+    /// </summary>
+    public static List<PlaylistInfo> AgainstPlayAll(PlayAllMatch playAll, Func<PlaylistInfo, (int Season, int Episode)?> number)
+    {
+        var against = new List<PlaylistInfo>();
+        var highest = new Dictionary<int, int>();
+        foreach (var playlist in playAll.Order)
+        {
+            if (number(playlist) is not { } n)
+            {
+                continue;
+            }
+
+            if (highest.TryGetValue(n.Season, out var before) && n.Episode < before)
+            {
+                against.Add(playlist);
+            }
+            else
+            {
+                highest[n.Season] = n.Episode;
+            }
+        }
+
+        return against;
     }
 
     /// <summary>

@@ -250,8 +250,16 @@ series up in **Sonarr**: the title, year, TVDB, TMDb and IMDb IDs, the original 
 Anime series type, absolute numbers. Set the season and the first episode on the disc: the ticked playlists are
 numbered from it in disc order (any number can be typed over), and get their titles from Sonarr (or typed ones).
 Disc order is the order of the disc's "play all" playlist when it has one, else the order the disc menu lists
-them in, else the order of the episodes' clips (playlist numbers are often out of order); a line above the list
-says which was used. The menu is read once when the card opens: an HDMV menu's buttons (its interactive graphics
+them in, else the order of the episodes' clips (playlist numbers are often out of order). A box above the list
+says whether a **play all** was found: a playlist (or DVD title) that plays the episodes one after the other, matched
+by their clips and in and out times, so episodes cut out of one big clip are ordered by where they start in it (an
+episode's own logo or warning of up to 30 s that the play all leaves out doesn't stop the match). It names the
+playlist, the order it plays them in and whether its chapters start at each episode, and gives the order a mark:
+**sure** (a play all of every episode), **likely** (the menu's buttons, or a play all of only some of them, the rest
+placed by their clips), or **a guess** (a Java menu's files, the clips alone, or a menu and a play all that
+disagree). Each ticked row says where it comes in the play all ("2nd in the play all") or that it isn't in it, the
+box adds whether Sonarr's running times agree, and it warns when the episode numbers (typed or matched) go against
+the play all's order. The menu is read once when the card opens: an HDMV menu's buttons (its interactive graphics
 stream, at the start of a small menu clip) give the playlists they play, on the page that plays most episodes,
 by their remote numbers or top to bottom; a Java (BD-J) menu isn't run, but its JAR files are searched for the
 playlist numbers ("00117", "PLAYLIST:00117"), in the order the file naming most episodes names them (a guess).

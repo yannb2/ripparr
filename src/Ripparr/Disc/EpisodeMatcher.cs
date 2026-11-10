@@ -28,6 +28,12 @@ public static class EpisodeMatcher
 
     public sealed record Match(PlaylistInfo Playlist, EpisodeInfo Episode);
 
+    /// <summary>The note when the running times give every playlist the episode the disc order does.</summary>
+    public const string AgreeNote = "Running times agree with the disc order.";
+
+    /// <summary>The note when the running times are too close to tell the episodes apart.</summary>
+    public const string TooCloseNote = "Running times are too close to tell the episodes apart: numbered in disc order.";
+
     /// <summary>The matches, in disc order, and a line saying what was done; Matches is null when the disc order stays.</summary>
     public static (List<Match>? Matches, string Note) Find(IReadOnlyList<PlaylistInfo> playlists, IReadOnlyList<EpisodeInfo> known, int season, int first)
     {
@@ -83,12 +89,12 @@ public static class EpisodeMatcher
         }
         if (matches.Select((m, i) => m.Episode == regular[i]).All(x => x))
         {
-            return (null, "Running times agree with the disc order.");
+            return (null, AgreeNote);
         }
 
         if (inOrder - bestGaps < MinimumGain)
         {
-            return (null, "Running times are too close to tell the episodes apart: numbered in disc order.");
+            return (null, TooCloseNote);
         }
 
         var specialCount = matches.Count(m => m.Episode.Season != season);
@@ -156,6 +162,8 @@ public static class EpisodeMatcher
 
         suggestions.Add(source == DiscOrderSource.JavaMenu
             ? "The Java menu's order is read out of its files, a guess: the running times are more likely right unless Watch says otherwise."
+            : source == DiscOrderSource.PlayAllPart
+            ? "The \"play all\" plays only some of these: their order is the disc's, but where the others go is a guess from their clips."
             : "Sonarr numbers episodes in TVDB's aired order. A box set in production or DVD order lists them otherwise: then the running times are right for Sonarr.");
         suggestions.Add("TVDB's runtimes are sometimes rounded, or one episode's copied to all: check them on TheTVDB if both orders look odd.");
         suggestions.Add($"Check the first episode (E{first:00}): if the disc starts elsewhere, change it and press Match running times again.");
