@@ -459,7 +459,7 @@
                     {
                         <tr>
                             <td></td>
-                            <td colspan="7"><WatchPanel SourcePath="@Source.Path" Playlist="@playlist.Name"/></td>
+                            <td colspan="7"><WatchPanel SourcePath="@Source.Path" Playlist="@playlist.Name" Plan="@(Analysis.IsDvd ? null : PlanFor(playlist))"/></td>
                         </tr>
                     }
                     @if (row.Pictures)

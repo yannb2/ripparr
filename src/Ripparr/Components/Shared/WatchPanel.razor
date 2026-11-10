@@ -1,4 +1,5 @@
-@* A playlist as a small video: 30 seconds of the start (titles), the middle or the end (credits), or the whole playlist played live. *@
+@* A playlist as a small video: 30 seconds of the start (titles), the middle or the end (credits), or the whole playlist played live.
+   With the job's tracks: its audio track, and its subtitle track burned in (both can be changed here). *@
 <div class="d-flex flex-wrap align-items-start gap-3 py-1">
     <div class="d-flex flex-column gap-2">
         <div class="btn-group btn-group-sm" role="group" aria-label="What to watch">
@@ -21,6 +22,35 @@
                 }
             </div>
         }
+        @if (Plan != null && Audio.Count > 0)
+        {
+            <div class="d-flex align-items-center gap-2 small" style="max-width: 20rem">
+                <label class="text-body-secondary text-nowrap" style="width: 4.5rem" for="@($"watch-audio-{_id}")">Audio</label>
+                <select id="@($"watch-audio-{_id}")" class="form-select form-select-sm" value="@(_audio?.ToString() ?? "")" @onchange="ChooseAudio"
+                        title="The audio track the preview plays">
+                    <option value="">As the job: @(Picked.Audio is { } a ? Label(Audio.First(t => t.Pid == a)) : "first track")</option>
+                    @foreach (var track in Audio)
+                    {
+                        <option value="@track.Pid">@Label(track)</option>
+                    }
+                </select>
+            </div>
+        }
+        @if (Plan != null && Subtitles.Count > 0)
+        {
+            <div class="d-flex align-items-center gap-2 small" style="max-width: 20rem">
+                <label class="text-body-secondary text-nowrap" style="width: 4.5rem" for="@($"watch-subtitle-{_id}")">Subtitles</label>
+                <select id="@($"watch-subtitle-{_id}")" class="form-select form-select-sm" value="@(_subtitle?.ToString() ?? "")" @onchange="ChooseSubtitle"
+                        title="The subtitle track burned into the preview">
+                    <option value="">As the job: @(Picked.Subtitle is { } p ? Label(Subtitles.First(t => t.Pid == p)) : "none")</option>
+                    <option value="0">None</option>
+                    @foreach (var track in Subtitles)
+                    {
+                        <option value="@track.Pid">@Label(track)</option>
+                    }
+                </select>
+            </div>
+        }
     </div>
     <div @key="Url" class="d-flex">
         <video src="@Url" controls autoplay preload="auto" class="rounded border bg-black" style="width: 640px; max-width: 100%; aspect-ratio: 16 / 9"
@@ -34,14 +64,14 @@
         {
             <span>
                 The whole playlist@(_from > 0 ? $" from {_from} % in" : ""), turned into a 720p video with ffmpeg as it plays: no seeking,
-                start at a quarter, half or three quarters instead. HDR looks flat here; the rip is untouched.
+                start at a quarter, half or three quarters instead.@(TracksNote) HDR looks flat here; the rip is untouched.
             </span>
         }
         else
         {
             <span>
                 30 seconds from @Points.First(p => p.Percent == _percent).Label.ToLowerInvariant() of the playlist, made with ffmpeg the first time
-                (a few seconds). HDR looks flat here; the rip is untouched.
+                (a few seconds).@(TracksNote) HDR looks flat here; the rip is untouched.
             </span>
         }
     </div>
@@ -53,6 +83,46 @@
 
     /// <summary>Opens on the whole playlist (extras, which are short) instead of 30 seconds of its start.</summary>
     [Parameter] public bool StartWhole { get; set; }
+
+    /// <summary>The job's tracks for this playlist: the preview plays its audio track and burns in its subtitle track.</summary>
+    [Parameter] public TrackPlan? Plan { get; set; }
+
+    private static int _count;
+    private readonly int _id = Interlocked.Increment(ref _count);
+
+    // Chosen here, over the job's: null follows the job, 0 is no subtitles.
+    private int? _audio;
+    private int? _subtitle;
+
+    private List<PlannedTrack> Audio => Plan?.Tracks.Where(t => t.Kind == StreamKind.Audio).ToList() ?? [];
+
+    // Burning in needs a picture subtitle (PGS): a DVD's go in as they are.
+    private List<PlannedTrack> Subtitles => Plan?.Tracks.Where(t => t.Kind == StreamKind.Subtitle && t.Codec == "PGS").ToList() ?? [];
+
+    private WatchTracks Picked => WatchTracks.From(Plan);
+
+    private WatchTracks Tracks
+    {
+        get
+        {
+            var picked = Picked;
+            var tracks = new WatchTracks(_audio ?? picked.Audio, _subtitle is 0 ? null : _subtitle ?? picked.Subtitle);
+            return tracks.Audio == null && tracks.Subtitle == null ? WatchTracks.None : tracks;
+        }
+    }
+
+    private string TracksNote => Plan == null ? "" : Tracks.Subtitle != null
+        ? " Audio and subtitles as picked above (the subtitles burned in)."
+        : " Audio as picked above.";
+
+    private static string Label(PlannedTrack track) =>
+        string.Join(" ", new[] { Languages.Name(track.Language), track.Codec, track.Layout, track.Commentary ? "(commentary)" : null, track.HearingImpaired ? "(SDH)" : null,
+            track.Forced ? "(forced)" : null, track.Keep ? null : "(not kept)" }
+            .Where(p => !string.IsNullOrEmpty(p)));
+
+    private void ChooseAudio(ChangeEventArgs e) => _audio = int.TryParse(e.Value?.ToString(), out var pid) ? pid : null;
+
+    private void ChooseSubtitle(ChangeEventArgs e) => _subtitle = int.TryParse(e.Value?.ToString(), out var pid) ? pid : null;
 
     private static readonly (int Percent, string Label)[] Points = [(2, "Start"), (50, "Middle"), (95, "End")];
     private int _percent = 2;
@@ -73,7 +143,7 @@
         _from = from;
     }
 
-    private string Query => $"path={Uri.EscapeDataString(SourcePath)}&playlist={Uri.EscapeDataString(Playlist)}";
+    private string Query => $"path={Uri.EscapeDataString(SourcePath)}&playlist={Uri.EscapeDataString(Playlist)}{Tracks.Query}";
 
     private string Url => _whole
         ? $"api/discs/play.mp4?{Query}&from={_from}"
