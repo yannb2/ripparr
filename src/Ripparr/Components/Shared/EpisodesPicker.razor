@@ -169,6 +169,43 @@
         </div>
         @if (SelectedPlaylists.Count >= 2)
         {
+            var report = Report;
+            var against = AgainstPlayAll(report);
+            <div class="border rounded px-2 py-2 mb-2 small order-report">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    @if (report.PlayAll is { Complete: true })
+                    {
+                        <span class="badge text-bg-success"><i class="bi bi-collection-play me-1"></i>Play all found</span>
+                    }
+                    else if (report.PlayAll != null)
+                    {
+                        <span class="badge text-bg-info"><i class="bi bi-collection-play me-1"></i>Play all found (some episodes)</span>
+                    }
+                    else
+                    {
+                        <span class="badge text-bg-secondary"><i class="bi bi-collection me-1"></i>No play all</span>
+                    }
+                    <span class="badge @(report.Confidence switch { OrderConfidence.Sure => "text-bg-success", OrderConfidence.Likely => "text-bg-info", _ => "text-bg-warning" })"
+                          title="How sure Ripparr is of the episode order the disc gives">
+                        Order: @(report.Confidence switch { OrderConfidence.Sure => "sure", OrderConfidence.Likely => "likely", _ => "a guess" })
+                    </span>
+                    <span>@report.PlayAllLine</span>
+                </div>
+                <div class="text-body-secondary mt-1">
+                    @report.SourceLine
+                    @if (RunningTimesLine is { } runningTimes)
+                    {
+                        <text> @runningTimes</text>
+                    }
+                </div>
+                @if (against.Count > 0)
+                {
+                    <div class="text-warning-emphasis mt-1">
+                        <i class="bi bi-exclamation-triangle me-1"></i>The episode numbers go against the "play all" for @string.Join(", ", against.Select(p => p.Label)):
+                        @(against.Count == 1 ? "it plays" : "they play") after a higher number. Watch their start to settle it, then fix the numbers.
+                    </div>
+                }
+            </div>
             <div class="small text-body-secondary mb-2 d-flex flex-wrap align-items-center gap-2">
                 <span>
                     <i class="bi bi-sort-numeric-down"></i>
@@ -178,21 +215,21 @@
                     }
                     else
                     {
-                        <text>Numbered @OrderNote.</text>
+                        @* Where the order comes from is in the box above. *@
                         @if (_readingMenu)
                         {
-                            <text> Reading the disc menu for its order…</text>
+                            @(" Reading the disc menu for its order…")
                         }
                         else if (Analysis.MenuOrder == null && Analysis.MenuNote != null)
                         {
-                            <text> @Analysis.MenuNote</text>
+                            @(" " + Analysis.MenuNote)
                         }
                         @if (State.MatchNote != null)
                         {
-                            <text> @State.MatchNote</text>
+                            @(" " + State.MatchNote)
                         }
                     }
-                    @(Analysis.IsDvd ? "Check the order on the DVD's menu or in MakeMKV" : "Check with Watch (the start shows the title)") and change a number if it is wrong.
+                    @(" ")@(Analysis.IsDvd ? "Check the order on the DVD's menu or in MakeMKV" : "Check with Watch (the start shows the title)") and change a number if it is wrong.
                 </span>
                 @if (_episodes.Count > 0)
                 {
@@ -216,6 +253,7 @@
                     <i class="bi bi-exclamation-triangle me-1"></i>@(disagreement.Source switch
                     {
                         DiscOrderSource.PlayAll => "The disc's \"play all\" order",
+                        DiscOrderSource.PlayAllPart => "The disc's order (a \"play all\" of some of them)",
                         DiscOrderSource.MenuButtons => "The disc menu's order",
                         _ => "The Java menu's order"
                     }) and Sonarr's running times don't agree.
@@ -292,6 +330,7 @@
                 </tr>
                 </thead>
                 <tbody>
+                @{ var playAll = SelectedPlaylists.Count >= 2 ? Report.PlayAll : null; }
                 @foreach (var playlist in Shown)
                 {
                     var row = Row(playlist);
@@ -304,6 +343,20 @@
                             @if (playlist.PlayAll)
                             {
                                 <span class="badge text-bg-warning ms-1">Play all</span>
+                            }
+                            @if (playAll != null && row.Selected)
+                            {
+                                var place = playAll.PlaceOf(playlist);
+                                @if (place > 0)
+                                {
+                                    <div class="small fw-normal text-success" title="@($"Starts {Format.Duration(playAll.Starts[place - 1])} into playlist {playAll.Playlist.Label}")">
+                                        <i class="bi bi-collection-play"></i> @Ordinal(place) in the play all
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="small fw-normal text-body-secondary">not in the play all</div>
+                                }
                             }
                         </td>
                         <td class="text-nowrap">@Format.Duration(playlist.Duration)</td>
@@ -701,7 +754,40 @@
     private IEnumerable<PlaylistInfo> Ordered(IEnumerable<PlaylistInfo> playlists) =>
         EpisodeFinder.InDiscOrder(Analysis, playlists.ToList()).Episodes;
 
-    private string OrderNote => EpisodeFinder.InDiscOrder(Analysis, SelectedPlaylists).How;
+    /// <summary>Whether a "play all" playlist was found for the ticked playlists, and how sure the order is.</summary>
+    private OrderReport Report => OrderReport.For(Analysis, SelectedPlaylists);
+
+    // The ticked playlists whose numbers (typed, matched or in order) go against the "play all".
+    private List<PlaylistInfo> AgainstPlayAll(OrderReport report) =>
+        report.PlayAll is { } playAll
+            ? EpisodeFinder.AgainstPlayAll(playAll, p => Row(p).Selected && Number(p) is { } n ? (SeasonOf(p), n) : null)
+            : [];
+
+    /// <summary>What Sonarr's running times say about the disc's order, when there are any.</summary>
+    private string? RunningTimesLine
+    {
+        get
+        {
+            if (_episodes.Count == 0)
+            {
+                return null;
+            }
+
+            if (State.Disagreement is { } disagreement && !State.DisagreementHidden && disagreement.Key == MatchKey)
+            {
+                return "Sonarr's running times say otherwise: see the warning below.";
+            }
+
+            var (matches, note) = EpisodeMatcher.Find(SelectedPlaylists, _episodes, _season, _first);
+            return matches != null ? null
+                : note == EpisodeMatcher.AgreeNote ? "Sonarr's running times agree."
+                : note == EpisodeMatcher.TooCloseNote ? "Sonarr's running times are too close to each other to tell."
+                : null;
+        }
+    }
+
+    private static string Ordinal(int n) =>
+        n + (n % 100 is 11 or 12 or 13 ? "th" : (n % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" });
 
     private EpisodeRow Row(PlaylistInfo playlist)
     {
@@ -851,7 +937,7 @@
     private async Task ReadMenuAsync()
     {
         var key = string.Join(",", _found.Select(p => p.Name).Order(StringComparer.Ordinal));
-        if (Analysis.IsDvd || _found.Count < 2 || _readingMenu || Analysis.MenuReadFor == key || EpisodeFinder.PlayAll(Analysis, _found).Playlist != null)
+        if (Analysis.IsDvd || _found.Count < 2 || _readingMenu || Analysis.MenuReadFor == key || EpisodeFinder.PlayAll(Analysis, _found) is { Complete: true })
         {
             return;
         }
