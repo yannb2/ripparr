@@ -28,10 +28,17 @@ public sealed class LivePlay(IOptions<RipparrOptions> options, JobStore store, I
     /// ffmpeg's concat list for the playlist from <paramref name="fromSeconds"/> on. A play item's
     /// in and out times are the clip's own time stamps (45 kHz clock), which is what the concat
     /// demuxer's inpoint and outpoint expect. Null when a clip is missing from the disc.
+    /// With <paramref name="streams"/> (PIDs), the list keeps only those streams, in that order: the
+    /// concat demuxer does not carry a clip's PIDs over, so the tracks are picked here.
     /// </summary>
-    public static string? ConcatList(Mpls playlist, string disc, double fromSeconds = 0)
+    public static string? ConcatList(Mpls playlist, string disc, double fromSeconds = 0, IReadOnlyList<int>? streams = null)
     {
         var text = new StringBuilder("ffconcat version 1.0\n");
+        foreach (var pid in streams ?? [])
+        {
+            text.Append("stream\nexact_stream_id 0x").Append(pid.ToString("x", CultureInfo.InvariantCulture)).Append('\n');
+        }
+
         var start = 0.0;
         foreach (var item in playlist.Items)
         {
@@ -58,22 +65,48 @@ public sealed class LivePlay(IOptions<RipparrOptions> options, JobStore store, I
         return text.ToString();
     }
 
-    /// <summary>ffmpeg's arguments: the concat list in, a fragmented MP4 out on stdout.</summary>
-    public static string[] Arguments(string list) =>
-    [
-        "-hide_banner", "-loglevel", "error", "-nostdin",
-        "-f", "concat", "-safe", "0", "-i", list,
-        "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn",
-        "-vf", "scale='min(1280,iw)':-2,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-g", "48",
-        "-ac", "2", "-c:a", "aac", "-b:a", "160k",
-        "-f", "mp4", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "pipe:1"
-    ];
+    /// <summary>
+    /// The streams the concat list keeps for the job's tracks: the video, the audio, the subtitle
+    /// (each only when the playlist has it). Null keeps them all (the first audio, no subtitles).
+    /// </summary>
+    public static List<int>? Streams(Mpls playlist, WatchTracks tracks)
+    {
+        if (tracks == WatchTracks.None || WatchTracks.VideoPid(playlist) is not { } video)
+        {
+            return null;
+        }
+
+        return [video, ..tracks.Audio is { } a ? [a] : Array.Empty<int>(), ..tracks.Subtitle is { } s ? [s] : Array.Empty<int>()];
+    }
+
+    /// <summary>
+    /// ffmpeg's arguments: the concat list in, a fragmented MP4 out on stdout. With the job's
+    /// tracks, the list holds video, audio, subtitle in that order (<see cref="Streams"/>).
+    /// </summary>
+    public static string[] Arguments(string list, WatchTracks? tracks = null)
+    {
+        tracks ??= WatchTracks.None;
+        var picked = tracks != WatchTracks.None;
+        var audio = picked ? tracks.Audio != null ? "0:1" : null : "0:a:0?";
+        var subtitle = tracks.Subtitle == null ? null : tracks.Audio != null ? "0:2" : "0:1";
+        return
+        [
+            "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-f", "concat", "-safe", "0", "-i", list,
+            ..WatchTracks.VideoArguments(picked ? "0:0" : "0:v:0", subtitle, "scale='min(1280,iw)':-2"),
+            ..audio == null ? Array.Empty<string>() : ["-map", audio],
+            "-sn", "-dn", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-g", "48",
+            "-ac", "2", "-c:a", "aac", "-b:a", "160k",
+            "-f", "mp4", "-movflags", "frag_keyframe+empty_moov+default_base_moof", "pipe:1"
+        ];
+    }
 
     /// <summary>
     /// Plays the playlist into the response until it ends or the browser lets go. Returns why it
     /// could not start (nothing written yet), or null once the stream ran.
     /// </summary>
-    public async Task<string?> StreamAsync(DiscSource source, PlaylistInfo playlist, int fromPercent, HttpResponse response, CancellationToken cancellationToken)
+    public async Task<string?> StreamAsync(DiscSource source, PlaylistInfo playlist, int fromPercent, WatchTracks tracks, HttpResponse response,
+        CancellationToken cancellationToken)
     {
         using var mine = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         LinkedListNode<CancellationTokenSource> node;
@@ -93,13 +126,13 @@ public sealed class LivePlay(IOptions<RipparrOptions> options, JobStore store, I
             var from = playlist.Mpls.Duration.TotalSeconds * Math.Clamp(fromPercent, 0, 99) / 100.0;
             if (source.Kind != SourceKind.Iso)
             {
-                return await PlayAsync(SourceFinder.BdmvParent(source.Path) ?? source.Path, source, playlist, from, response, mine.Token);
+                return await PlayAsync(SourceFinder.BdmvParent(source.Path) ?? source.Path, source, playlist, from, tracks, response, mine.Token);
             }
 
             var running = store.List(50, [JobStatus.Running]).FirstOrDefault(j => j.SourcePath == source.Path && j.MountedAt != null);
             var played = await IsoMount.BorrowAsync(options.Value.IsoMount, source.Path, running?.MountedAt,
                 () => store.List(50, [JobStatus.Running]).Any(j => j.SourcePath == source.Path),
-                async disc => new Tuple<string?>(await PlayAsync(disc, source, playlist, from, response, mine.Token)));
+                async disc => new Tuple<string?>(await PlayAsync(disc, source, playlist, from, tracks, response, mine.Token)));
             return played == null ? "Playing an ISO needs the mount service." : played.Item1;
         }
         finally
@@ -114,9 +147,12 @@ public sealed class LivePlay(IOptions<RipparrOptions> options, JobStore store, I
         }
     }
 
-    private async Task<string?> PlayAsync(string disc, DiscSource source, PlaylistInfo playlist, double from, HttpResponse response, CancellationToken cancellationToken)
+    private async Task<string?> PlayAsync(string disc, DiscSource source, PlaylistInfo playlist, double from, WatchTracks tracks, HttpResponse response,
+        CancellationToken cancellationToken)
     {
-        var list = ConcatList(playlist.Mpls, disc, from);
+        var streams = Streams(playlist.Mpls, tracks);
+        tracks = streams == null ? WatchTracks.None : tracks;
+        var list = ConcatList(playlist.Mpls, disc, from, streams);
         if (list == null)
         {
             return $"A clip of playlist {playlist.Name} is missing.";
@@ -131,7 +167,7 @@ public sealed class LivePlay(IOptions<RipparrOptions> options, JobStore store, I
         {
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
         };
-        foreach (var argument in Arguments(listFile))
+        foreach (var argument in Arguments(listFile, tracks))
         {
             start.ArgumentList.Add(argument);
         }

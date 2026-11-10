@@ -90,4 +90,21 @@ public class LivePlayTests
             Directory.Delete(quoted, recursive: true);
         }
     }
+
+    [TestMethod]
+    public void TheJobsTracksAreAskedForByPidBeforeTheClips()
+    {
+        var disc = Disc("00002");
+        try
+        {
+            var playlist = Mpls.Parse(MplsBuilder.Feature(("00002", 60)).Build());
+            var list = LivePlay.ConcatList(playlist, disc, streams: [0x1011, 0x1101, 0x1201])!;
+            StringAssert.StartsWith(list,
+                "ffconcat version 1.0\nstream\nexact_stream_id 0x1011\nstream\nexact_stream_id 0x1101\nstream\nexact_stream_id 0x1201\nfile '");
+        }
+        finally
+        {
+            Directory.Delete(disc, recursive: true);
+        }
+    }
 }

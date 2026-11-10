@@ -200,6 +200,14 @@ it can start at 25, 50 or 75 % instead; Start, Middle and End still give the 30-
 streams run at once (a third stops the oldest), and an ISO needs the mount service. Blu-ray only. The Whole
 button is on every Watch panel (Playlists list and TV episodes too).
 
+Every Watch panel (film, TV episodes, extras) plays the job's tracks, not the disc's first ones: the audio track
+ticked Default (else the first kept one) and the first kept subtitle track (a Default forced one first), burned
+into the picture. **Audio** and **Subtitles** under the buttons show which ones and can switch to any other track
+of the playlist (or no subtitles) for the preview only; "As the job" follows the job's ticks. On the film's
+page, a playlist other than the chosen one plays what the profile would pick for it. Blu-ray only: a DVD
+preview keeps its first audio track and no subtitles. A caption already on screen where the preview starts is
+not shown (ffmpeg starts reading there); the next one is.
+
 A playlist that is just other playlists one after the other is flagged **Play all** and hidden with the
 duplicates (the switch shows them): ripping it would repeat the others.
 

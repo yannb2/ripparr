@@ -283,7 +283,7 @@
                 {
                     <tr>
                         <td></td>
-                        <td colspan="8"><WatchPanel SourcePath="@_source.Path" Playlist="@playlist.Name"/></td>
+                        <td colspan="8"><WatchPanel SourcePath="@_source.Path" Playlist="@playlist.Name" Plan="WatchPlan(playlist)"/></td>
                     </tr>
                 }
             }
@@ -1030,6 +1030,28 @@
     {
         var typed = _tags.Where(t => t.Value.Length > 0 && t.Name.Length > 0).GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First().Value);
         _tags = Profile.CustomTags.Select(t => new GlobalTag { Name = t.Name, Value = typed.GetValueOrDefault(t.Name, t.Value) }).ToList();
+    }
+
+    private readonly Dictionary<(string Playlist, string? Profile, string? Original), TrackPlan> _watchPlans = [];
+
+    /// <summary>
+    /// The tracks the Watch preview plays: the job's for the film's playlist, what the profile would
+    /// pick for another one. None on a DVD (it cannot burn in its subtitles).
+    /// </summary>
+    private TrackPlan? WatchPlan(PlaylistInfo playlist)
+    {
+        if (_analysis is not { IsDvd: false })
+        {
+            return null;
+        }
+
+        if (_plan != null && _selected?.Name == playlist.Name)
+        {
+            return _plan;
+        }
+
+        var key = (playlist.Name, Profile.Id, _original);
+        return _watchPlans.TryGetValue(key, out var plan) ? plan : _watchPlans[key] = TrackPlanner.Build(playlist.Mpls, Profile, _original);
     }
 
     private void BuildPlan()

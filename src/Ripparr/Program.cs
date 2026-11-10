@@ -148,7 +148,7 @@ app.MapGet("/api/discs/listen/{pid:int}.m4a",
     });
 // 30 seconds of a playlist as a small video, to tell which episode (or fake) it is: only discs inside the sources.
 app.MapGet("/api/discs/watch/{percent:int}.mp4",
-    async (int percent, string path, string playlist, DiscAnalyzer analyzer, Thumbnails thumbnails) =>
+    async (int percent, string path, string playlist, int? audio, int? subtitle, DiscAnalyzer analyzer, Thumbnails thumbnails) =>
     {
         var source = Thumbnails.PreviewPercents.Contains(percent) && analyzer.InSources(path) ? analyzer.Describe(path) : null;
         if (source == null)
@@ -163,12 +163,14 @@ app.MapGet("/api/discs/watch/{percent:int}.mp4",
             return Results.NotFound();
         }
 
-        var (file, error) = await thumbnails.PreviewAsync(source, analysis, found, percent);
+        // The job's audio track and burned-in subtitle track (Blu-ray only), else the first audio track.
+        var tracks = analysis.IsDvd ? WatchTracks.None : WatchTracks.Check(found.Mpls, audio, subtitle);
+        var (file, error) = await thumbnails.PreviewAsync(source, analysis, found, percent, tracks);
         return file == null ? Results.Problem(error, statusCode: 404) : Results.File(file, "video/mp4", enableRangeProcessing: true);
     });
 // A whole playlist, played live as it is read, to check an extra before ripping it: only discs inside the sources.
 app.MapGet("/api/discs/play.mp4",
-    async (string path, string playlist, int? from, HttpContext context, DiscAnalyzer analyzer, LivePlay player) =>
+    async (string path, string playlist, int? from, int? audio, int? subtitle, HttpContext context, DiscAnalyzer analyzer, LivePlay player) =>
     {
         var source = analyzer.InSources(path) ? analyzer.Describe(path) : null;
         if (source == null || from is { } f && !LivePlay.StartPercents.Contains(f))
@@ -183,7 +185,8 @@ app.MapGet("/api/discs/play.mp4",
             return Results.NotFound();
         }
 
-        var error = await player.StreamAsync(source, found, from ?? 0, context.Response, context.RequestAborted);
+        var tracks = WatchTracks.Check(found.Mpls, audio, subtitle);
+        var error = await player.StreamAsync(source, found, from ?? 0, tracks, context.Response, context.RequestAborted);
         return error == null || context.Response.HasStarted ? Results.Empty : Results.Problem(error, statusCode: 404);
     });
 app.MapRazorComponents<App>()

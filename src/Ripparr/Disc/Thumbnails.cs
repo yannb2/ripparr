@@ -101,19 +101,28 @@ public sealed class Thumbnails(IOptions<RipparrOptions> options, JobStore store,
             ]);
 
     /// <summary>
-    /// 30 seconds of a playlist as a small H.264 video with its first audio track, to see which
-    /// episode (or extra, or fake) it is. HDR is shown as it is (colours look flat): enough to tell
-    /// one episode from another.
+    /// 30 seconds of a playlist as a small H.264 video, to see which episode (or extra, or fake) it
+    /// is: with the job's audio track and its subtitle track burned in (<paramref name="tracks"/>),
+    /// else the first audio track and no subtitles. HDR is shown as it is (colours look flat):
+    /// enough to tell one episode from another.
     /// </summary>
-    public Task<(string? File, string? Error)> PreviewAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int percent) =>
-        CutAsync(source, analysis, playlist, percent / 100.0, $"watch-{percent.ToString(CultureInfo.InvariantCulture)}.mp4",
-            (path, seconds, temp) =>
-            [
-                "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", seconds,
-                "-i", path, "-map", "0:v:0", "-map", "0:a:0?", "-t", PreviewSeconds.ToString(CultureInfo.InvariantCulture),
-                "-sn", "-vf", "scale=640:-2,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
-                "-ac", "2", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-f", "mp4", "-y", temp
-            ]);
+    public Task<(string? File, string? Error)> PreviewAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist, int percent,
+        WatchTracks? tracks = null)
+    {
+        tracks ??= WatchTracks.None;
+        return CutAsync(source, analysis, playlist, percent / 100.0, $"watch-{percent.ToString(CultureInfo.InvariantCulture)}{tracks.FileSuffix}.mp4",
+            (path, seconds, temp) => PreviewArguments(path, seconds, temp, tracks));
+    }
+
+    public static string[] PreviewArguments(string path, string seconds, string temp, WatchTracks tracks) =>
+    [
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", seconds, "-i", path,
+        ..WatchTracks.VideoArguments("0:v:0", tracks.Subtitle is { } s ? $"0:i:{s.ToString(CultureInfo.InvariantCulture)}" : null, "scale=640:-2"),
+        "-map", tracks.Audio is { } a ? $"0:i:{a.ToString(CultureInfo.InvariantCulture)}" : "0:a:0?",
+        "-t", PreviewSeconds.ToString(CultureInfo.InvariantCulture),
+        "-sn", "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+        "-ac", "2", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-f", "mp4", "-y", temp
+    ];
 
     private async Task<(string? File, string? Error)> CutAsync(DiscSource source, DiscAnalysis analysis, PlaylistInfo playlist,
         double fraction, string name, Func<string, string, string, string[]> arguments)
